@@ -62,6 +62,12 @@ The app uses Next.js App Router, Server Actions, Prisma, PostgreSQL, Tailwind CS
 
 Required local environment variables are intentionally excluded from Git. See `.env` locally for development secrets.
 
+For any shared or production deployment, configure:
+
+- `SHADOWPM_SESSION_SECRET`: required for signed session cookies
+- `DEEPSEEK_API_KEY`: required for AI import and AI summaries
+- Database connection variables required by Prisma/PostgreSQL
+
 ## Quality Gate
 
 Every substantial module must pass:

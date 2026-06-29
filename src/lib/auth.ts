@@ -10,7 +10,12 @@ export interface SessionUser {
 const SESSION_COOKIE = "shadowpm-session";
 
 function getSessionSecret() {
-  return process.env.SHADOWPM_SESSION_SECRET || process.env.AUTH_SECRET || "shadowpm-local-dev-secret";
+  const secret = process.env.SHADOWPM_SESSION_SECRET || process.env.AUTH_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Missing SHADOWPM_SESSION_SECRET or AUTH_SECRET");
+  }
+  return "shadowpm-local-dev-secret";
 }
 
 function signPayload(payload: string) {
