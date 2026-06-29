@@ -1,6 +1,4 @@
-"use client";
-
-import { login } from "@/actions/auth-actions";
+import { loginWithForm } from "@/actions/auth-actions";
 
 const SEED_USERS = [
   {
@@ -40,30 +38,32 @@ export default function LoginPage() {
         {/* 用户卡片列表 */}
         <div className="space-y-3">
           {SEED_USERS.map((user) => (
-            <button
-              key={user.name}
-              onClick={() => login(user.name)}
-              className="flex w-full items-center gap-4 rounded-xl border bg-white p-4 text-left shadow-sm transition-all hover:border-gray-400 hover:shadow-md"
-            >
-              <div className="flex size-10 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
-                {user.name[0]}
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">
-                  {user.name}
-                  <span
-                    className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                      user.role === "LEADER"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-blue-100 text-blue-700"
-                    }`}
-                  >
-                    {user.role === "LEADER" ? "管理者" : "成员"}
-                  </span>
-                </p>
-                <p className="text-sm text-gray-500">{user.desc}</p>
-              </div>
-            </button>
+            <form key={user.name} action={loginWithForm}>
+              <input type="hidden" name="userName" value={user.name} />
+              <button
+                type="submit"
+                className="flex w-full items-center gap-4 rounded-xl border bg-white p-4 text-left shadow-sm transition-all hover:border-gray-400 hover:shadow-md"
+              >
+                <div className="flex size-10 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
+                  {user.name[0]}
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900">
+                    {user.name}
+                    <span
+                      className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                        user.role === "LEADER"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}
+                    >
+                      {user.role === "LEADER" ? "管理者" : "成员"}
+                    </span>
+                  </p>
+                  <p className="text-sm text-gray-500">{user.desc}</p>
+                </div>
+              </button>
+            </form>
           ))}
         </div>
 

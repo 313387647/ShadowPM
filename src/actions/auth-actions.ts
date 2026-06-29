@@ -43,6 +43,12 @@ export async function login(userName: string) {
   redirect(user.role === "LEADER" ? "/dashboard" : "/workspace");
 }
 
+export async function loginWithForm(formData: FormData) {
+  const userName = formData.get("userName");
+  if (typeof userName !== "string") throw new Error("缺少登录用户");
+  await login(userName);
+}
+
 export async function logout() {
   const cookieStore = await cookies();
   cookieStore.delete("shadowpm-session");
