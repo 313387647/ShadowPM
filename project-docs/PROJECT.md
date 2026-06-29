@@ -1,22 +1,78 @@
-# 总体项目设定 (Project Context)
+# ShadowPM Project Context
 
-## 1. 项目愿景 (ShadowPM)
-本项目是一个为营销/公关团队量身定制的"轻量级智能项目管控系统"。旨在替代公司繁冗的 OA 审批系统和极易混乱的 Excel 表格。
-核心理念：极简录入、账目清白、历史可溯、资产内聚、AI 赋能。
+## Product Positioning
 
-## 2. 强制技术栈 (Tech Stack)
-你必须严格遵守以下技术栈进行代码编写，绝不可使用替代品：
-- **核心框架**: Next.js 14 (强制使用 App Router，绝对不要使用 Pages Router)
-- **后端逻辑**: Next.js Server Actions (完全在 Node.js 环境执行，不写传统的 API Routes)
-- **前端库**: React 18
-- **样式方案**: Tailwind CSS
-- **UI 组件库**: Shadcn UI (配合 Lucide React 图标)
-- **数据库 ORM**: Prisma
-- **关系型数据库**: PostgreSQL
-- **图表库**: Apache ECharts (用于大盘渲染)
+ShadowPM is an AI Native Project Management Platform for fast internal project control.
 
-## 3. 编码"军规" (Golden Rules)
-- **极简主义**: 代码要求模块化、高内聚，尽量复用 Shadcn UI 组件。避免过度封装。
-- **状态管理**: 尽量依赖 React Server Components (RSC) 获取数据，客户端状态仅使用 React 自身 Hook (`useState`, `useOptimistic`)，禁止引入 Redux 等重型库。
-- **类型安全**: 严格使用 TypeScript，确保 Server Actions 的入参和返回值都有明确的 Type 定义。
-- **无复杂审批**: 系统绝对不包含任何"提交审核-领导驳回"的 OA 式流转。
+It serves lightweight team operations outside heavy enterprise systems. The target user is not trying to run a generic task board; they need to create, update, and manage multidimensional project control tables with as little manual work as possible.
+
+The product must optimize for:
+
+- AI-first creation and updates
+- Extremely low learning cost
+- High information density
+- Keyboard-first operation
+- Minimum clicks and page switching
+- Auditable project, budget, and progress history
+- Modern SaaS quality comparable to Linear, Cursor, Raycast, Vercel, GitHub, and Stripe Dashboard
+
+## Core Product Model
+
+ShadowPM projects are organized around three primary work surfaces:
+
+1. Project Control Table
+   The main operating artifact. It tracks workstreams, control items, owners, departments, deadlines, status, progress, risks, and links to budget/calendar/assets.
+
+2. Budget Ledger
+   Budget must not be hidden inside the control table. It is an append-only ledger with allocation, expense, refund, and adjustment flows.
+
+3. Execution Calendar
+   Execution and communication plans should be structured as dates, channels, workstreams, owners, content, status, and related control items.
+
+The trust layers are:
+
+- Progress Change Log
+- Budget Flow Log
+- AI import/action traceability
+
+The canonical model is maintained in `CANONICAL_PROJECT_SCHEMA.md`.
+
+## Current Product State
+
+The product currently supports:
+
+- Workspace project creation
+- AI project import from pasted text or uploaded spreadsheet
+- Import preview and confirmation
+- Project control table
+- Budget ledger
+- Execution calendar
+- Progress timeline
+- Risk register
+- Wiki/assets
+- AI copilot suggestions and confirmation flows
+- Dashboard overview
+
+The current Alpha is suitable for review and internal testing with the sample spreadsheet in `project-docs/review-assets/`.
+
+## Technical Stack
+
+- Framework: Next.js 14 App Router
+- Backend: Next.js Server Actions
+- Frontend: React 18
+- Styling: Tailwind CSS
+- UI: Shadcn-style local primitives + Lucide icons
+- ORM: Prisma
+- Database: PostgreSQL
+- Charts: Recharts
+- File parsing: spreadsheet parser in `src/lib/xlsx-parser.js`
+
+## Engineering Rules
+
+- Prefer React Server Components and Server Actions.
+- Avoid unnecessary client-side global state.
+- Keep mutations typed, permission-aware, and auditable.
+- Budget and progress changes should be append-only by default.
+- AI output should become structured data, not chat-only text.
+- Every substantial module must pass `npm test`, `npm run lint`, and `npm run build`.
+- Do not preserve broken flows just for compatibility.

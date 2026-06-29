@@ -2,6 +2,26 @@
 
 *(Vibe Coding 规则：AI 在结束每一轮代码编写后，必须主动在此文件中追加记录)*
 
+## [2026-06-29] Review Docs & Repository Organization
+
+### Documentation updated to current Alpha state
+- Replaced the default Next.js `README.md` with a ShadowPM review-oriented README.
+- Updated `project-docs/PROJECT.md` to reflect the current AI Native Project Management Platform positioning.
+- Updated `project-docs/API.md` to match the current Server Actions surface.
+- Rewrote `project-docs/TASKS.md` into a P0/P1/P2 roadmap aligned with the product constitution.
+- Rewrote `project-docs/REVIEW_PACKAGE.md` as the current Alpha review package.
+- Added `project-docs/README.md` as the documentation index.
+
+### Folder organization
+- Moved the messy sample workbook into `project-docs/review-assets/`.
+- Renamed the workbook to `one-million-project-control-sample.xlsx` for reviewer clarity and stable references.
+- Updated `CANONICAL_PROJECT_SCHEMA.md` to point to the new review asset path.
+
+### Intent
+- Make GitHub review easier for collaborators.
+- Prevent reviewers from judging the product from stale MVP docs.
+- Keep sample data clearly separate from source code and product docs.
+
 ## [2026-06-24] Phase 1 — Task 1: 初始化 Next.js 14 项目
 - 使用 `create-next-app@14` 初始化项目，包含 TypeScript、Tailwind CSS、ESLint、App Router、src/ 目录
 - 配置 `@/*` 路径别名指向 `./src/*`

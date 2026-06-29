@@ -315,7 +315,7 @@ For messy sources, AI should produce a clear mapping summary:
 
 ## Current Sample Workbook Assessment
 
-The workbook `案例/副本-【一万台】项目管控表.xlsx` is a useful messy source, not a canonical template.
+The workbook `project-docs/review-assets/one-million-project-control-sample.xlsx` is a useful messy source, not a canonical template.
 
 Observed issues:
 
