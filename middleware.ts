@@ -8,6 +8,7 @@ export function middleware(request: NextRequest) {
   // 放行公开演示页、登录页与静态资源
   if (
     pathname === "/demo" ||
+    pathname === "/guide" ||
     pathname === "/login" ||
     pathname.startsWith("/demo-assets") ||
     pathname.startsWith("/_next") ||

@@ -60,6 +60,9 @@ export default function DemoPage() {
                 下载案例表格
               </a>
             </Button>
+            <Button asChild variant="outline" className="gap-2">
+              <Link href="/guide">查看小白教程</Link>
+            </Button>
           </div>
         </div>
       </section>
