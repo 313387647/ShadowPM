@@ -41,6 +41,7 @@ Known gaps:
 
 ## Review Entry Points
 
+- [Shareable Demo Page](/demo)
 - [Review Package](./project-docs/REVIEW_PACKAGE.md)
 - [User Guide](./project-docs/USER_GUIDE.md)
 - [Feedback Template](./project-docs/FEEDBACK_TEMPLATE.md)
@@ -55,6 +56,8 @@ Known gaps:
 
 ```bash
 npm install
+npx prisma db push
+npx prisma db seed
 npm test
 npm run lint
 npm run build

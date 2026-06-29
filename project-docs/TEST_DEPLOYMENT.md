@@ -15,6 +15,12 @@ The goal is a private Alpha test site where reviewers can:
 5. Confirm budget/calendar/risk candidates
 6. Submit structured feedback
 
+Recommended share URL:
+
+```text
+https://<your-test-domain>/demo
+```
+
 ## 2. Minimum Product Gate
 
 Required before sharing the URL:

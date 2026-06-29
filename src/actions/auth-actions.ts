@@ -5,12 +5,27 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createSessionCookieValue } from "@/lib/auth";
 
+const DEMO_USERS = {
+  "陈鹏": "LEADER",
+  "林小夏": "MEMBER",
+  "赵雨桐": "MEMBER",
+} as const;
+
 export async function login(userName: string) {
   // 按名称查找用户（seed 脚本保证这三个用户始终存在）
-  const user = await prisma.user.findFirst({
+  const existingUser = await prisma.user.findFirst({
     where: { name: userName },
   });
-  if (!user) throw new Error(`用户 ${userName} 不存在，请先运行 npx prisma db seed`);
+  const demoRole = DEMO_USERS[userName as keyof typeof DEMO_USERS];
+  if (!existingUser && !demoRole) {
+    throw new Error(`用户 ${userName} 不存在`);
+  }
+  const user = existingUser ?? await prisma.user.create({
+    data: {
+      name: userName,
+      role: demoRole,
+    },
+  });
 
   const cookieStore = await cookies();
   cookieStore.set("shadowpm-session", createSessionCookieValue({
