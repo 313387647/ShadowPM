@@ -1,0 +1,250 @@
+// ShadowPM - Prisma Schema
+// 基于 DATABASE.md 蓝图，适配 Prisma 7.x
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  LEADER
+  MEMBER
+}
+
+enum TaskStatus {
+  PENDING     // 待启动
+  IN_PROGRESS // 进行中
+  COMPLETED   // 已完成
+}
+
+enum FlowType {
+  ALLOCATE // 初始/追加预算 (正数)
+  EXPENSE  // 支出走账 (负数)
+  REFUND   // 费用退回 (正数)
+}
+
+enum AssetType {
+  DOCUMENT // 富文本
+  LINK     // 外部链接
+  FILE     // 附件
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  role      Role     @default(MEMBER)
+  createdAt DateTime @default(now())
+  projects  Project[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  ownerId     String
+  totalBudget Decimal  @db.Decimal(14, 2) // 规划的总预算池（14位总精度，2位小数）
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+
+  owner   User         @relation(fields: [ownerId], references: [id])
+  tasks        Task[]
+  phases       Phase[]
+  folders      AssetFolder[]
+  risks        Risk[]
+  healthSnaps  HealthSnapshot[]
+  importDrafts ImportDraft[]
+  calendarEntries ExecutionCalendarEntry[]
+  activityLogs ActivityLog[]
+}
+
+model Phase {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  sortOrder Int      @default(0)
+  startDate DateTime?
+  endDate   DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId])
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  projectId   String
+  phaseId     String?    // 所属阶段
+  name        String
+  description String?    // 详细描述（对标 Excel 管控表「详细描述」列）
+  notes       String?    // 进度备注/结论（对标 Excel「进度或结论」列）
+  assignee    String?    // 执行人姓名
+  department  String?    // 负责部门（对标 Excel「负责部门」列）
+  priority    String     @default("P2") // P0 | P1 | P2 | P3
+  deadline    DateTime?
+  status      TaskStatus @default(PENDING)
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase   Phase?        @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  logs    ProgressLog[]
+  budgets BudgetFlow[]
+  calendarEntries ExecutionCalendarEntry[]
+
+  @@index([projectId])
+  @@index([phaseId])
+}
+
+model ProgressLog {
+  id        String   @id @default(cuid())
+  taskId    String
+  content   String   // 支持 Markdown
+  createdBy String   // 操作人
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([createdAt])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  projectId   String
+  targetType  String   // PROJECT | CONTROL_ITEM | BUDGET_ITEM | CALENDAR_ENTRY | RISK | ASSET | IMPORT
+  targetId    String?
+  changeType  String   // CREATE | UPDATE | STATUS_CHANGE | COMMENT | AI_ACTION | IMPORT | DELETE_REQUEST
+  summary     String
+  beforeState Json?
+  afterState  Json?
+  source      String   @default("HUMAN") // HUMAN | AI | IMPORT | SYSTEM
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([targetType])
+  @@index([createdAt])
+}
+
+model BudgetFlow {
+  id          String   @id @default(cuid())
+  taskId      String
+  flowType    FlowType
+  amount      Decimal  @db.Decimal(14, 2) // 支出为负数，分配为正数（14位总精度，2位小数）
+  description String   // 事由
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([createdAt])
+}
+
+model Risk {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String?  // 风险标题；历史自动检测风险可为空
+  type        String   // BUDGET | SCHEDULE | RESOURCE | SCOPE | COMMUNICATION | OTHER
+  level       String   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  description String   // AI 生成的风险描述
+  suggestion  String?  // AI 建议的应对措施
+  status      String   @default("OPEN") // OPEN | ACKNOWLEDGED | MITIGATED | CLOSED
+  source      String   @default("MANUAL") // MANUAL | AI_IMPORT | AI_DETECTION
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([type])
+  @@index([status])
+}
+
+model ExecutionCalendarEntry {
+  id          String   @id @default(cuid())
+  projectId   String
+  taskId      String?
+  date        DateTime?
+  startTime   String?
+  endTime     String?
+  channel     String?
+  workstream  String?
+  content     String
+  owner       String?
+  department  String?
+  status      String   @default("PLANNED") // PLANNED | CONFIRMED | DONE | CANCELED
+  notes       String?
+  source      String   @default("MANUAL") // MANUAL | AI_IMPORT
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([taskId])
+  @@index([date])
+  @@index([status])
+  @@index([channel])
+}
+
+model AssetFolder {
+  id        String  @id @default(cuid())
+  projectId String
+  name      String
+  parentId  String? // 支持树状层级
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assets  AssetItem[]
+}
+
+model HealthSnapshot {
+  id             String   @id @default(cuid())
+  projectId      String
+  timestamp       DateTime @default(now())
+  budgetHealth   Float    // 0-100
+  scheduleHealth Float    // 0-100
+  riskCount      Int      @default(0)
+  overallScore   Float    // 加权综合 0-100
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([timestamp])
+}
+
+model AssetItem {
+  id       String    @id @default(cuid())
+  folderId String
+  title    String
+  type     AssetType
+  content  String?   // 富文本或外部链接
+  fileUrl  String?
+  version  Int       @default(1)
+
+  folder AssetFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+}
+
+model ImportDraft {
+  id              String   @id @default(cuid())
+  projectId       String
+  sourceType      String   @default("AI_IMPORT") // AI_IMPORT | MANUAL_IMPORT
+  status          String   @default("PENDING") // PENDING | APPLIED | DISMISSED
+  sourceQuality   String   @default("messy") // clean | usable | messy | unsafe
+  confidence      String   @default("low") // high | medium | low
+  budgetItems     Json     @default("[]")
+  calendarEntries Json     @default("[]")
+  risks           Json     @default("[]")
+  createdBy       String
+  createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+}
