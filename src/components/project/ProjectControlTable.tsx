@@ -22,13 +22,11 @@ type Task = {
   department: string | null;
   deadline: Date | string | null;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
-  phaseId: string | null;
   priority: string;
   logs: { id: string; content: string; createdBy: string; createdAt: Date | string }[];
   _count: { logs: number; budgets: number; calendarEntries: number };
 };
 
-type Phase = { id: string; name: string };
 type ControlFilter = "ALL" | "MISSING" | "OVERDUE" | "WITH_BUDGET" | "WITH_LOGS" | "WITH_CALENDAR";
 
 const CONTROL_FILTERS: { value: ControlFilter; label: string }[] = [
@@ -90,7 +88,7 @@ function matchesControlFilter(task: Task, filter: ControlFilter) {
   return true;
 }
 
-function matchesSearch(task: Task, phaseName: string, query: string) {
+function matchesSearch(task: Task, query: string) {
   if (!query.trim()) return true;
   const normalizedQuery = query.trim().toLowerCase();
   return [
@@ -101,7 +99,6 @@ function matchesSearch(task: Task, phaseName: string, query: string) {
     task.department,
     task.priority,
     TASK_STATUS_MAP[task.status],
-    phaseName,
   ].some((value) => value?.toLowerCase().includes(normalizedQuery));
 }
 
@@ -112,11 +109,9 @@ function isEditingTarget(target: EventTarget | null) {
 
 function ControlTableRow({
   task,
-  phaseName,
   focused,
 }: {
   task: Task;
-  phaseName: string;
   focused: boolean;
 }) {
   const router = useRouter();
@@ -219,9 +214,6 @@ function ControlTableRow({
           historyOpen && "bg-primary/5"
         )}
       >
-      <td className="px-3 py-2 text-muted-foreground">
-        <span className="line-clamp-1">{phaseName}</span>
-      </td>
       <td className="px-3 py-2">
         <div className="space-y-1">
           <input
@@ -385,7 +377,7 @@ function ControlTableRow({
       </tr>
       {historyOpen && (
         <tr className="border-t bg-primary/[0.03]">
-          <td colSpan={12} className="px-3 py-3">
+          <td colSpan={11} className="px-3 py-3">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
@@ -447,11 +439,9 @@ function ControlTableRow({
 export function ProjectControlTable({
   projectId,
   tasks,
-  phases,
 }: {
   projectId: string;
   tasks: Task[];
-  phases: Phase[];
 }) {
   const router = useRouter();
   const createFormRef = useRef<HTMLFormElement>(null);
@@ -462,8 +452,6 @@ export function ProjectControlTable({
   const [creating, setCreating] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
-  const phaseName = (phaseId: string | null) =>
-    phaseId ? phases.find((phase) => phase.id === phaseId)?.name ?? "未分组" : "未分组";
 
   const overdueCount = tasks.filter(isOverdue).length;
   const filterCounts = CONTROL_FILTERS.reduce<Record<ControlFilter, number>>((counts, item) => {
@@ -478,8 +466,7 @@ export function ProjectControlTable({
     WITH_CALENDAR: 0,
   });
   const visibleTasks = tasks.filter((task) => {
-    const name = phaseName(task.phaseId);
-    return matchesControlFilter(task, filter) && matchesSearch(task, name, query);
+    return matchesControlFilter(task, filter) && matchesSearch(task, query);
   });
 
   useEffect(() => {
@@ -617,13 +604,7 @@ export function ProjectControlTable({
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
             />
           </div>
-          <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_1fr_1fr]">
-            <Select name="phaseId" defaultValue="" className="h-9 text-sm">
-              <option value="">未分组/通用事项</option>
-              {phases.map((phase) => (
-                <option key={phase.id} value={phase.id}>{phase.name}</option>
-              ))}
-            </Select>
+          <div className="mt-2 grid gap-2 lg:grid-cols-2">
             <Select name="status" defaultValue="PENDING" className="h-9 text-sm">
               <option value="PENDING">待启动</option>
               <option value="IN_PROGRESS">进行中</option>
@@ -711,10 +692,9 @@ export function ProjectControlTable({
                 </p>
               </div>
             ) : (
-              <table className="w-full min-w-[1120px] text-left text-xs">
+              <table className="w-full min-w-[1040px] text-left text-xs">
                 <thead className="border-b bg-muted/40 text-muted-foreground">
                   <tr>
-                    <th className="w-28 px-3 py-2 font-medium">阶段</th>
                     <th className="min-w-56 px-3 py-2 font-medium">管控事项</th>
                     <th className="w-24 px-3 py-2 font-medium">负责人</th>
                     <th className="w-28 px-3 py-2 font-medium">部门</th>
@@ -734,7 +714,6 @@ export function ProjectControlTable({
                       <ControlTableRow
                         key={task.id}
                         task={task}
-                        phaseName={phaseName(task.phaseId)}
                         focused={focusedTaskId === task.id}
                       />
                     );

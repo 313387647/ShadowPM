@@ -47,7 +47,7 @@ export function TaskViewToggle({
       </div>
 
       {view === "control" ? (
-        <ProjectControlTable projectId={projectId} tasks={tasks} phases={phases} />
+        <ProjectControlTable projectId={projectId} tasks={tasks} />
       ) : view === "list" ? (
         <TaskList projectId={projectId} tasks={tasks} />
       ) : (
