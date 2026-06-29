@@ -142,11 +142,29 @@ Latest verified gate before GitHub upload:
 
 ### P0
 
-- AI import needs field-level confidence, missing-field priority, and conflict review.
+The latest external review raised two reliability issues that must move ahead of additional product surface work:
+
+- Permission hardening must come first. Current lightweight auth and project-scoped Server Actions need centralized read/write assertions.
+- Budget formulas must be unified. `Project.totalBudget` should be treated as planned budget metadata, while `BudgetFlow` should remain the financial source of truth.
+
+Updated P0 order:
+
+1. Reliability hardening
+2. Budget ledger truth
+3. AI creation without mandatory budget
+4. Import draft safety
+5. AI import quality V2
+6. Control table V2
+7. Execution calendar V2
+8. Business-rule tests
+
+Key P0 gaps:
+
+- AI import needs field-level confidence, missing-field priority, source references, and conflict review.
+- Import draft budget candidates must not default unclear estimates to expense flows.
 - Control table needs stronger inline editing and "needs confirmation" workflows.
 - Execution calendar needs V2 orchestration around workstream/channel/owner/status.
-- Server Action permissions need hardening.
-- Business-rule tests need to cover budget, logs, import confirmation, and linking.
+- Business-rule tests need to cover budget, permissions, logs, import confirmation, and linking.
 
 ### P1
 

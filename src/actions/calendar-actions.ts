@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, assertCanWriteProject } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/types";
 
 const CALENDAR_STATUSES = ["PLANNED", "CONFIRMED", "DONE", "CANCELED"] as const;
@@ -65,8 +65,7 @@ function buildCalendarChangeLog(
 }
 
 export async function getProjectCalendarEntries(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("未登录");
+  await assertCanReadProject(projectId);
 
   return prisma.executionCalendarEntry.findMany({
     where: { projectId },
@@ -81,9 +80,6 @@ export async function getProjectCalendarEntries(projectId: string) {
 }
 
 export async function updateCalendarEntry(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const entryId = formData.get("entryId") as string;
   const dateRaw = (formData.get("date") as string) || null;
   const statusRaw = (formData.get("status") as string) || "PLANNED";
@@ -111,6 +107,7 @@ export async function updateCalendarEntry(formData: FormData): Promise<ActionRes
     },
   });
   if (!entry) return { success: false, message: "日历项不存在" };
+  const user = await assertCanWriteProject(entry.projectId);
   const relatedTask = taskId
     ? await prisma.task.findFirst({
         where: { id: taskId, projectId: entry.projectId },

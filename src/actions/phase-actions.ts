@@ -2,12 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, assertCanWriteProject } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/types";
 
 export async function getProjectPhases(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  await assertCanReadProject(projectId);
   return prisma.phase.findMany({
     where: { projectId },
     include: { _count: { select: { tasks: true } } },
@@ -16,10 +15,8 @@ export async function getProjectPhases(projectId: string) {
 }
 
 export async function createPhase(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const projectId = formData.get("projectId") as string;
+  await assertCanWriteProject(projectId);
   const name = formData.get("name") as string;
 
   if (!projectId || !name?.trim()) {

@@ -3,15 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, assertCanWriteTask } from "@/lib/permissions";
 import type { $Enums } from "@/generated/prisma/client";
 import type { ActionResult } from "@/actions/types";
 
 // ── 读取项目维度流水 ──
 
 export async function getProjectLedger(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("未登录");
+  await assertCanReadProject(projectId);
 
   const flows = await prisma.budgetFlow.findMany({
     where: { task: { projectId } },
@@ -33,8 +32,7 @@ export async function getProjectLedger(projectId: string) {
 // 使用 Prisma.Decimal 完成所有运算，前端收到纯 number
 
 export async function getProjectBudgetBalance(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("未登录");
+  await assertCanReadProject(projectId);
 
   const [project, result] = await Promise.all([
     prisma.project.findUnique({
@@ -66,8 +64,7 @@ export async function getProjectBudgetBalance(projectId: string) {
 // ── 获取项目下的任务列表（供下拉选择） ──
 
 export async function getProjectTasksForSelect(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  await assertCanReadProject(projectId);
 
   return prisma.task.findMany({
     where: { projectId },
@@ -79,10 +76,8 @@ export async function getProjectTasksForSelect(projectId: string) {
 // ── 记账操作（纯 Append，绝不修改任何余额字段） ──
 
 export async function recordBudget(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const taskId = formData.get("taskId") as string;
+  const { user } = await assertCanWriteTask(taskId);
   const flowType = formData.get("flowType") as string;
   const amountRaw = formData.get("amount") as string;
   const description = formData.get("description") as string;

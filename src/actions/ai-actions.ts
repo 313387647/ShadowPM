@@ -13,7 +13,7 @@ async function parsePDFBuffer(buffer: Buffer): Promise<string> {
 
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireCurrentUser } from "@/lib/permissions";
 import { PROJECT_DEFAULT_FOLDERS } from "@/lib/constants";
 import type { ActionResult } from "@/actions/types";
 
@@ -180,8 +180,7 @@ const AI_IMPORT_MAX_TOKENS = 8192;
 export async function parseDocumentForProject(
   formData: FormData
 ): Promise<ActionResult<AIParsedProject>> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
+  await requireCurrentUser();
 
   try {
     let text = "";
@@ -286,8 +285,7 @@ function isLikelyTruncatedJson(content: string) {
 export async function createProjectFromAI(
   dto: CreateProjectFromAIDTO
 ): Promise<ActionResult<{ projectId: string }>> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
+  const user = await requireCurrentUser();
 
   if (!dto.projectName.trim() || !dto.totalBudget || dto.totalBudget <= 0) {
     return { success: false, message: "项目名称和预算为必填项" };

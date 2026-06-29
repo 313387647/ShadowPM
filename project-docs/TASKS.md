@@ -54,29 +54,63 @@ These items are required before ShadowPM should be considered ready for broader 
 - [x] Update product documentation to match the current AI-native platform direction
 - [x] Move review sample assets into `project-docs/review-assets/`
 - [x] Publish latest Alpha review build to GitHub
-- [ ] AI import quality V2
+- [x] P0.1 Reliability hardening
+  - [x] Add centralized `src/lib/permissions.ts`
+  - [x] Add `requireCurrentUser`, `assertCanReadProject`, and `assertCanWriteProject`
+  - [x] Apply project access checks to project-scoped Server Actions
+  - [x] Fix Copilot project context so it cannot read unrelated projects
+  - [x] Replace forgeable plain session cookie with a signed and server-verifiable session strategy
+  - [ ] Add regression tests for cross-project read/write protection
+- [ ] P0.2 Budget ledger truth
+  - Unify budget formulas across Dashboard, Ledger, Copilot, and AI summaries
+  - Treat `Project.totalBudget` as planned/approved budget metadata
+  - Treat `BudgetFlow` as financial truth
+  - Compute dynamic budget from `SUM(ALLOCATE)`
+  - Compute consumed budget from `ABS(SUM(EXPENSE)) - SUM(REFUND)`
+  - Remove any formula that double-counts `Project.totalBudget + initial ALLOCATE`
+  - Ensure `EXPENSE` is always negative and `ALLOCATE/REFUND` are positive
+  - Add business tests for budget snapshots
+- [ ] P0.3 AI creation should not block on missing budget
+  - Require project name only
+  - Allow unknown or zero total budget when source does not contain a reliable budget pool
+  - Show "budget pool needs confirmation" instead of blocking project creation
+  - Keep budget candidates in review queue
+  - Do not create an initial `ALLOCATE` flow when no confirmed budget exists
+- [ ] P0.4 Import draft safety
+  - Stop defaulting budget candidates to `EXPENSE`
+  - Use AI candidate type when confidence is high
+  - Require manual flow type selection for estimate or unclear budget candidates
+  - Handle multiple pending import drafts by grouping, superseding, or requiring resolution
+  - Prevent import candidates from being applied to tasks outside the project
+- [ ] P0.5 AI import quality V2
   - Add field-level confidence
   - Separate required gaps from optional gaps
   - Surface conflicts and ambiguous fields before confirmation
+  - Add `sourceRef` for control items, budget candidates, calendar entries, and risks
+  - Add `missingFields` and `conflicts` to the import preview model
+  - Group preview rows as "ready to create", "needs confirmation", and "can fill later"
   - Keep low-confidence items editable instead of blocking creation
-- [ ] Control table V2
+- [ ] P0.6 Control table V2
+  - Introduce a product-language adapter: database may stay `Task`, but UI/actions should expose "Control Item / 管控事项"
+  - Replace task-manager wording in core surfaces
   - Improve inline edit coverage
   - Add missing-field and needs-confirmation filters
+  - Add low-confidence filters once import confidence is available
+  - Expose department, description, owner, deadline, status, latest progress, and blocker editing
   - Show clearer relationship indicators for budget/calendar/risk/assets
-- [ ] Execution calendar V2
+- [ ] P0.7 Execution calendar V2
   - Optimize for execution orchestration, not decorative month browsing
   - Add workstream/channel/owner/status grouping
   - Improve overdue and upcoming signal density
   - Keep channel and owner separate
-- [ ] Permission hardening
-  - Add centralized project access helpers
-  - Enforce owner/member access at Server Action boundaries
-  - Audit AI mutation permission checks
-- [ ] Business-rule tests
+- [ ] P0.8 Business-rule tests
   - Budget balance from flow sum
+  - Cross-project read/write protection
   - Status change creates progress log
+  - AI import can create a project without confirmed total budget
   - Import confirmation creates expected records
   - Calendar/task and ledger/task linking
+  - Import budget candidate cannot cross-link to another project's task
 
 ## P1 - Product Differentiation
 
@@ -84,6 +118,7 @@ These items are required before ShadowPM should be considered ready for broader 
   - Keyboard-first command interface
   - Natural language updates
   - Quick create/update/query flows
+  - Mutation preview before write operations
 - [ ] Multi-turn AI confirmation
   - AI asks only high-value clarification questions
   - User can choose "create now, fill gaps later"

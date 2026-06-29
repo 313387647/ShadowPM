@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, assertCanWriteProject } from "@/lib/permissions";
 import { PROJECT_DEFAULT_FOLDERS } from "@/lib/constants";
 import type { $Enums } from "@/generated/prisma/client";
 import type { ActionResult } from "@/actions/types";
@@ -10,8 +10,7 @@ import type { ActionResult } from "@/actions/types";
 // ── 读取（不抛异常，返回空数组代替） ──
 
 export async function getProjectFolders(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  await assertCanReadProject(projectId);
   return prisma.assetFolder.findMany({
     where: { projectId },
     include: { _count: { select: { assets: true } } },
@@ -20,8 +19,13 @@ export async function getProjectFolders(projectId: string) {
 }
 
 export async function getFolderAssets(folderId: string) {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const folder = await prisma.assetFolder.findUnique({
+    where: { id: folderId },
+    select: { projectId: true },
+  });
+  if (!folder) return [];
+  await assertCanReadProject(folder.projectId);
+
   return prisma.assetItem.findMany({
     where: { folderId },
     orderBy: { title: "asc" },
@@ -31,10 +35,8 @@ export async function getFolderAssets(folderId: string) {
 // ── 创建目录 ──
 
 export async function createFolder(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const projectId = formData.get("projectId") as string;
+  await assertCanWriteProject(projectId);
   const name = formData.get("name") as string;
   const parentId = (formData.get("parentId") as string) || null;
 
@@ -53,9 +55,6 @@ export async function createFolder(formData: FormData): Promise<ActionResult> {
 // ── 保存资产 ──
 
 export async function saveAsset(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const folderId = formData.get("folderId") as string;
   const title = formData.get("title") as string;
   const type = formData.get("type") as string;
@@ -70,6 +69,7 @@ export async function saveAsset(formData: FormData): Promise<ActionResult> {
     select: { projectId: true },
   });
   if (!folder) return { success: false, message: "目录不存在" };
+  await assertCanWriteProject(folder.projectId);
 
   // LINK 类型：content 存 URL；DOCUMENT 类型：content 存富文本
   await prisma.assetItem.create({

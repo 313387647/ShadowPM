@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, assertCanWriteProject } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/types";
 
 const RISK_STATUSES = ["OPEN", "ACKNOWLEDGED", "MITIGATED", "CLOSED"] as const;
@@ -15,8 +15,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export async function getProjectRisks(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  await assertCanReadProject(projectId);
 
   return prisma.risk.findMany({
     where: { projectId },
@@ -25,9 +24,6 @@ export async function getProjectRisks(projectId: string) {
 }
 
 export async function updateRiskStatus(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const riskId = formData.get("riskId") as string;
   const statusRaw = formData.get("status") as string;
   const status = RISK_STATUSES.includes(statusRaw as (typeof RISK_STATUSES)[number])
@@ -43,6 +39,7 @@ export async function updateRiskStatus(formData: FormData): Promise<ActionResult
     select: { id: true, projectId: true, title: true, status: true, level: true, type: true },
   });
   if (!risk) return { success: false, message: "风险不存在" };
+  const user = await assertCanWriteProject(risk.projectId);
   if (risk.status === status) return { success: true, message: "状态未变化" };
 
   await prisma.$transaction(async (tx) => {

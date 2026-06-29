@@ -3,11 +3,11 @@
 import OpenAI from "openai";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireCurrentUser } from "@/lib/permissions";
 
 export async function generateDashboardSummary(): Promise<string | null> {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "LEADER") return null;
+  const user = await requireCurrentUser();
+  if (user.role !== "LEADER") return null;
 
   try {
     const now = new Date();

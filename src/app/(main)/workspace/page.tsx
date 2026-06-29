@@ -9,11 +9,12 @@ import { CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 export default async function WorkspacePage() {
   const user = await getCurrentUser();
   if (!user) return null;
+  const taskProjectScope = user.role === "LEADER" ? {} : { project: { ownerId: user.id } };
 
   const [projects, myTasks, overdueTasks] = await Promise.all([
     getUserProjects(),
     prisma.task.findMany({
-      where: { assignee: user.name, status: { not: "COMPLETED" } },
+      where: { assignee: user.name, status: { not: "COMPLETED" }, ...taskProjectScope },
       include: { project: { select: { id: true, name: true } } },
       orderBy: [{ status: "asc" }, { deadline: "asc" }],
       take: 5,
@@ -21,6 +22,7 @@ export default async function WorkspacePage() {
     prisma.task.findMany({
       where: {
         assignee: user.name,
+        ...taskProjectScope,
         deadline: { lt: new Date() },
         status: { not: "COMPLETED" },
       },

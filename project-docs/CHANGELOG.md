@@ -22,6 +22,47 @@
 - Prevent reviewers from judging the product from stale MVP docs.
 - Keep sample data clearly separate from source code and product docs.
 
+## [2026-06-29] Roadmap Update After External Review
+
+### Evaluation
+- Accepted the review's core diagnosis: ShadowPM's product constitution has moved to AI-native project control, while parts of the implementation still carry traditional task-manager assumptions.
+- Verified the highest-risk findings in code:
+  - Project-scoped Server Actions need centralized permission checks.
+  - Dashboard budget formulas can double-count planned budget plus initial allocation.
+  - AI project creation currently blocks when total budget is missing.
+  - Import draft budget candidates default to expense, which is unsafe for estimates.
+
+### Roadmap changes
+- Moved permission hardening and budget formula unification ahead of UI expansion.
+- Split P0 into smaller execution modules:
+  - P0.1 Reliability hardening
+  - P0.2 Budget ledger truth
+  - P0.3 AI creation without mandatory budget
+  - P0.4 Import draft safety
+  - P0.5 AI import quality V2
+  - P0.6 Control table V2
+  - P0.7 Execution calendar V2
+  - P0.8 Business-rule tests
+- Kept Command Center in P1 until core data trust is stronger.
+
+## [2026-06-29] P0.1 Reliability Hardening
+
+### Security and permissions
+- Added `src/lib/permissions.ts` as the centralized permission boundary.
+- Added `requireCurrentUser`, `assertCanReadProject`, `assertCanWriteProject`, `assertCanReadTask`, and `assertCanWriteTask`.
+- Converted project-scoped Server Actions to use centralized permission checks before reading or mutating project data.
+- Hardened AI/Copilot context so MEMBER users only see their own project scope, while LEADER users retain global visibility.
+- Restricted workspace task queries to the user's permitted project scope.
+
+### Session integrity
+- Replaced the old plain `id:name:role` session cookie with a signed session payload.
+- `requireCurrentUser` now verifies that the signed session user still exists in the database.
+- Existing local sessions may need to log in again after this change.
+
+### Scope note
+- This module does not change budget formulas or AI import behavior; those remain P0.2 and P0.3.
+- Cross-project regression tests are still tracked under P0.8 business-rule tests.
+
 ## [2026-06-24] Phase 1 — Task 1: 初始化 Next.js 14 项目
 - 使用 `create-next-app@14` 初始化项目，包含 TypeScript、Tailwind CSS、ESLint、App Router、src/ 目录
 - 配置 `@/*` 路径别名指向 `./src/*`

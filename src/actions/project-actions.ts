@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, assertCanWriteProject, requireCurrentUser } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/types";
 import { initProjectFolders } from "@/actions/wiki-actions";
 
@@ -14,8 +14,7 @@ function parseDateSafe(dateRaw: string | null): Date | null {
 }
 
 export async function createProject(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
+  const user = await requireCurrentUser();
 
   const name = formData.get("name") as string;
   const budgetRaw = formData.get("totalBudget") as string;
@@ -66,8 +65,7 @@ export async function createProject(formData: FormData): Promise<ActionResult> {
 }
 
 export async function getUserProjects() {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  const user = await requireCurrentUser();
 
   const projects = await prisma.project.findMany({
     where: { ownerId: user.id },
@@ -83,15 +81,13 @@ export async function getUserProjects() {
 }
 
 export async function deleteProject(projectId: string): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
+  await assertCanWriteProject(projectId);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { name: true, ownerId: true },
+    select: { name: true },
   });
   if (!project) return { success: false, message: "项目不存在" };
-  if (project.ownerId !== user.id) return { success: false, message: "无权删除此项目" };
 
   await prisma.project.delete({ where: { id: projectId } });
   revalidatePath("/workspace");
@@ -99,8 +95,7 @@ export async function deleteProject(projectId: string): Promise<ActionResult> {
 }
 
 export async function getProjectDetail(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("未登录");
+  await assertCanReadProject(projectId);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },

@@ -2,7 +2,7 @@
 
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanWriteTask, requireCurrentUser } from "@/lib/permissions";
 
 export type CopilotResponse = {
   message: string;
@@ -12,11 +12,11 @@ export type CopilotResponse = {
 // ── 风险检测（Copilot 内嵌，无需额外 Action） ──
 
 export async function detectProjectRisks(): Promise<CopilotResponse> {
-  const user = await getCurrentUser();
-  if (!user) return { message: "请先登录" };
+  const user = await requireCurrentUser();
 
   const now = new Date();
   const projects = await prisma.project.findMany({
+    where: user.role === "LEADER" ? {} : { ownerId: user.id },
     include: {
       _count: { select: { tasks: true } },
       tasks: { select: { id: true, name: true, status: true, deadline: true } },
@@ -182,8 +182,7 @@ function textMatchesInput(input: string, value: string) {
 }
 
 export async function processCopilotMessage(input: string): Promise<CopilotResponse> {
-  const user = await getCurrentUser();
-  if (!user) return { message: "请先登录" };
+  const user = await requireCurrentUser();
 
   if (!input.trim()) return { message: "请输入内容" };
 
@@ -191,6 +190,7 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
     // 1. 查询用户相关的项目和任务上下文
     const [userProjects, userTasks] = await Promise.all([
       prisma.project.findMany({
+        where: user.role === "LEADER" ? {} : { ownerId: user.id },
         select: {
           id: true,
           name: true,
@@ -210,10 +210,17 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
       }),
       prisma.task.findMany({
         where: {
-          OR: [
-            { assignee: user.name },
-            { project: { ownerId: user.id } },
-          ],
+          ...(user.role === "LEADER"
+            ? {}
+            : {
+                project: { ownerId: user.id },
+              }),
+          OR: user.role === "LEADER"
+            ? [
+                { assignee: user.name },
+                { project: { ownerId: user.id } },
+              ]
+            : undefined,
           status: { not: "COMPLETED" },
         },
         select: { id: true, name: true, status: true, project: { select: { id: true, name: true } } },
@@ -430,6 +437,7 @@ ${riskList || "（无）"}
       }
 
       if (parsed.action === "update_status" && parsed.newStatus) {
+        await assertCanWriteTask(matchedTask.id);
         const STATUS_LABEL: Record<string, string> = {
           PENDING: "待启动", IN_PROGRESS: "进行中", COMPLETED: "已完成",
         };
@@ -463,6 +471,7 @@ ${riskList || "（无）"}
       }
 
       if (parsed.action === "add_log" && parsed.logContent) {
+        await assertCanWriteTask(matchedTask.id);
         await prisma.progressLog.create({
           data: {
             taskId: matchedTask.id,
@@ -483,7 +492,7 @@ ${riskList || "（无）"}
       return {
         message: parsed.message as string,
         actions: parsed.projectName
-          ? await getProjectActions(parsed.projectName as string)
+          ? await getProjectActions(parsed.projectName as string, user)
           : undefined,
       };
     }
@@ -499,9 +508,12 @@ ${riskList || "（无）"}
 }
 
 // 辅助：根据项目名查找项目并返回操作链接
-async function getProjectActions(name: string) {
+async function getProjectActions(name: string, user: Awaited<ReturnType<typeof requireCurrentUser>>) {
   const project = await prisma.project.findFirst({
-    where: { name: { contains: name } },
+    where: {
+      name: { contains: name },
+      ...(user.role === "LEADER" ? {} : { ownerId: user.id }),
+    },
     select: { id: true, name: true },
   });
   if (!project) return undefined;

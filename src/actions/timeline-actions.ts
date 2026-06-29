@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, assertCanWriteProject, assertCanWriteTask } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/types";
 
 type ProjectAIInsight = {
@@ -18,8 +18,7 @@ type ProjectAIInsight = {
 // ── 项目维度聚合时间轴（跨所有任务） ──
 
 export async function getProjectTimeline(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("未登录");
+  await assertCanReadProject(projectId);
 
   const [progressLogs, activityLogs] = await Promise.all([
     prisma.progressLog.findMany({
@@ -88,10 +87,8 @@ function isBulkControlFillProgress(content: string) {
 // ── 纯 Append 模式插入 —— 绝对不修改任何已有记录 ──
 
 export async function addProgressLog(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const taskId = formData.get("taskId") as string;
+  const { user } = await assertCanWriteTask(taskId);
   const content = formData.get("content") as string;
 
   if (!taskId || !content?.trim()) {
@@ -117,8 +114,7 @@ export async function addProgressLog(formData: FormData): Promise<ActionResult> 
 }
 
 export async function generateProjectActivitySummary(projectId: string): Promise<ActionResult<ProjectAIInsight>> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
+  const user = await assertCanReadProject(projectId);
   if (!process.env.DEEPSEEK_API_KEY) return { success: false, message: "缺少 DEEPSEEK_API_KEY，暂时无法生成 AI 摘要" };
 
   const project = await prisma.project.findUnique({
@@ -330,10 +326,8 @@ ${recentProgressLogs.slice(0, 8).map((log) => `- ${formatDate(log.createdAt)}｜
 }
 
 export async function adoptAIActionSuggestion(formData: FormData): Promise<ActionResult<{ taskId: string }>> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const projectId = formData.get("projectId") as string;
+  const user = await assertCanWriteProject(projectId);
   const activityLogId = formData.get("activityLogId") as string;
   const actionIndex = Number(formData.get("actionIndex"));
   const name = normalizeOptionalText(formData.get("name"));
@@ -438,10 +432,8 @@ export async function adoptAIActionSuggestion(formData: FormData): Promise<Actio
 }
 
 export async function scheduleAIActionSuggestion(formData: FormData): Promise<ActionResult<{ calendarEntryId: string }>> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const projectId = formData.get("projectId") as string;
+  const user = await assertCanWriteProject(projectId);
   const activityLogId = formData.get("activityLogId") as string;
   const actionIndex = Number(formData.get("actionIndex"));
   const content = normalizeOptionalText(formData.get("content"));
@@ -575,10 +567,8 @@ export async function scheduleAIActionSuggestion(formData: FormData): Promise<Ac
 }
 
 export async function adoptAIRiskSignal(formData: FormData): Promise<ActionResult<{ riskId: string }>> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const projectId = formData.get("projectId") as string;
+  const user = await assertCanWriteProject(projectId);
   const activityLogId = formData.get("activityLogId") as string;
   const riskIndex = Number(formData.get("riskIndex"));
   const title = normalizeOptionalText(formData.get("title"));
@@ -681,10 +671,8 @@ export async function adoptAIRiskSignal(formData: FormData): Promise<ActionResul
 }
 
 export async function adoptAIBudgetSignal(formData: FormData): Promise<ActionResult<{ budgetFlowId: string }>> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const projectId = formData.get("projectId") as string;
+  const user = await assertCanWriteProject(projectId);
   const activityLogId = formData.get("activityLogId") as string;
   const budgetIndex = Number(formData.get("budgetIndex"));
   const taskId = formData.get("taskId") as string;

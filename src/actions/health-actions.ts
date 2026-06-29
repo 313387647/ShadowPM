@@ -1,13 +1,13 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, requireCurrentUser } from "@/lib/permissions";
 
 // ── 定时快照（Leader 可手动触发） ──
 
 export async function takeHealthSnapshot() {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "LEADER") return { success: false };
+  const user = await requireCurrentUser();
+  if (user.role !== "LEADER") return { success: false };
 
   const projects = await prisma.project.findMany({
     include: {
@@ -41,6 +41,7 @@ export async function takeHealthSnapshot() {
 // ── 获取快照历史 ──
 
 export async function getHealthHistory(projectId: string) {
+  await assertCanReadProject(projectId);
   return prisma.healthSnapshot.findMany({
     where: { projectId },
     orderBy: { timestamp: "desc" },
@@ -51,8 +52,8 @@ export async function getHealthHistory(projectId: string) {
 // ── Team 工作负载 ──
 
 export async function getTeamWorkload() {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "LEADER") return [];
+  const user = await requireCurrentUser();
+  if (user.role !== "LEADER") return [];
 
   const members = await prisma.user.findMany({
     include: {

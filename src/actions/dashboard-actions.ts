@@ -2,13 +2,12 @@
 
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireCurrentUser } from "@/lib/permissions";
 
 // ── 全局大盘聚合（全部压力交给 PostgreSQL） ──
 
 export async function getGlobalDashboardStats() {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("未登录");
+  const user = await requireCurrentUser();
   if (user.role !== "LEADER") throw new Error("仅 Leader 可访问");
 
   const now = new Date();
@@ -103,8 +102,7 @@ export async function getGlobalDashboardStats() {
 // ── 项目健康度（严格按财务铁律：DB 聚合 + 精确公式） ──
 
 export async function getProjectsHealth() {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("未登录");
+  const user = await requireCurrentUser();
   if (user.role !== "LEADER") throw new Error("仅 Leader 可访问");
 
   const now = new Date();

@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { createSessionCookieValue } from "@/lib/auth";
 
 export async function login(userName: string) {
   // 按名称查找用户（seed 脚本保证这三个用户始终存在）
@@ -12,7 +13,11 @@ export async function login(userName: string) {
   if (!user) throw new Error(`用户 ${userName} 不存在，请先运行 npx prisma db seed`);
 
   const cookieStore = await cookies();
-  cookieStore.set("shadowpm-session", `${user.id}:${user.name}:${user.role}`, {
+  cookieStore.set("shadowpm-session", createSessionCookieValue({
+    id: user.id,
+    name: user.name,
+    role: user.role,
+  }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

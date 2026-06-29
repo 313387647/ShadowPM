@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, assertCanWriteProject, assertCanWriteTask } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/types";
 
 /** 安全解析 HTML date input（"YYYY-MM-DD"），强制 UTC 午夜，杜绝时区偏移 */
@@ -65,8 +65,7 @@ function buildTaskChangeLog(
 // ── 读取 ──
 
 export async function getProjectTasks(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("未登录");
+  await assertCanReadProject(projectId);
 
   return prisma.task.findMany({
     where: { projectId },
@@ -78,10 +77,8 @@ export async function getProjectTasks(projectId: string) {
 // ── 新增 ──
 
 export async function createTask(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const projectId = formData.get("projectId") as string;
+  await assertCanWriteProject(projectId);
   const name = formData.get("name") as string;
   const assignee = (formData.get("assignee") as string) || null;
   const phaseId = (formData.get("phaseId") as string) || null;
@@ -118,8 +115,7 @@ export async function updateTaskStatus(
   taskId: string,
   status: string
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
+  const { user, task: taskRef } = await assertCanWriteTask(taskId);
 
   const STATUS_MAP: Record<string, string> = {
     PENDING: "待启动",
@@ -127,7 +123,7 @@ export async function updateTaskStatus(
     COMPLETED: "已完成",
   };
 
-  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  const task = await prisma.task.findUnique({ where: { id: taskRef.id } });
   if (!task) return { success: false, message: "任务不存在" };
 
   await prisma.$transaction([
@@ -151,10 +147,8 @@ export async function updateTaskStatus(
 // ── 编辑任务 ──
 
 export async function updateTask(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const taskId = formData.get("taskId") as string;
+  const { user } = await assertCanWriteTask(taskId);
   const name = (formData.get("name") as string) || null;
   const assignee = (formData.get("assignee") as string) || null;
   const deadlineRaw = (formData.get("deadline") as string) || null;
@@ -216,8 +210,10 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
 }
 
 export async function fillMissingTaskFields(formData: FormData): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
+  const projectIdRaw = (formData.get("projectId") as string) || null;
+  const user = projectIdRaw
+    ? await assertCanWriteProject(projectIdRaw)
+    : null;
 
   const taskIdsRaw = (formData.get("taskIds") as string) || "[]";
   const assignee = normalizeText(formData.get("assignee") as string | null);
@@ -240,7 +236,7 @@ export async function fillMissingTaskFields(formData: FormData): Promise<ActionR
   }
 
   const tasks = await prisma.task.findMany({
-    where: { id: { in: taskIds } },
+    where: { id: { in: taskIds }, ...(projectIdRaw ? { projectId: projectIdRaw } : {}) },
     select: {
       id: true,
       projectId: true,
@@ -254,6 +250,9 @@ export async function fillMissingTaskFields(formData: FormData): Promise<ActionR
   });
 
   if (tasks.length === 0) return { success: false, message: "没有找到可补齐的管控事项" };
+  const projectIds = Array.from(new Set(tasks.map((task) => task.projectId)));
+  if (projectIds.length !== 1) return { success: false, message: "批量补齐只能作用于同一个项目" };
+  const userWithAccess = user ?? await assertCanWriteProject(projectIds[0]);
 
   const updates = tasks
     .map((task) => {
@@ -297,7 +296,7 @@ export async function fillMissingTaskFields(formData: FormData): Promise<ActionR
                 })),
               },
               source: "HUMAN",
-              createdBy: user.name,
+              createdBy: userWithAccess.name,
             },
           }),
         ]
@@ -315,7 +314,7 @@ export async function fillMissingTaskFields(formData: FormData): Promise<ActionR
         data: {
           taskId: task.id,
           content: `🧩 批量补齐管控字段\n${changes.map((change) => `- ${change}`).join("\n")}`,
-          createdBy: user.name,
+          createdBy: userWithAccess.name,
         },
       }),
     ]),
@@ -333,8 +332,7 @@ export async function fillMissingTaskFields(formData: FormData): Promise<ActionR
 // ── 删除任务 ──
 
 export async function deleteTask(taskId: string): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
+  await assertCanWriteTask(taskId);
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },

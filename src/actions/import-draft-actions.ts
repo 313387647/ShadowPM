@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { assertCanReadProject, assertCanWriteProject } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/types";
 
 function asArray(value: unknown) {
@@ -87,8 +87,7 @@ function parseDateSafe(dateRaw: string | null | undefined): Date | null {
 }
 
 export async function getPendingImportDrafts(projectId: string) {
-  const user = await getCurrentUser();
-  if (!user) return [];
+  await assertCanReadProject(projectId);
 
   const drafts = await prisma.importDraft.findMany({
     where: {
@@ -129,9 +128,6 @@ export async function getPendingImportDrafts(projectId: string) {
 export async function applyBudgetImportCandidate(
   formData: FormData
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const draftId = formData.get("draftId") as string;
   const indexRaw = formData.get("candidateIndex") as string;
   const taskId = formData.get("taskId") as string;
@@ -152,6 +148,7 @@ export async function applyBudgetImportCandidate(
   if (!draft || draft.status !== "PENDING") {
     return { success: false, message: "导入候选不存在或已处理" };
   }
+  const user = await assertCanWriteProject(draft.projectId);
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -242,9 +239,6 @@ export async function applyBudgetImportCandidate(
 export async function applyRiskImportCandidate(
   formData: FormData
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const draftId = formData.get("draftId") as string;
   const indexRaw = formData.get("candidateIndex") as string;
   const candidateIndex = Number(indexRaw);
@@ -260,6 +254,7 @@ export async function applyRiskImportCandidate(
   if (!draft || draft.status !== "PENDING") {
     return { success: false, message: "导入候选不存在或已处理" };
   }
+  const user = await assertCanWriteProject(draft.projectId);
 
   const risks = asArray(draft.risks) as RiskCandidate[];
   const candidate = risks[candidateIndex];
@@ -334,9 +329,6 @@ export async function applyRiskImportCandidate(
 export async function applyCalendarImportCandidate(
   formData: FormData
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, message: "请先登录" };
-
   const draftId = formData.get("draftId") as string;
   const indexRaw = formData.get("candidateIndex") as string;
   const candidateIndex = Number(indexRaw);
@@ -352,6 +344,7 @@ export async function applyCalendarImportCandidate(
   if (!draft || draft.status !== "PENDING") {
     return { success: false, message: "导入候选不存在或已处理" };
   }
+  const user = await assertCanWriteProject(draft.projectId);
 
   const calendarEntries = asArray(draft.calendarEntries) as CalendarCandidate[];
   const candidate = calendarEntries[candidateIndex];
