@@ -24,7 +24,11 @@ export function CreateProjectForm() {
         toast.success(result.message!);
         formRef.current?.reset();
         setOpen(false);
-        router.refresh();
+        if (result.data?.projectId) {
+          router.push(`/projects/${result.data.projectId}`);
+        } else {
+          router.refresh();
+        }
       } else {
         toast.error(result.message!);
       }

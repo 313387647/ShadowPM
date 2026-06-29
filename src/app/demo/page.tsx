@@ -45,6 +45,7 @@ export default function DemoPage() {
             </h1>
             <p className="text-base leading-7 text-muted-foreground">
               这个测试站用于收集 ShadowPM Alpha 反馈。请重点看 AI 是否正确拆分项目管控总表、预算候选、执行日历和风险/待定项，而不是只评价页面是否好看。
+              也请测试手动创建项目、修改管控事项、记录预算和维护日历是否足够顺手。
             </p>
           </div>
           <div className="flex flex-wrap gap-3">

@@ -13,7 +13,7 @@ function parseDateSafe(dateRaw: string | null): Date | null {
   return new Date(dateRaw + "T00:00:00.000Z");
 }
 
-export async function createProject(formData: FormData): Promise<ActionResult> {
+export async function createProject(formData: FormData): Promise<ActionResult<{ projectId: string }>> {
   const user = await requireCurrentUser();
 
   const name = formData.get("name") as string;
@@ -65,7 +65,7 @@ export async function createProject(formData: FormData): Promise<ActionResult> {
   }
 
   revalidatePath("/workspace");
-  return { success: true, message: `项目「${name}」创建成功` };
+  return { success: true, message: `项目「${name}」创建成功`, data: { projectId: project.id } };
 }
 
 export async function getUserProjects() {
