@@ -26,9 +26,11 @@ type Flow = {
 type TaskOption = { id: string; name: string; status: string };
 
 interface Props {
-  totalBudget: number;
+  plannedBudget: number;
+  allocatedBudget: number;
   balance: number;
   used: number;
+  usagePercent: number;
   flows: Flow[];
   tasks: TaskOption[];
 }
@@ -39,7 +41,7 @@ const FLOW_COLORS: Record<string, string> = {
   REFUND: "text-emerald-600",
 };
 
-export function LedgerTable({ totalBudget, balance, used, flows, tasks }: Props) {
+export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usagePercent, flows, tasks }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const formRef = useRef<HTMLFormElement>(null);
@@ -49,7 +51,6 @@ export function LedgerTable({ totalBudget, balance, used, flows, tasks }: Props)
   const [query, setQuery] = useState("");
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
 
-  const usagePercent = totalBudget > 0 ? Math.round((used / totalBudget) * 100) : 0;
   const normalizedQuery = query.trim().toLowerCase();
   const visibleFlows = useMemo(() => {
     return flows.filter((flow) => {
@@ -103,10 +104,13 @@ export function LedgerTable({ totalBudget, balance, used, flows, tasks }: Props)
           <CardContent className="pt-5">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Wallet className="size-4" />
-              项目总预算
+              已确认预算池
             </div>
             <p className="mt-1 text-2xl font-bold tabular-nums">
-              ¥{totalBudget.toLocaleString("zh-CN")}
+              ¥{allocatedBudget.toLocaleString("zh-CN")}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              计划预算 ¥{plannedBudget.toLocaleString("zh-CN")}
             </p>
           </CardContent>
         </Card>
@@ -120,7 +124,7 @@ export function LedgerTable({ totalBudget, balance, used, flows, tasks }: Props)
               ¥{used.toLocaleString("zh-CN")}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              占预算 {usagePercent}%
+              占确认预算 {usagePercent}%
             </p>
           </CardContent>
         </Card>

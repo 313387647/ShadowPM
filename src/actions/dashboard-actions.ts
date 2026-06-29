@@ -3,6 +3,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/permissions";
+import { calculateBudgetSnapshot } from "@/lib/budget";
 
 // ── 全局大盘聚合（全部压力交给 PostgreSQL） ──
 
@@ -17,7 +18,6 @@ export async function getGlobalDashboardStats() {
   // ════════════════════════════════════════
 
   const [
-    budgetTotal,
     allocAgg,
     expenseAgg,
     refundAgg,
@@ -26,9 +26,6 @@ export async function getGlobalDashboardStats() {
     overdueCount,
     projectCount,
   ] = await Promise.all([
-    // 总预算池：所有项目 totalBudget 求和
-    prisma.project.aggregate({ _sum: { totalBudget: true } }),
-
     // ALLOCATE 总和
     prisma.budgetFlow.aggregate({
       _sum: { amount: true },
@@ -70,8 +67,6 @@ export async function getGlobalDashboardStats() {
     prisma.project.count(),
   ]);
 
-  const totalPool: Prisma.Decimal =
-    budgetTotal._sum.totalBudget ?? new Prisma.Decimal(0);
   const totalAllocated: Prisma.Decimal =
     allocAgg._sum.amount ?? new Prisma.Decimal(0);
   const totalExpense: Prisma.Decimal =
@@ -88,7 +83,7 @@ export async function getGlobalDashboardStats() {
   }
 
   return {
-    totalPool: totalPool.toNumber(),
+    totalPool: totalAllocated.toNumber(),
     totalAllocated: totalAllocated.toNumber(),
     totalExpense: totalExpense.toNumber(),
     totalRefund: totalRefund.toNumber(),
@@ -159,15 +154,12 @@ export async function getProjectsHealth() {
       refund: new Prisma.Decimal(0),
     };
 
-    // ── 财务铁律（与详情页完全一致） ──
-    // 动态总预算 = 初始预算 + 追加分配
-    const dynamicTotal = p.totalBudget.add(fin.alloc);
-    // 已耗金额 = |支出| - 退款
-    const consumed = fin.expense.abs().sub(fin.refund);
-    // 消耗比例
-    const budgetUsage = dynamicTotal.gt(0)
-      ? Math.round(consumed.div(dynamicTotal).times(100).toNumber())
-      : 0;
+    const budget = calculateBudgetSnapshot({
+      plannedBudget: p.totalBudget,
+      allocated: fin.alloc,
+      expense: fin.expense,
+      refund: fin.refund,
+    });
 
     const completedTasks = p.tasks.filter((t) => t.status === "COMPLETED").length;
     const totalTasks = p._count.tasks;
@@ -177,15 +169,17 @@ export async function getProjectsHealth() {
       (t) => t.deadline && new Date(t.deadline) < now && t.status !== "COMPLETED"
     );
 
-    const isAtRisk = budgetUsage > 90 || hasOverdueTasks;
+    const isAtRisk = budget.usagePercent > 90 || hasOverdueTasks;
 
     return {
       id: p.id,
       name: p.name,
       ownerName: p.owner.name,
-      dynamicTotal: dynamicTotal.toNumber(),
-      consumed: consumed.toNumber(),
-      budgetUsage,
+      dynamicTotal: budget.allocated.toNumber(),
+      plannedBudget: budget.plannedBudget.toNumber(),
+      consumed: budget.consumed.toNumber(),
+      balance: budget.balance.toNumber(),
+      budgetUsage: budget.usagePercent,
       totalTasks,
       completedTasks,
       taskProgress,

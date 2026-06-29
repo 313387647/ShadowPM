@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertCanReadProject, assertCanWriteProject, assertCanWriteTask } from "@/lib/permissions";
+import { calculateBudgetSnapshot } from "@/lib/budget";
 import type { ActionResult } from "@/actions/types";
 
 type ProjectAIInsight = {
@@ -170,13 +171,17 @@ export async function generateProjectActivitySummary(projectId: string): Promise
     select: { id: true },
   });
   const taskIdList = taskIds.map((task) => task.id);
-  const [budgetExpense, budgetAllocation, recentProgressLogs, calendarEntries] = await Promise.all([
+  const [budgetExpense, budgetAllocation, budgetRefund, recentProgressLogs, calendarEntries] = await Promise.all([
     prisma.budgetFlow.aggregate({
       where: { taskId: { in: taskIdList }, flowType: "EXPENSE" },
       _sum: { amount: true },
     }),
     prisma.budgetFlow.aggregate({
       where: { taskId: { in: taskIdList }, flowType: "ALLOCATE" },
+      _sum: { amount: true },
+    }),
+    prisma.budgetFlow.aggregate({
+      where: { taskId: { in: taskIdList }, flowType: "REFUND" },
       _sum: { amount: true },
     }),
     prisma.progressLog.findMany({
@@ -214,8 +219,12 @@ export async function generateProjectActivitySummary(projectId: string): Promise
     p0: project.tasks.filter((task) => task.priority === "P0").length,
   };
   const openRisks = project.risks.filter((risk) => risk.status !== "CLOSED");
-  const spent = (budgetExpense._sum.amount ?? new Prisma.Decimal(0)).abs();
-  const allocated = budgetAllocation._sum.amount ?? new Prisma.Decimal(0);
+  const budget = calculateBudgetSnapshot({
+    plannedBudget: project.totalBudget,
+    allocated: budgetAllocation._sum.amount,
+    expense: budgetExpense._sum.amount,
+    refund: budgetRefund._sum.amount,
+  });
 
   const prompt = `你是 ShadowPM 的项目状态分析助手。ShadowPM 不是任务管理工具，而是 AI Native Project Management Platform。
 
@@ -243,9 +252,12 @@ JSON 结构：
 项目：
 - 名称：${project.name}
 - 周期：${formatDate(project.startDate)} 至 ${formatDate(project.endDate)}
-- 总预算：${formatMoney(project.totalBudget)}
-- 已分配预算：${formatMoney(allocated)}
-- 已支出预算：${formatMoney(spent)}
+- 计划预算：${formatMoney(budget.plannedBudget)}
+- 已确认预算池：${formatMoney(budget.allocated)}
+- 已使用预算：${formatMoney(budget.consumed)}
+- 可用结余：${formatMoney(budget.balance)}
+- 支出流水：${formatMoney(budget.expense)}
+- 退款：${formatMoney(budget.refund)}
 
 管控总表：
 - 总事项：${taskStats.total}
@@ -308,9 +320,12 @@ ${recentProgressLogs.slice(0, 8).map((log) => `- ${formatDate(log.createdAt)}｜
           ...insight,
           taskStats,
           budget: {
-            total: project.totalBudget.toString(),
-            allocated: allocated.toString(),
-            spent: spent.toString(),
+            planned: budget.plannedBudget.toString(),
+            allocated: budget.allocated.toString(),
+            consumed: budget.consumed.toString(),
+            balance: budget.balance.toString(),
+            expense: budget.expense.toString(),
+            refund: budget.refund.toString(),
           },
           openRiskCount: openRisks.length,
           generatedAt: new Date().toISOString(),

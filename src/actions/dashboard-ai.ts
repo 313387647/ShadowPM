@@ -12,7 +12,7 @@ export async function generateDashboardSummary(): Promise<string | null> {
   try {
     const now = new Date();
 
-    const [projects, taskAgg, flowAgg, overdueCount] = await Promise.all([
+    const [projects, taskAgg, allocAgg, expenseAgg, refundAgg, overdueCount] = await Promise.all([
       prisma.project.findMany({
         select: {
           name: true, totalBudget: true,
@@ -24,7 +24,15 @@ export async function generateDashboardSummary(): Promise<string | null> {
       prisma.task.groupBy({ by: ["status"], _count: { id: true } }),
       prisma.budgetFlow.aggregate({
         _sum: { amount: true },
+        where: { flowType: "ALLOCATE" },
+      }),
+      prisma.budgetFlow.aggregate({
+        _sum: { amount: true },
         where: { flowType: "EXPENSE" },
+      }),
+      prisma.budgetFlow.aggregate({
+        _sum: { amount: true },
+        where: { flowType: "REFUND" },
       }),
       prisma.task.count({
         where: { deadline: { lt: now }, status: { not: "COMPLETED" } },
@@ -33,8 +41,11 @@ export async function generateDashboardSummary(): Promise<string | null> {
 
     if (projects.length === 0) return null;
 
-    const totalBudget = projects.reduce((s, p) => s.add(p.totalBudget), new Prisma.Decimal(0));
-    const totalExpense = (flowAgg._sum.amount ?? new Prisma.Decimal(0)).abs();
+    const plannedBudget = projects.reduce((s, p) => s.add(p.totalBudget), new Prisma.Decimal(0));
+    const totalAllocated = allocAgg._sum.amount ?? new Prisma.Decimal(0);
+    const totalExpense = (expenseAgg._sum.amount ?? new Prisma.Decimal(0)).abs();
+    const totalRefund = refundAgg._sum.amount ?? new Prisma.Decimal(0);
+    const consumed = totalExpense.sub(totalRefund);
 
     const pending = taskAgg.find((g) => g.status === "PENDING")?._count.id ?? 0;
     const inProgress = taskAgg.find((g) => g.status === "IN_PROGRESS")?._count.id ?? 0;
@@ -58,8 +69,9 @@ export async function generateDashboardSummary(): Promise<string | null> {
 
 数据：
 • 总项目数：${projects.length}
-• 总预算：¥${totalBudget.toNumber().toLocaleString()}
-• 已支出：¥${totalExpense.toNumber().toLocaleString()}
+• 计划预算：¥${plannedBudget.toNumber().toLocaleString()}
+• 已确认预算池：¥${totalAllocated.toNumber().toLocaleString()}
+• 已使用：¥${consumed.toNumber().toLocaleString()}
 • 待启动任务：${pending} | 进行中：${inProgress} | 已完成：${completed}
 • 逾期未完成：${overdueCount} 个
 • 各项目进度：

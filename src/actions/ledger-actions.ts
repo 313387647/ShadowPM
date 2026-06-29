@@ -4,8 +4,11 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertCanReadProject, assertCanWriteTask } from "@/lib/permissions";
+import { calculateBudgetSnapshot } from "@/lib/budget";
 import type { $Enums } from "@/generated/prisma/client";
 import type { ActionResult } from "@/actions/types";
+
+const FLOW_TYPES = ["ALLOCATE", "EXPENSE", "REFUND"] as const;
 
 // ── 读取项目维度流水 ──
 
@@ -34,30 +37,40 @@ export async function getProjectLedger(projectId: string) {
 export async function getProjectBudgetBalance(projectId: string) {
   await assertCanReadProject(projectId);
 
-  const [project, result] = await Promise.all([
+  const [project, allocAgg, expenseAgg, refundAgg] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
       select: { totalBudget: true },
     }),
     prisma.budgetFlow.aggregate({
       _sum: { amount: true },
-      where: { task: { projectId } },
+      where: { task: { projectId }, flowType: "ALLOCATE" },
+    }),
+    prisma.budgetFlow.aggregate({
+      _sum: { amount: true },
+      where: { task: { projectId }, flowType: "EXPENSE" },
+    }),
+    prisma.budgetFlow.aggregate({
+      _sum: { amount: true },
+      where: { task: { projectId }, flowType: "REFUND" },
     }),
   ]);
 
-  // Prisma.Decimal 精确运算 —— 杜绝浮点数精度丢失
-  // 关键：flowSum 已包含初始 ALLOCATE（即预算本身），结余 = Σ 所有流水
-  const totalBudget: Prisma.Decimal = project?.totalBudget ?? new Prisma.Decimal(0);
-  const flowSum: Prisma.Decimal = result._sum.amount ?? new Prisma.Decimal(0);
-
-  // 结余 = 流水总和（ALLOCATE - EXPENSE + REFUND）
-  const balance = flowSum;
-  // 已使用 = 项目总预算 - 当前结余
-  const used = totalBudget.sub(balance);
+  const snapshot = calculateBudgetSnapshot({
+    plannedBudget: project?.totalBudget,
+    allocated: allocAgg._sum.amount,
+    expense: expenseAgg._sum.amount,
+    refund: refundAgg._sum.amount,
+  });
 
   return {
-    balance: balance.toNumber(),
-    used: used.toNumber(),
+    plannedBudget: snapshot.plannedBudget.toNumber(),
+    allocatedBudget: snapshot.allocated.toNumber(),
+    balance: snapshot.balance.toNumber(),
+    used: snapshot.consumed.toNumber(),
+    expense: snapshot.expense.toNumber(),
+    refund: snapshot.refund.toNumber(),
+    usagePercent: snapshot.usagePercent,
   };
 }
 
@@ -84,6 +97,9 @@ export async function recordBudget(formData: FormData): Promise<ActionResult> {
 
   if (!taskId || !flowType || !amountRaw || !description?.trim()) {
     return { success: false, message: "所有字段为必填项" };
+  }
+  if (!FLOW_TYPES.includes(flowType as (typeof FLOW_TYPES)[number])) {
+    return { success: false, message: "流水类型无效" };
   }
 
   // 使用 Prisma.Decimal 包装器，杜绝原生 parseFloat

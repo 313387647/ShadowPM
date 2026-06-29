@@ -1,8 +1,10 @@
 "use server";
 
 import OpenAI from "openai";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertCanWriteTask, requireCurrentUser } from "@/lib/permissions";
+import { calculateBudgetSnapshot } from "@/lib/budget";
 
 export type CopilotResponse = {
   message: string;
@@ -267,19 +269,31 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
 
     const budgetSummaries = userProjects.map((project) => {
       const flows = project.tasks.flatMap((task) => task.budgets);
-      const flowSum = flows.reduce((sum, flow) => sum + flow.amount.toNumber(), 0);
-      const totalBudget = project.totalBudget.toNumber();
+      const allocated = flows
+        .filter((flow) => flow.flowType === "ALLOCATE")
+        .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
       const expense = flows
         .filter((flow) => flow.flowType === "EXPENSE")
-        .reduce((sum, flow) => sum + Math.abs(flow.amount.toNumber()), 0);
+        .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
+      const refund = flows
+        .filter((flow) => flow.flowType === "REFUND")
+        .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
+      const budget = calculateBudgetSnapshot({
+        plannedBudget: project.totalBudget,
+        allocated,
+        expense,
+        refund,
+      });
 
       return {
         id: project.id,
         name: project.name,
-        totalBudget,
-        balance: flowSum,
-        used: totalBudget - flowSum,
-        expense,
+        plannedBudget: budget.plannedBudget.toNumber(),
+        allocatedBudget: budget.allocated.toNumber(),
+        balance: budget.balance.toNumber(),
+        used: budget.consumed.toNumber(),
+        expense: budget.expense.toNumber(),
+        refund: budget.refund.toNumber(),
         flowCount: flows.length,
       };
     });
@@ -298,7 +312,7 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
 
       return {
         message: `💰 当前预算概览：\n\n${budgetsToShow.map((project) =>
-          `• ${project.name}\n  总预算：${formatMoney(project.totalBudget)}｜已使用：${formatMoney(project.used)}｜结余：${formatMoney(project.balance)}｜支出流水：${formatMoney(project.expense)}｜流水 ${project.flowCount} 条`
+          `• ${project.name}\n  计划预算：${formatMoney(project.plannedBudget)}｜确认预算：${formatMoney(project.allocatedBudget)}｜已使用：${formatMoney(project.used)}｜结余：${formatMoney(project.balance)}｜支出流水：${formatMoney(project.expense)}｜退款：${formatMoney(project.refund)}｜流水 ${project.flowCount} 条`
         ).join("\n")}`,
         actions: budgetsToShow[0]
           ? [{ label: `进入 ${budgetsToShow[0].name}`, href: `/projects/${budgetsToShow[0].id}` }]
@@ -346,7 +360,7 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
       `• [${t.status}] ${t.name} → 项目: ${t.project.name} (taskId: ${t.id})`
     ).join("\n");
     const budgetList = budgetSummaries.map((project) =>
-      `• ${project.name}：总预算 ${formatMoney(project.totalBudget)}，已使用 ${formatMoney(project.used)}，结余 ${formatMoney(project.balance)}，支出流水 ${formatMoney(project.expense)}`
+      `• ${project.name}：计划预算 ${formatMoney(project.plannedBudget)}，确认预算 ${formatMoney(project.allocatedBudget)}，已使用 ${formatMoney(project.used)}，结余 ${formatMoney(project.balance)}，支出流水 ${formatMoney(project.expense)}，退款 ${formatMoney(project.refund)}`
     ).join("\n");
     const calendarList = userCalendarEntries.map((entry) =>
       `• [${CALENDAR_STATUS_LABEL[entry.status] ?? entry.status}] ${formatCalendarDate(entry.date)}${entry.startTime ? ` ${entry.startTime}` : ""} · ${entry.content} → 项目: ${entry.project.name} · ${entry.workstream ?? "未分组"} · ${entry.channel ?? "渠道待确认"} · ${entry.owner ?? "负责人待确认"}`

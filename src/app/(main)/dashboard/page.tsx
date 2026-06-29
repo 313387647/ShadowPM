@@ -41,14 +41,14 @@ export default async function DashboardPage() {
           <CardContent className="pt-5">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <TrendingUp className="size-4" />
-              总预算池
+              确认预算池
             </div>
             <p className="mt-1 text-2xl font-bold tabular-nums">
               ¥{Math.round(stats.totalPool / 10000).toLocaleString()}
               <span className="text-sm font-normal text-muted-foreground ml-0.5">万</span>
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              已分配 ¥{Math.round(stats.totalAllocated / 10000).toLocaleString()} 万
+              来自 ALLOCATE 流水
             </p>
           </CardContent>
         </Card>

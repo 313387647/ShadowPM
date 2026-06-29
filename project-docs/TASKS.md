@@ -61,15 +61,15 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Fix Copilot project context so it cannot read unrelated projects
   - [x] Replace forgeable plain session cookie with a signed and server-verifiable session strategy
   - [ ] Add regression tests for cross-project read/write protection
-- [ ] P0.2 Budget ledger truth
-  - Unify budget formulas across Dashboard, Ledger, Copilot, and AI summaries
-  - Treat `Project.totalBudget` as planned/approved budget metadata
-  - Treat `BudgetFlow` as financial truth
-  - Compute dynamic budget from `SUM(ALLOCATE)`
-  - Compute consumed budget from `ABS(SUM(EXPENSE)) - SUM(REFUND)`
-  - Remove any formula that double-counts `Project.totalBudget + initial ALLOCATE`
-  - Ensure `EXPENSE` is always negative and `ALLOCATE/REFUND` are positive
-  - Add business tests for budget snapshots
+- [x] P0.2 Budget ledger truth
+  - [x] Unify budget formulas across Dashboard, Ledger, Copilot, and AI summaries
+  - [x] Treat `Project.totalBudget` as planned/approved budget metadata
+  - [x] Treat `BudgetFlow` as financial truth
+  - [x] Compute dynamic budget from `SUM(ALLOCATE)`
+  - [x] Compute consumed budget from `ABS(SUM(EXPENSE)) - SUM(REFUND)`
+  - [x] Remove formulas that double-count `Project.totalBudget + initial ALLOCATE`
+  - [x] Ensure manual budget entries reject invalid flow types and store `EXPENSE` as negative
+  - [ ] Add business tests for budget snapshots
 - [ ] P0.3 AI creation should not block on missing budget
   - Require project name only
   - Allow unknown or zero total budget when source does not contain a reliable budget pool

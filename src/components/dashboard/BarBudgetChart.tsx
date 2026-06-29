@@ -25,7 +25,7 @@ export function BarBudgetChart({ data }: Props) {
   const chartData = data.map((d) => ({
     name: d.name.length > 8 ? d.name.slice(0, 8) + "…" : d.name,
     fullName: d.name,
-    "动态预算": Math.round(d.dynamicTotal / 10000),
+    "确认预算": Math.round(d.dynamicTotal / 10000),
     "已消耗": Math.round(d.consumed / 10000),
   }));
 
@@ -55,7 +55,7 @@ export function BarBudgetChart({ data }: Props) {
           />
           <Legend />
           <Bar
-            dataKey="总预算"
+            dataKey="确认预算"
             fill="hsl(var(--primary))"
             radius={[4, 4, 0, 0]}
             maxBarSize={40}

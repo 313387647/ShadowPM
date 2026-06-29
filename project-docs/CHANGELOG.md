@@ -63,6 +63,31 @@
 - This module does not change budget formulas or AI import behavior; those remain P0.2 and P0.3.
 - Cross-project regression tests are still tracked under P0.8 business-rule tests.
 
+## [2026-06-29] P0.2 Budget Ledger Truth
+
+### Unified budget formula
+- Added `src/lib/budget.ts` as the single budget snapshot calculator.
+- Standardized the financial source of truth:
+  - `Project.totalBudget` = planned or approved budget metadata.
+  - `BudgetFlow` = financial truth.
+  - Confirmed budget = `SUM(ALLOCATE)`.
+  - Consumed budget = `ABS(SUM(EXPENSE)) - SUM(REFUND)`.
+  - Available balance = confirmed budget - consumed budget.
+- Removed Dashboard health double-counting of `Project.totalBudget + ALLOCATE`.
+
+### Product surfaces updated
+- Ledger now shows planned budget separately from confirmed budget.
+- Dashboard cards and budget chart now use confirmed budget wording.
+- Copilot budget replies now distinguish planned budget, confirmed budget, consumed budget, balance, expense, and refund.
+- AI project activity summaries now use the same budget terms and calculations.
+
+### Safety
+- Manual budget recording now rejects invalid flow types before writing.
+- `EXPENSE` continues to be stored as negative; `ALLOCATE` and `REFUND` remain positive.
+
+### Scope note
+- Business-rule tests for budget snapshots remain tracked under P0.8.
+
 ## [2026-06-24] Phase 1 — Task 1: 初始化 Next.js 14 项目
 - 使用 `create-next-app@14` 初始化项目，包含 TypeScript、Tailwind CSS、ESLint、App Router、src/ 目录
 - 配置 `@/*` 路径别名指向 `./src/*`

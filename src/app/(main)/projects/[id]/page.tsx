@@ -56,7 +56,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
 
   if (!project) notFound();
 
-  const { balance, used } = budgetData;
+  const { balance, used, allocatedBudget, plannedBudget, usagePercent } = budgetData;
   const activeTab = PROJECT_TABS.includes(searchParams?.tab ?? "")
     ? searchParams?.tab ?? "tasks"
     : "tasks";
@@ -156,9 +156,11 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
 
         <TabsContent value="ledger" className="mt-4">
           <LedgerTable
-            totalBudget={project.totalBudget}
+            plannedBudget={plannedBudget}
+            allocatedBudget={allocatedBudget}
             balance={balance}
             used={used}
+            usagePercent={usagePercent}
             flows={flows}
             tasks={taskOptions}
           />
