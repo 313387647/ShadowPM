@@ -43,6 +43,7 @@ Known gaps:
 
 - [Shareable Demo Page](/demo)
 - [Review Package](./project-docs/REVIEW_PACKAGE.md)
+- [Beginner Tutorial](./project-docs/BEGINNER_TUTORIAL.md)
 - [User Guide](./project-docs/USER_GUIDE.md)
 - [Feedback Template](./project-docs/FEEDBACK_TEMPLATE.md)
 - [Test Deployment Checklist](./project-docs/TEST_DEPLOYMENT.md)

@@ -5,6 +5,7 @@ This folder is the durable project memory for ShadowPM.
 Start here:
 
 - `REVIEW_PACKAGE.md` - current Alpha review brief
+- `BEGINNER_TUTORIAL.md` - step-by-step tutorial for first-time testers
 - `USER_GUIDE.md` - complete reviewer user guide
 - `FEEDBACK_TEMPLATE.md` - structured feedback template
 - `TEST_DEPLOYMENT.md` - private test deployment checklist

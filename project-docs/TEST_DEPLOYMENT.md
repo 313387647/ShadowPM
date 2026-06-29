@@ -105,13 +105,14 @@ Send reviewers:
 
 - Test site URL
 - Recommended login user
+- `project-docs/BEGINNER_TUTORIAL.md`
 - `project-docs/USER_GUIDE.md`
 - The sample spreadsheet if they do not have repo access
 
 Suggested message:
 
 ```text
-请测试 ShadowPM Alpha：上传案例表格，查看 AI 是否能生成可用的项目管控表，并重点反馈预算、日历、风险是否被正确拆分。
+请测试 ShadowPM Alpha：打开 Demo 链接，按照《ShadowPM 小白测试教程》上传案例表格，查看 AI 是否能生成可用的项目管控表，并重点反馈预算、日历、风险是否被正确拆分。
 
 请不要只评价页面是否好看，重点看：
 1. 是否比原 Excel 更容易理解
