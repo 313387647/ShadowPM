@@ -24,7 +24,7 @@ export function AIProjectCreator({ onClose }: Props) {
   function createDraft(project: AIParsedProject): CreateProjectFromAIDTO {
     return {
       projectName: project.projectName,
-      totalBudget: project.totalBudget ?? 0,
+      totalBudget: project.totalBudget,
       startDate: project.startDate,
       endDate: project.endDate,
       tasks: project.tasks.map((t) => ({ ...t })),
@@ -33,7 +33,7 @@ export function AIProjectCreator({ onClose }: Props) {
       risks: project.risks,
       sourceQuality: project.sourceQuality,
       confidence: project.confidence,
-      createBudgetFlow: true,
+      createBudgetFlow: Boolean(project.totalBudget && project.totalBudget > 0),
     };
   }
 
@@ -84,7 +84,6 @@ export function AIProjectCreator({ onClose }: Props) {
     if (!draft) return [];
     const gaps: string[] = [];
     if (!draft.projectName.trim()) gaps.push("项目名称");
-    if (!draft.totalBudget || draft.totalBudget <= 0) gaps.push("总预算");
     if (!draft.tasks.some((task) => task.name.trim())) gaps.push("至少一条管控事项");
     return gaps;
   }
@@ -92,6 +91,7 @@ export function AIProjectCreator({ onClose }: Props) {
   function getOptionalGapSummary(draft: CreateProjectFromAIDTO | null) {
     if (!draft) return [];
     const gaps: string[] = [];
+    if (!draft.totalBudget || draft.totalBudget <= 0) gaps.push("预算池待确认");
     if (!draft.startDate || !draft.endDate) gaps.push("项目周期不完整");
 
     const namedTasks = draft.tasks.filter((task) => task.name.trim());
@@ -304,19 +304,6 @@ export function AIProjectCreator({ onClose }: Props) {
                 </div>
               )}
 
-              {(!edited.totalBudget || edited.totalBudget <= 0) && (
-                <div>
-                  <label className="block text-xs font-medium mb-1 text-amber-950">总预算 (¥)</label>
-                  <input
-                    type="number"
-                    value={edited.totalBudget || ""}
-                    onChange={(e) => setEdited({ ...edited, totalBudget: Number(e.target.value) || 0 })}
-                    placeholder="例如：5000000"
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-              )}
-
               {!edited.tasks.some((task) => task.name.trim()) && (
                 <div>
                   <label className="block text-xs font-medium mb-1 text-amber-950">第一条管控事项</label>
@@ -421,7 +408,10 @@ export function AIProjectCreator({ onClose }: Props) {
                 <div className="space-y-1">
                   <p className="font-medium">本次创建范围</p>
                   <p className="text-xs leading-relaxed text-blue-900/80">
-                    将创建项目资料、项目管控总表和初始预算流水。
+                    将创建项目资料和项目管控总表。
+                    {edited.totalBudget && edited.totalBudget > 0 && edited.createBudgetFlow
+                      ? " 已确认的总预算会生成一条初始 ALLOCATE 预算流水。"
+                      : " 当前预算池未确认，不会自动生成初始预算流水。"}
                     {candidateCount(edited) > 0
                       ? ` AI 还识别出 ${candidateCount(edited)} 条预算/日历/风险候选，暂不自动写入正式账本或日历，后续需要确认后再生成记录。你可以在创建前排除明显错误的候选。`
                       : " 未识别到需要额外确认的预算、日历或风险候选。"}
@@ -452,7 +442,14 @@ export function AIProjectCreator({ onClose }: Props) {
                 <input
                   type="number"
                   value={edited.totalBudget || ""}
-                  onChange={(e) => setEdited({ ...edited, totalBudget: Number(e.target.value) || 0 })}
+                  onChange={(e) => {
+                    const totalBudget = Number(e.target.value) || null;
+                    setEdited({
+                      ...edited,
+                      totalBudget,
+                      createBudgetFlow: Boolean(totalBudget && totalBudget > 0),
+                    });
+                  }}
                   className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>
@@ -677,17 +674,23 @@ export function AIProjectCreator({ onClose }: Props) {
           )}
 
           {/* Budget flow toggle */}
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={edited.createBudgetFlow}
-              onChange={(e) =>
-                setEdited({ ...edited, createBudgetFlow: e.target.checked })
-              }
-              className="rounded"
-            />
-            创建项目预算池初始流水（ALLOCATE: ¥{edited.totalBudget.toLocaleString()}）
-          </label>
+          {edited.totalBudget && edited.totalBudget > 0 ? (
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={edited.createBudgetFlow}
+                onChange={(e) =>
+                  setEdited({ ...edited, createBudgetFlow: e.target.checked })
+                }
+                className="rounded"
+              />
+              创建项目预算池初始流水（ALLOCATE: ¥{edited.totalBudget.toLocaleString()}）
+            </label>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              未确认总预算：项目会先创建，预算池和预算候选稍后在资金账本中确认。
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="flex items-center justify-between pt-2 border-t">
@@ -700,7 +703,7 @@ export function AIProjectCreator({ onClose }: Props) {
               </Button>
               <Button
                 onClick={handleConfirm}
-                disabled={!edited.projectName.trim() || !edited.totalBudget}
+                disabled={!edited.projectName.trim()}
                 className="gap-2"
               >
                 <Sparkles className="size-4" /> 创建项目与管控表

@@ -19,13 +19,15 @@ export async function createProject(formData: FormData): Promise<ActionResult> {
   const name = formData.get("name") as string;
   const budgetRaw = formData.get("totalBudget") as string;
 
-  if (!name || !budgetRaw) {
-    return { success: false, message: "项目名称和预算为必填项" };
+  if (!name?.trim()) {
+    return { success: false, message: "项目名称为必填项" };
   }
 
-  const totalBudget = new Prisma.Decimal(budgetRaw);
-  if (totalBudget.isNaN() || totalBudget.lte(0)) {
-    return { success: false, message: "预算必须为大于 0 的数字" };
+  const totalBudget = budgetRaw
+    ? new Prisma.Decimal(budgetRaw)
+    : new Prisma.Decimal(0);
+  if (totalBudget.isNaN() || totalBudget.lt(0)) {
+    return { success: false, message: "预算不能为负数" };
   }
 
   const project = await prisma.project.create({
@@ -41,7 +43,7 @@ export async function createProject(formData: FormData): Promise<ActionResult> {
   // 自动生成 4 个默认文件夹
   await initProjectFolders(project.id);
 
-  // 自动创建占位任务 + 初始 ALLOCATE 预算流水（修复偏离点 #5）
+  // 自动创建占位任务；有确认预算时才创建初始 ALLOCATE 流水
   const placeholderTask = await prisma.task.create({
     data: {
       projectId: project.id,
@@ -50,15 +52,17 @@ export async function createProject(formData: FormData): Promise<ActionResult> {
       status: "IN_PROGRESS",
     },
   });
-  await prisma.budgetFlow.create({
-    data: {
-      taskId: placeholderTask.id,
-      flowType: "ALLOCATE",
-      amount: totalBudget,
-      description: `「${name}」项目初始预算分配`,
-      createdBy: user.name,
-    },
-  });
+  if (totalBudget.gt(0)) {
+    await prisma.budgetFlow.create({
+      data: {
+        taskId: placeholderTask.id,
+        flowType: "ALLOCATE",
+        amount: totalBudget,
+        description: `「${name}」项目初始预算分配`,
+        createdBy: user.name,
+      },
+    });
+  }
 
   revalidatePath("/workspace");
   return { success: true, message: `项目「${name}」创建成功` };

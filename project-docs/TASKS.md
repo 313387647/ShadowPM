@@ -70,12 +70,13 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Remove formulas that double-count `Project.totalBudget + initial ALLOCATE`
   - [x] Ensure manual budget entries reject invalid flow types and store `EXPENSE` as negative
   - [ ] Add business tests for budget snapshots
-- [ ] P0.3 AI creation should not block on missing budget
-  - Require project name only
-  - Allow unknown or zero total budget when source does not contain a reliable budget pool
-  - Show "budget pool needs confirmation" instead of blocking project creation
-  - Keep budget candidates in review queue
-  - Do not create an initial `ALLOCATE` flow when no confirmed budget exists
+- [x] P0.3 AI creation should not block on missing budget
+  - [x] Require project name only
+  - [x] Allow unknown or zero total budget when source does not contain a reliable budget pool
+  - [x] Show "budget pool needs confirmation" instead of blocking project creation
+  - [x] Keep budget candidates in review queue
+  - [x] Do not create an initial `ALLOCATE` flow when no confirmed budget exists
+  - [x] Align manual project creation with the same optional budget rule
 - [ ] P0.4 Import draft safety
   - Stop defaulting budget candidates to `EXPENSE`
   - Use AI candidate type when confidence is high

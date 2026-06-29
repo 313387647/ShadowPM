@@ -88,6 +88,24 @@
 ### Scope note
 - Business-rule tests for budget snapshots remain tracked under P0.8.
 
+## [2026-06-29] P0.3 Creation Without Mandatory Budget
+
+### AI import creation
+- AI-created projects no longer require a confirmed total budget.
+- If AI cannot reliably identify a budget pool, `totalBudget` can remain `null` in the draft and is stored as `0` planned budget on creation.
+- Initial `ALLOCATE` budget flow is created only when the user has a confirmed positive total budget and keeps the budget-flow toggle enabled.
+- AI prompt now explicitly tells the model to return `null` for unreliable total budget instead of inventing one.
+
+### Preview UX
+- "Budget pool needs confirmation" is now an optional gap, not a blocking required field.
+- The preview explains when the project will be created without an initial budget flow.
+- Create button now requires project name only.
+- Budget candidates remain in the import review queue for later confirmation.
+
+### Manual creation
+- Manual project creation now also allows empty budget.
+- If a manual project has no confirmed budget, ShadowPM creates the project and control placeholder without an initial `ALLOCATE` flow.
+
 ## [2026-06-24] Phase 1 — Task 1: 初始化 Next.js 14 项目
 - 使用 `create-next-app@14` 初始化项目，包含 TypeScript、Tailwind CSS、ESLint、App Router、src/ 目录
 - 配置 `@/*` 路径别名指向 `./src/*`

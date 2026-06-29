@@ -8,7 +8,7 @@ export type ActionResult<T = void> = {
 // ── 项目 ──
 export interface ProjectCreateDTO {
   name: string;
-  totalBudget: number;
+  totalBudget?: number;
   startDate?: string;
   endDate?: string;
 }

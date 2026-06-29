@@ -80,7 +80,7 @@ export type AIParsedProject = {
 
 export type CreateProjectFromAIDTO = {
   projectName: string;
-  totalBudget: number;
+  totalBudget: number | null;
   startDate: string | null;
   endDate: string | null;
   tasks: AIParsedTask[];
@@ -96,7 +96,7 @@ const SYSTEM_PROMPT = `你是 ShadowPM 的 AI 项目导入引擎。你必须把�
 
 {
   "projectName": "项目名称",
-  "totalBudget": 数字（元，如果是"万"单位请×10000）,
+  "totalBudget": 数字（元，如果是"万"单位请×10000；无法可靠判断则null，不要编造）,
   "startDate": "YYYY-MM-DD",
   "endDate": "YYYY-MM-DD",
   "objective": "项目目标/背景，无法判断则null",
@@ -287,11 +287,14 @@ export async function createProjectFromAI(
 ): Promise<ActionResult<{ projectId: string }>> {
   const user = await requireCurrentUser();
 
-  if (!dto.projectName.trim() || !dto.totalBudget || dto.totalBudget <= 0) {
-    return { success: false, message: "项目名称和预算为必填项" };
+  if (!dto.projectName.trim()) {
+    return { success: false, message: "项目名称为必填项" };
   }
 
-  const totalBudget = new Prisma.Decimal(dto.totalBudget.toString());
+  const confirmedTotalBudget =
+    typeof dto.totalBudget === "number" && dto.totalBudget > 0
+      ? new Prisma.Decimal(dto.totalBudget.toString())
+      : new Prisma.Decimal(0);
   const importCandidates = {
     budgetItems: dto.budgetItems ?? [],
     calendarEntries: dto.calendarEntries ?? [],
@@ -326,7 +329,7 @@ export async function createProjectFromAI(
     const createdProject = await tx.project.create({
       data: {
         name: dto.projectName.trim(),
-        totalBudget,
+        totalBudget: confirmedTotalBudget,
         ownerId: user.id,
         startDate: dto.startDate ? new Date(dto.startDate + "T00:00:00.000Z") : null,
         endDate: dto.endDate ? new Date(dto.endDate + "T00:00:00.000Z") : null,
@@ -376,12 +379,12 @@ export async function createProjectFromAI(
       if (i === 0) firstTaskId = task.id;
     }
 
-    if (dto.createBudgetFlow && firstTaskId) {
+    if (dto.createBudgetFlow && confirmedTotalBudget.gt(0) && firstTaskId) {
       await tx.budgetFlow.create({
         data: {
           taskId: firstTaskId,
           flowType: "ALLOCATE",
-          amount: totalBudget,
+          amount: confirmedTotalBudget,
           description: `「${dto.projectName}」项目初始预算分配`,
           createdBy: user.name,
         },
