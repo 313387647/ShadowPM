@@ -6,19 +6,15 @@ import { getProjectDetail } from "@/actions/project-actions";
 import { getProjectTasks } from "@/actions/task-actions";
 import { getProjectLedger, getProjectBudgetBalance, getProjectTasksForSelect } from "@/actions/ledger-actions";
 import { getProjectTimeline } from "@/actions/timeline-actions";
-import { getProjectFolders } from "@/actions/wiki-actions";
 import { getProjectPhases } from "@/actions/phase-actions";
 import { getPendingImportDrafts } from "@/actions/import-draft-actions";
 import { getProjectCalendarEntries } from "@/actions/calendar-actions";
-import { getProjectRisks } from "@/actions/risk-actions";
 import { getProjectFeedback } from "@/actions/feedback-actions";
 import { LedgerTable } from "@/components/project/LedgerTable";
 import { TimelineView } from "@/components/project/TimelineView";
-import { WikiExplorer } from "@/components/wiki/WikiExplorer";
 import { TaskViewToggle } from "@/components/project/TaskViewToggle";
 import { ImportDraftPanel } from "@/components/project/ImportDraftPanel";
 import { ExecutionCalendarView } from "@/components/project/ExecutionCalendarView";
-import { RiskView } from "@/components/project/RiskView";
 import { ProjectFeedbackPanel } from "@/components/project/ProjectFeedbackPanel";
 
 interface Props {
@@ -26,7 +22,7 @@ interface Props {
   searchParams?: { tab?: string };
 }
 
-const PROJECT_TABS = ["tasks", "timeline", "calendar", "ledger", "risks", "wiki"];
+const PROJECT_TABS = ["tasks", "timeline", "ledger", "calendar"];
 
 export default async function ProjectDetailPage({ params, searchParams }: Props) {
   // ⚡ Promise.all() 并发请求 —— 消除串行瀑布流
@@ -37,11 +33,9 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
     budgetData,
     taskOptions,
     timeline,
-    folders,
     phases,
     importDrafts,
     calendarEntries,
-    risks,
     feedbacks,
   ] = await Promise.all([
     getProjectDetail(params.id),
@@ -50,11 +44,9 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
     getProjectBudgetBalance(params.id),
     getProjectTasksForSelect(params.id),
     getProjectTimeline(params.id),
-    getProjectFolders(params.id),
     getProjectPhases(params.id),
     getPendingImportDrafts(params.id),
     getProjectCalendarEntries(params.id),
-    getProjectRisks(params.id),
     getProjectFeedback(params.id),
   ]);
 
@@ -117,28 +109,16 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
             🕐 项目活动
           </TabsTrigger>
           <TabsTrigger
-            value="calendar"
-            className="rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm"
-          >
-            📆 执行日历
-          </TabsTrigger>
-          <TabsTrigger
             value="ledger"
             className="rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm"
           >
             💰 资金账本
           </TabsTrigger>
           <TabsTrigger
-            value="risks"
+            value="calendar"
             className="rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm"
           >
-            ⚠️ 风险/待定
-          </TabsTrigger>
-          <TabsTrigger
-            value="wiki"
-            className="rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm"
-          >
-            📁 文档资产
+            📆 执行日历
           </TabsTrigger>
         </TabsList>
 
@@ -154,10 +134,6 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
           <TimelineView projectId={params.id} logs={timeline} tasks={taskOptions} />
         </TabsContent>
 
-        <TabsContent value="calendar" className="mt-4">
-          <ExecutionCalendarView projectId={params.id} entries={calendarEntries} tasks={taskOptions} />
-        </TabsContent>
-
         <TabsContent value="ledger" className="mt-4">
           <LedgerTable
             plannedBudget={plannedBudget}
@@ -170,12 +146,8 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
           />
         </TabsContent>
 
-        <TabsContent value="risks" className="mt-4">
-          <RiskView risks={risks} />
-        </TabsContent>
-
-        <TabsContent value="wiki" className="mt-4">
-          <WikiExplorer projectId={params.id} folders={folders} />
+        <TabsContent value="calendar" className="mt-4">
+          <ExecutionCalendarView projectId={params.id} entries={calendarEntries} tasks={taskOptions} />
         </TabsContent>
       </Tabs>
 

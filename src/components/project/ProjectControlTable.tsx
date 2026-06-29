@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Circle, History, Loader2, Play, Plus, Target } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { TASK_STATUS_MAP } from "@/lib/constants";
-import { createTask, fillMissingTaskFields, updateTask } from "@/actions/task-actions";
+import { createTask, updateTask } from "@/actions/task-actions";
 import { cn } from "@/lib/utils";
 
 type Task = {
@@ -36,25 +37,6 @@ const CONTROL_FILTERS: { value: ControlFilter; label: string }[] = [
   { value: "WITH_LOGS", label: "有日志" },
   { value: "WITH_CALENDAR", label: "有日历" },
 ];
-
-const STATUS_ICON = {
-  PENDING: <Circle className="size-3 text-muted-foreground" />,
-  IN_PROGRESS: <Play className="size-3 text-blue-500" fill="currentColor" />,
-  COMPLETED: <CheckCircle2 className="size-3 text-emerald-500" fill="currentColor" />,
-};
-
-const STATUS_BADGE: Record<Task["status"], "secondary" | "default" | "outline"> = {
-  PENDING: "secondary",
-  IN_PROGRESS: "default",
-  COMPLETED: "outline",
-};
-
-const PRIORITY_CLASS: Record<string, string> = {
-  P0: "bg-red-100 text-red-700",
-  P1: "bg-amber-100 text-amber-700",
-  P2: "bg-muted text-muted-foreground",
-  P3: "bg-muted/60 text-muted-foreground",
-};
 
 function getMissingFields(task: Task) {
   const missing: string[] = [];
@@ -127,10 +109,14 @@ function ControlTableRow({
   focused: boolean;
 }) {
   const router = useRouter();
+  const [name, setName] = useState(task.name);
+  const [description, setDescription] = useState(task.description ?? "");
   const [assignee, setAssignee] = useState(task.assignee ?? "");
   const [department, setDepartment] = useState(task.department ?? "");
   const [deadline, setDeadline] = useState(toDateInputValue(task.deadline));
   const [notes, setNotes] = useState(task.notes ?? "");
+  const [priority, setPriority] = useState(task.priority);
+  const [status, setStatus] = useState<Task["status"]>(task.status);
   const [saving, setSaving] = useState(false);
 
   const missing = getMissingFields({
@@ -141,10 +127,14 @@ function ControlTableRow({
   });
   const overdue = isOverdue({ ...task, deadline: deadline || null });
   const dirty =
+    name !== task.name ||
+    description !== (task.description ?? "") ||
     assignee !== (task.assignee ?? "") ||
     department !== (task.department ?? "") ||
     deadline !== toDateInputValue(task.deadline) ||
-    notes !== (task.notes ?? "");
+    notes !== (task.notes ?? "") ||
+    priority !== task.priority ||
+    status !== task.status;
 
   async function save() {
     if (!dirty || saving) return;
@@ -152,12 +142,14 @@ function ControlTableRow({
     try {
       const formData = new FormData();
       formData.set("taskId", task.id);
-      formData.set("name", task.name);
+      formData.set("name", name);
       formData.set("assignee", assignee);
       formData.set("department", department);
       formData.set("deadline", deadline);
-      formData.set("description", task.description ?? "");
+      formData.set("description", description);
       formData.set("notes", notes);
+      formData.set("priority", priority);
+      formData.set("status", status);
 
       const result = await updateTask(formData);
       if (result.success) {
@@ -173,7 +165,7 @@ function ControlTableRow({
     }
   }
 
-  function saveOnEnter(event: React.KeyboardEvent<HTMLInputElement>) {
+  function saveOnEnter(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
       save();
@@ -192,13 +184,22 @@ function ControlTableRow({
         <span className="line-clamp-1">{phaseName}</span>
       </td>
       <td className="px-3 py-2">
-        <div className="space-y-0.5">
-          <p className="font-medium leading-5">{task.name}</p>
-          {task.description && (
-            <p className="line-clamp-1 text-[11px] text-muted-foreground">
-              {task.description}
-            </p>
-          )}
+        <div className="space-y-1">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={saveOnEnter}
+            placeholder="管控事项"
+            className="w-full rounded border border-transparent bg-transparent px-1 py-1 font-medium leading-5 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
+          />
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            onKeyDown={saveOnEnter}
+            placeholder="详细描述"
+            rows={2}
+            className="w-full resize-none rounded border border-transparent bg-transparent px-1 py-1 text-[11px] leading-5 text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
+          />
         </div>
       </td>
       <td className="px-3 py-2">
@@ -237,15 +238,27 @@ function ControlTableRow({
         </div>
       </td>
       <td className="px-3 py-2">
-        <Badge variant={STATUS_BADGE[task.status]} className="gap-1">
-          {STATUS_ICON[task.status]}
-          {TASK_STATUS_MAP[task.status]}
-        </Badge>
+        <Select
+          value={status}
+          onChange={(event) => setStatus(event.target.value as Task["status"])}
+          className="h-8 text-xs"
+        >
+          <option value="PENDING">待启动</option>
+          <option value="IN_PROGRESS">进行中</option>
+          <option value="COMPLETED">已完成</option>
+        </Select>
       </td>
       <td className="px-3 py-2">
-        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${PRIORITY_CLASS[task.priority] ?? PRIORITY_CLASS.P2}`}>
-          {task.priority}
-        </span>
+        <Select
+          value={priority}
+          onChange={(event) => setPriority(event.target.value)}
+          className="h-8 text-xs font-semibold"
+        >
+          <option value="P0">P0</option>
+          <option value="P1">P1</option>
+          <option value="P2">P2</option>
+          <option value="P3">P3</option>
+        </Select>
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
         {task._count.logs}
@@ -341,36 +354,12 @@ export function ProjectControlTable({
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(tasks.length === 0);
   const [creating, setCreating] = useState(false);
-  const [bulkAssignee, setBulkAssignee] = useState("");
-  const [bulkDepartment, setBulkDepartment] = useState("");
-  const [bulkDeadline, setBulkDeadline] = useState("");
-  const [bulkSaving, setBulkSaving] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
   const phaseName = (phaseId: string | null) =>
     phaseId ? phases.find((phase) => phase.id === phaseId)?.name ?? "未分组" : "未分组";
 
-  const missingCount = tasks.reduce(
-    (sum, task) => sum + getMissingFields(task).length,
-    0
-  );
   const overdueCount = tasks.filter(isOverdue).length;
-  const incompleteTasks = tasks
-    .map((task) => ({
-      task,
-      missing: getMissingFields(task),
-      overdue: isOverdue(task),
-      phaseName: phaseName(task.phaseId),
-    }))
-    .filter((item) => item.missing.length > 0 || item.overdue)
-    .sort((a, b) => {
-      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
-      return b.missing.length - a.missing.length;
-    });
-  const totalRequiredFields = tasks.length * 3;
-  const readiness = totalRequiredFields > 0
-    ? Math.round(((totalRequiredFields - missingCount) / totalRequiredFields) * 100)
-    : 100;
   const filterCounts = CONTROL_FILTERS.reduce<Record<ControlFilter, number>>((counts, item) => {
     counts[item.value] = tasks.filter((task) => matchesControlFilter(task, item.value)).length;
     return counts;
@@ -386,7 +375,6 @@ export function ProjectControlTable({
     const name = phaseName(task.phaseId);
     return matchesControlFilter(task, filter) && matchesSearch(task, name, query);
   });
-  const visibleIncompleteTasks = visibleTasks.filter((task) => getMissingFields(task).length > 0);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -434,46 +422,6 @@ export function ProjectControlTable({
     window.setTimeout(() => jumpToTask(taskId), 250);
   }, [searchParams, tasks]);
 
-  async function applyBulkFill() {
-    if (bulkSaving) return;
-    if (visibleIncompleteTasks.length === 0) {
-      toast.info("当前筛选范围没有待补字段");
-      return;
-    }
-    if (!bulkAssignee.trim() && !bulkDepartment.trim() && !bulkDeadline) {
-      toast.error("至少填写一个要补齐的字段");
-      return;
-    }
-
-    setBulkSaving(true);
-    try {
-      const formData = new FormData();
-      formData.set("taskIds", JSON.stringify(visibleIncompleteTasks.map((task) => task.id)));
-      formData.set("assignee", bulkAssignee);
-      formData.set("department", bulkDepartment);
-      formData.set("deadline", bulkDeadline);
-
-      const result = await fillMissingTaskFields(formData);
-      if (result.success) {
-        toast.success(
-          result.message
-            ? `${result.message}，已写入活动流摘要`
-            : "批量补齐完成，已写入活动流摘要"
-        );
-        setBulkAssignee("");
-        setBulkDepartment("");
-        setBulkDeadline("");
-        router.refresh();
-      } else {
-        toast.error(result.message ?? "批量补齐失败");
-      }
-    } catch {
-      toast.error("批量补齐失败");
-    } finally {
-      setBulkSaving(false);
-    }
-  }
-
   async function handleCreate(formData: FormData) {
     if (creating) return;
     setCreating(true);
@@ -503,7 +451,7 @@ export function ProjectControlTable({
         <div>
           <p className="text-sm font-medium">项目管控表</p>
           <p className="text-xs text-muted-foreground">
-            一屏查看任务、责任、进度、风险和待补信息
+            直接编辑事项、负责人、部门、截止、状态、优先级和进度结论
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -516,9 +464,6 @@ export function ProjectControlTable({
             <Plus className="size-3.5" />
             新增管控事项
           </Button>
-          <Badge variant={missingCount > 0 ? "destructive" : "secondary"}>
-            {missingCount} 个待补字段
-          </Badge>
           <Badge variant={overdueCount > 0 ? "destructive" : "outline"}>
             {overdueCount} 个逾期事项
           </Badge>
@@ -543,7 +488,7 @@ export function ProjectControlTable({
               添加
             </Button>
           </div>
-          <div className="mt-3 grid gap-2 lg:grid-cols-[1.5fr_1fr_1fr_150px]">
+          <div className="mt-3 grid gap-2 lg:grid-cols-[1.4fr_1fr_1fr_150px]">
             <input
               name="name"
               required
@@ -566,145 +511,38 @@ export function ProjectControlTable({
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
             />
           </div>
+          <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_1fr_1fr]">
+            <Select name="phaseId" defaultValue="" className="h-9 text-sm">
+              <option value="">未分组/通用事项</option>
+              {phases.map((phase) => (
+                <option key={phase.id} value={phase.id}>{phase.name}</option>
+              ))}
+            </Select>
+            <Select name="status" defaultValue="PENDING" className="h-9 text-sm">
+              <option value="PENDING">待启动</option>
+              <option value="IN_PROGRESS">进行中</option>
+              <option value="COMPLETED">已完成</option>
+            </Select>
+            <Select name="priority" defaultValue="P2" className="h-9 text-sm">
+              <option value="P0">P0 - 必须马上处理</option>
+              <option value="P1">P1 - 关键事项</option>
+              <option value="P2">P2 - 常规事项</option>
+              <option value="P3">P3 - 低优先级</option>
+            </Select>
+          </div>
           <div className="mt-2 grid gap-2 lg:grid-cols-2">
             <input
               name="description"
-              placeholder="详细描述，可选"
+              placeholder="详细描述，例如：确认场地档期、面积、搭建限制和报价"
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
             />
             <input
               name="notes"
-              placeholder="进度/结论，可选"
+              placeholder="进度/结论，例如：待供应商周五前反馈"
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
             />
           </div>
         </form>
-      )}
-
-      {tasks.length > 0 && (
-        <div className="rounded-lg border bg-muted/20 p-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Target className="size-4 text-primary" />
-                <p className="text-sm font-medium">信息补齐队列</p>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                AI 生成后优先确认负责人、部门和截止日期，避免执行口径漂移
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={readiness >= 90 ? "secondary" : "destructive"}>
-                完整度 {readiness}%
-              </Badge>
-              <Badge variant={incompleteTasks.length > 0 ? "outline" : "secondary"}>
-                {incompleteTasks.length} 条需确认
-              </Badge>
-            </div>
-          </div>
-
-          {incompleteTasks.length === 0 ? (
-            <div className="mt-3 flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs text-emerald-600">
-              <CheckCircle2 className="size-3.5" />
-              核心管控信息已完整，可以进入执行跟踪。
-            </div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              <div className="rounded-md border bg-background p-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-medium">快速补齐当前筛选</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      只填空字段，不覆盖已有负责人、部门或截止日期
-                    </p>
-                  </div>
-                  <Badge variant="outline">
-                    {visibleIncompleteTasks.length} 条可补齐
-                  </Badge>
-                </div>
-                <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_160px_auto]">
-                  <input
-                    data-bulk-fill="assignee"
-                    value={bulkAssignee}
-                    onChange={(event) => setBulkAssignee(event.target.value)}
-                    placeholder="负责人"
-                    className="h-8 rounded-md border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground/50 focus:border-primary"
-                  />
-                  <input
-                    data-bulk-fill="department"
-                    value={bulkDepartment}
-                    onChange={(event) => setBulkDepartment(event.target.value)}
-                    placeholder="部门"
-                    className="h-8 rounded-md border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground/50 focus:border-primary"
-                  />
-                  <input
-                    data-bulk-fill="deadline"
-                    type="text"
-                    inputMode="numeric"
-                    value={bulkDeadline}
-                    onChange={(event) => setBulkDeadline(event.target.value)}
-                    placeholder="截止日期 YYYY-MM-DD"
-                    className="h-8 rounded-md border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground/50 focus:border-primary"
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8"
-                    onClick={applyBulkFill}
-                    disabled={bulkSaving || visibleIncompleteTasks.length === 0}
-                  >
-                    {bulkSaving ? "补齐中" : "补齐"}
-                  </Button>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <History className="size-3.5" />
-                  <span>成功后生成 1 条项目活动摘要，并在每个任务保留字段变更明细。</span>
-                </div>
-              </div>
-
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {incompleteTasks.slice(0, 6).map((item) => (
-                  <button
-                    key={item.task.id}
-                    type="button"
-                    onClick={() => jumpToTask(item.task.id, item.missing[0])}
-                    className="rounded-md border bg-background p-2 text-left transition-colors hover:border-primary/50 hover:bg-primary/5"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="line-clamp-1 text-xs font-medium">
-                        {item.task.name}
-                      </span>
-                      {item.overdue && (
-                        <AlertTriangle className="size-3.5 shrink-0 text-destructive" />
-                      )}
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
-                      <span>{item.phaseName}</span>
-                      {item.missing.map((field) => (
-                        <span
-                          key={field}
-                          className="rounded-full bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700"
-                        >
-                          缺{field}
-                        </span>
-                      ))}
-                      {item.overdue && (
-                        <span className="rounded-full bg-red-50 px-1.5 py-0.5 font-medium text-red-700">
-                          已逾期
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              {visibleIncompleteTasks.length !== incompleteTasks.length && (
-                <p className="text-[11px] text-muted-foreground">
-                  已按当前筛选/搜索限定补齐范围，清空筛选可处理全部待补事项。
-                </p>
-              )}
-            </div>
-          )}
-        </div>
       )}
 
       {tasks.length === 0 ? (

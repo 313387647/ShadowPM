@@ -32,6 +32,8 @@ function buildTaskChangeLog(
     deadline: Date | null;
     description: string | null;
     notes: string | null;
+    priority: string;
+    status: string;
   },
   after: {
     name: string;
@@ -40,6 +42,8 @@ function buildTaskChangeLog(
     deadline: Date | null;
     description: string | null;
     notes: string | null;
+    priority: string;
+    status: string;
   }
 ) {
   const changes: string[] = [];
@@ -54,6 +58,8 @@ function buildTaskChangeLog(
   pushTextChange("部门", "department");
   pushTextChange("详细描述", "description");
   pushTextChange("进度/结论", "notes");
+  pushTextChange("优先级", "priority");
+  pushTextChange("状态", "status");
 
   if (formatDateValue(before.deadline) !== formatDateValue(after.deadline)) {
     changes.push(`截止日期：${formatDateValue(before.deadline)} → ${formatDateValue(after.deadline)}`);
@@ -85,6 +91,8 @@ export async function createTask(formData: FormData): Promise<ActionResult> {
   const description = (formData.get("description") as string) || null;
   const notes = (formData.get("notes") as string) || null;
   const department = (formData.get("department") as string) || null;
+  const priority = normalizePriority((formData.get("priority") as string) || null);
+  const status = normalizeStatus((formData.get("status") as string) || null);
 
   if (!projectId || !name?.trim()) {
     return { success: false, message: "所属项目和任务名称为必填项" };
@@ -101,6 +109,8 @@ export async function createTask(formData: FormData): Promise<ActionResult> {
       description: description?.trim() || null,
       notes: notes?.trim() || null,
       department: department?.trim() || null,
+      priority,
+      status,
       deadline: parseDateSafe(deadlineRaw),
     },
   });
@@ -155,6 +165,8 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
   const description = (formData.get("description") as string) || null;
   const notes = (formData.get("notes") as string) || null;
   const department = (formData.get("department") as string) || null;
+  const priority = normalizePriority((formData.get("priority") as string) || null);
+  const status = normalizeStatus((formData.get("status") as string) || null);
 
   if (!taskId || !name?.trim()) {
     return { success: false, message: "任务 ID 和名称为必填项" };
@@ -170,6 +182,8 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
       deadline: true,
       description: true,
       notes: true,
+      priority: true,
+      status: true,
     },
   });
   if (!task) return { success: false, message: "任务不存在" };
@@ -181,6 +195,8 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
     description: normalizeText(description),
     notes: normalizeText(notes),
     department: normalizeText(department),
+    priority,
+    status,
   };
   const changes = buildTaskChangeLog(task, nextTask);
 
@@ -207,6 +223,16 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
     success: true,
     message: changes.length > 0 ? "任务已更新，变更已记录" : "任务无变化",
   };
+}
+
+function normalizePriority(value: string | null) {
+  return ["P0", "P1", "P2", "P3"].includes(value ?? "") ? value! : "P2";
+}
+
+function normalizeStatus(value: string | null) {
+  return ["PENDING", "IN_PROGRESS", "COMPLETED"].includes(value ?? "")
+    ? value as "PENDING" | "IN_PROGRESS" | "COMPLETED"
+    : "PENDING";
 }
 
 export async function fillMissingTaskFields(formData: FormData): Promise<ActionResult> {
@@ -246,6 +272,8 @@ export async function fillMissingTaskFields(formData: FormData): Promise<ActionR
       deadline: true,
       description: true,
       notes: true,
+      priority: true,
+      status: true,
     },
   });
 
@@ -263,6 +291,8 @@ export async function fillMissingTaskFields(formData: FormData): Promise<ActionR
         deadline: task.deadline ?? deadline,
         description: task.description,
         notes: task.notes,
+        priority: task.priority,
+        status: task.status,
       };
       const changes = buildTaskChangeLog(task, nextTask);
       return { task, nextTask, changes };
