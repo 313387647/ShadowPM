@@ -77,12 +77,12 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Keep budget candidates in review queue
   - [x] Do not create an initial `ALLOCATE` flow when no confirmed budget exists
   - [x] Align manual project creation with the same optional budget rule
-- [ ] P0.4 Import draft safety
-  - Stop defaulting budget candidates to `EXPENSE`
-  - Use AI candidate type when confidence is high
-  - Require manual flow type selection for estimate or unclear budget candidates
-  - Handle multiple pending import drafts by grouping, superseding, or requiring resolution
-  - Prevent import candidates from being applied to tasks outside the project
+- [x] P0.4 Import draft safety
+  - [x] Stop defaulting budget candidates to `EXPENSE`
+  - [x] Use AI candidate type when it maps directly to `ALLOCATE`, `EXPENSE`, or `REFUND`
+  - [x] Require manual flow type selection for estimate, transfer, or unclear budget candidates
+  - [x] Handle multiple pending import drafts by switching between import batches
+  - [x] Prevent import candidates from being applied to tasks outside the project
 - [ ] P0.5 AI import quality V2
   - Add field-level confidence
   - Separate required gaps from optional gaps
@@ -164,3 +164,26 @@ npm run build
 3. Fix all errors.
 4. Explain changed files, reason, risk, and impact.
 5. Push to GitHub only after the module is stable.
+
+## External Tester Gate
+
+Goal: let reviewers directly upload the sample spreadsheet and submit product feedback through a shared website.
+
+Minimum gate before sharing a test URL:
+
+- [x] P0.1 permissions are hardened enough for private testing
+- [x] P0.2 budget formulas are unified
+- [x] P0.3 project creation does not require confirmed budget
+- [x] P0.4 import draft budget candidates no longer default to expense
+- [ ] Shared deployment is configured with `SHADOWPM_SESSION_SECRET`, `DEEPSEEK_API_KEY`, and database access
+- [ ] Test flow is smoke-tested with `project-docs/review-assets/one-million-project-control-sample.xlsx`
+
+Tester flow:
+
+1. Open the test site.
+2. Log in as a test user.
+3. Upload `project-docs/review-assets/one-million-project-control-sample.xlsx`.
+4. Review AI preview.
+5. Create the project even if budget is missing.
+6. Check project control table, budget draft queue, execution calendar candidates, and risk candidates.
+7. Submit feedback on wrong extraction, missing fields, confusing labels, and unsafe AI assumptions.

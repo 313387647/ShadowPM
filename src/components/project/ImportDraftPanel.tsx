@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronDown, ChevronUp, Loader2, ShieldAlert, Sparkles, WalletCards } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   applyBudgetImportCandidate,
@@ -15,6 +15,7 @@ type BudgetPreview = {
   candidateIndex: number;
   title?: string;
   amount?: number | null;
+  type?: string | null;
   workstream?: string | null;
   status?: string | null;
   description?: string | null;
@@ -66,6 +67,29 @@ const QUALITY_LABEL: Record<string, string> = {
   unsafe: "需人工确认",
 };
 
+const FLOW_TYPE_LABEL: Record<string, string> = {
+  ALLOCATE: "分配",
+  EXPENSE: "支出",
+  REFUND: "退款",
+};
+
+function normalizeBudgetType(type?: string | null) {
+  return type?.trim().toUpperCase() ?? "";
+}
+
+function recommendedFlowType(item: BudgetPreview) {
+  const type = normalizeBudgetType(item.type);
+  if (type === "ALLOCATE") return "ALLOCATE";
+  if (type === "EXPENSE") return "EXPENSE";
+  if (type === "REFUND") return "REFUND";
+  return "";
+}
+
+function needsManualFlowType(item: BudgetPreview) {
+  const type = normalizeBudgetType(item.type);
+  return !["ALLOCATE", "EXPENSE", "REFUND"].includes(type);
+}
+
 export function ImportDraftPanel({
   drafts,
   tasks,
@@ -76,16 +100,20 @@ export function ImportDraftPanel({
   const router = useRouter();
   const [applyingKey, setApplyingKey] = useState<string | null>(null);
   const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+  const activeDraft = useMemo(
+    () => drafts.find((draft) => draft.id === activeDraftId) ?? drafts[0] ?? null,
+    [activeDraftId, drafts]
+  );
 
-  if (drafts.length === 0) return null;
+  if (!activeDraft) return null;
 
   const totalBudget = drafts.reduce((sum, draft) => sum + draft.budgetCount, 0);
   const totalCalendar = drafts.reduce((sum, draft) => sum + draft.calendarCount, 0);
   const totalRisks = drafts.reduce((sum, draft) => sum + draft.riskCount, 0);
-  const latest = drafts[0];
-  const pendingBudgetPreview = latest.budgetPreview;
-  const pendingCalendarPreview = latest.calendarPreview;
-  const pendingRiskPreview = latest.riskPreview;
+  const pendingBudgetPreview = activeDraft.budgetPreview;
+  const pendingCalendarPreview = activeDraft.calendarPreview;
+  const pendingRiskPreview = activeDraft.riskPreview;
   const pendingTotal = pendingBudgetPreview.length + pendingCalendarPreview.length + pendingRiskPreview.length;
   const expanded = manualExpanded ?? pendingTotal <= 6;
 
@@ -154,14 +182,15 @@ export function ImportDraftPanel({
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-semibold">AI 导入审核队列</p>
               <span className="rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-medium">
-                {QUALITY_LABEL[latest.sourceQuality] ?? latest.sourceQuality}
+                {QUALITY_LABEL[activeDraft.sourceQuality] ?? activeDraft.sourceQuality}
               </span>
               <span className="rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-medium">
-                置信度 {latest.confidence}
+                置信度 {activeDraft.confidence}
               </span>
             </div>
             <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
-              待处理 {pendingTotal} 条。确认后才会写入正式预算账本、执行日历或风险列表。
+              当前批次 {pendingTotal} 条，全部批次共 {totalBudget + totalCalendar + totalRisks} 条待处理。
+              确认后才会写入正式预算账本、执行日历或风险列表。
             </p>
           </div>
         </div>
@@ -197,23 +226,43 @@ export function ImportDraftPanel({
         </div>
       )}
 
+      {expanded && drafts.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-background/70 px-3 py-2">
+          <span className="text-xs font-medium text-amber-900">导入批次</span>
+          <select
+            value={activeDraft.id}
+            onChange={(event) => setActiveDraftId(event.target.value)}
+            className="h-8 min-w-64 rounded border bg-background px-2 text-xs outline-none"
+          >
+            {drafts.map((draft, index) => {
+              const count = draft.budgetCount + draft.calendarCount + draft.riskCount;
+              return (
+                <option key={draft.id} value={draft.id}>
+                  {index === 0 ? "最新批次" : `较早批次 ${index + 1}`} · {count} 条 · {new Date(draft.createdAt).toLocaleString("zh-CN")}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      )}
+
       {expanded && (
         <div className="grid gap-3 xl:grid-cols-[1.15fr_1fr_1fr]">
           <BudgetQueue
-            draftId={latest.id}
+            draftId={activeDraft.id}
             items={pendingBudgetPreview}
             tasks={tasks}
             applyingKey={applyingKey}
             onApply={handleApplyBudget}
           />
           <CalendarQueue
-            draftId={latest.id}
+            draftId={activeDraft.id}
             items={pendingCalendarPreview}
             applyingKey={applyingKey}
             onApply={handleApplyCalendar}
           />
           <RiskQueue
-            draftId={latest.id}
+            draftId={activeDraft.id}
             items={pendingRiskPreview}
             applyingKey={applyingKey}
             onApply={handleApplyRisk}
@@ -258,6 +307,8 @@ function BudgetQueue({
         <div className="max-h-72 divide-y overflow-y-auto">
           {items.map((item) => {
             const recommendation = recommendBudgetTask(item, tasks);
+            const suggestedFlowType = recommendedFlowType(item);
+            const requiresManualFlow = needsManualFlowType(item);
 
             return (
               <form key={`budget-${draftId}-${item.candidateIndex}`} action={onApply} className="grid gap-2 px-3 py-2 text-xs">
@@ -274,7 +325,7 @@ function BudgetQueue({
                       )}
                     </div>
                     <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                      {[item.workstream, item.status].filter(Boolean).join(" · ") || "来源待确认"}
+                      {[item.workstream, item.type, item.status].filter(Boolean).join(" · ") || "来源待确认"}
                     </p>
                   </div>
                   <span className="font-mono font-semibold">
@@ -295,9 +346,15 @@ function BudgetQueue({
                       </option>
                     ))}
                   </select>
-                  <select name="flowType" defaultValue="EXPENSE" className="rounded border bg-background px-2 py-1 text-[11px] outline-none">
-                    <option value="EXPENSE">支出</option>
+                  <select
+                    name="flowType"
+                    required
+                    defaultValue={suggestedFlowType}
+                    className="rounded border bg-background px-2 py-1 text-[11px] outline-none"
+                  >
+                    <option value="">类型</option>
                     <option value="ALLOCATE">分配</option>
+                    <option value="EXPENSE">支出</option>
                     <option value="REFUND">退款</option>
                   </select>
                   <Button
@@ -310,13 +367,24 @@ function BudgetQueue({
                     {applyingKey === `${draftId}:${item.candidateIndex}` ? <Loader2 className="size-3 animate-spin" /> : "入账"}
                   </Button>
                 </div>
-                {recommendation ? (
-                  <p className="truncate text-[11px] text-emerald-700">
-                    已推荐：{recommendation.task.name}
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">未找到高置信关联，请手动选择。</p>
-                )}
+                <div className="space-y-0.5">
+                  {requiresManualFlow ? (
+                    <p className="text-[11px] text-amber-700">
+                      {item.type ? `${item.type} 不是正式流水类型，需手动选择分配/支出/退款。` : "AI 未判断流水类型，需手动选择。"}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-emerald-700">
+                      建议类型：{FLOW_TYPE_LABEL[suggestedFlowType] ?? suggestedFlowType}
+                    </p>
+                  )}
+                  {recommendation ? (
+                    <p className="truncate text-[11px] text-emerald-700">
+                      已推荐事项：{recommendation.task.name}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">未找到高置信关联，请手动选择事项。</p>
+                  )}
+                </div>
               </form>
             );
           })}

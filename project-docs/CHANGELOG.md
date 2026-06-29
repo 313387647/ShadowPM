@@ -106,6 +106,22 @@
 - Manual project creation now also allows empty budget.
 - If a manual project has no confirmed budget, ShadowPM creates the project and control placeholder without an initial `ALLOCATE` flow.
 
+## [2026-06-29] P0.4 Import Draft Safety
+
+### Budget candidate safety
+- Budget import candidates no longer default to `EXPENSE`.
+- If AI identifies a candidate as `ALLOCATE`, `EXPENSE`, or `REFUND`, the review UI preselects that type.
+- If AI identifies a candidate as `ESTIMATE`, `TRANSFER`, or an unclear type, the user must manually choose the final flow type before writing to the ledger.
+- Server-side validation continues to reject empty or invalid flow types.
+
+### Draft queue handling
+- Import draft review now supports switching between multiple pending import batches instead of only exposing the latest draft.
+- The panel still defaults to the newest import batch but keeps older pending batches reachable.
+
+### External testing preparation
+- Added an external tester gate and tester flow to `project-docs/TASKS.md`.
+- The product is now closer to being safe for spreadsheet-upload testing by non-developers, pending shared deployment setup and smoke testing.
+
 ## [2026-06-24] Phase 1 — Task 1: 初始化 Next.js 14 项目
 - 使用 `create-next-app@14` 初始化项目，包含 TypeScript、Tailwind CSS、ESLint、App Router、src/ 目录
 - 配置 `@/*` 路径别名指向 `./src/*`

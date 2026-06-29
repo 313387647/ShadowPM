@@ -13,6 +13,7 @@ function asArray(value: unknown) {
 type BudgetCandidate = {
   title?: string;
   amount?: number | null;
+  type?: string | null;
   workstream?: string | null;
   status?: string | null;
   description?: string | null;
@@ -54,6 +55,7 @@ type CalendarCandidate = {
 };
 
 const FLOW_TYPES = ["ALLOCATE", "EXPENSE", "REFUND"] as const;
+const BUDGET_TYPES_REQUIRING_MANUAL_FLOW = ["ESTIMATE", "TRANSFER"] as const;
 const RISK_TYPES = ["BUDGET", "SCHEDULE", "RESOURCE", "SCOPE", "COMMUNICATION", "OTHER"] as const;
 const RISK_LEVELS = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
 const CALENDAR_STATUSES = ["PLANNED", "CONFIRMED", "DONE", "CANCELED"] as const;
@@ -84,6 +86,10 @@ function parseDateSafe(dateRaw: string | null | undefined): Date | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(dateRaw)
     ? new Date(`${dateRaw}T00:00:00.000Z`)
     : null;
+}
+
+function normalizeBudgetCandidateType(type: string | null | undefined) {
+  return type?.trim().toUpperCase() ?? "";
 }
 
 export async function getPendingImportDrafts(projectId: string) {
@@ -164,6 +170,10 @@ export async function applyBudgetImportCandidate(
   if (candidate.applied) return { success: false, message: "预算候选已入账" };
   if (typeof candidate.amount !== "number" || candidate.amount <= 0) {
     return { success: false, message: "预算候选金额无效，暂不能入账" };
+  }
+  const candidateType = normalizeBudgetCandidateType(candidate.type);
+  if (BUDGET_TYPES_REQUIRING_MANUAL_FLOW.includes(candidateType as (typeof BUDGET_TYPES_REQUIRING_MANUAL_FLOW)[number]) && flowTypeRaw === candidateType) {
+    return { success: false, message: "预算估算或转移候选必须先选择分配、支出或退款类型" };
   }
 
   const candidateAmount = candidate.amount;
