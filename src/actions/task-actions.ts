@@ -75,7 +75,14 @@ export async function getProjectTasks(projectId: string) {
 
   return prisma.task.findMany({
     where: { projectId },
-    include: { _count: { select: { logs: true, budgets: true, calendarEntries: true } } },
+    include: {
+      logs: {
+        select: { id: true, content: true, createdBy: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 3,
+      },
+      _count: { select: { logs: true, budgets: true, calendarEntries: true } },
+    },
     orderBy: [{ priority: "asc" }, { status: "asc" }, { name: "asc" }],
   });
 }

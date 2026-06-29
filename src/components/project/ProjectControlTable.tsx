@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Loader2, Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, MessageSquarePlus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { TASK_STATUS_MAP } from "@/lib/constants";
 import { createTask, updateTask } from "@/actions/task-actions";
+import { addProgressLog } from "@/actions/timeline-actions";
 import { cn } from "@/lib/utils";
 
 type Task = {
@@ -23,6 +24,7 @@ type Task = {
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   phaseId: string | null;
   priority: string;
+  logs: { id: string; content: string; createdBy: string; createdAt: Date | string }[];
   _count: { logs: number; budgets: number; calendarEntries: number };
 };
 
@@ -67,6 +69,15 @@ function toDateInputValue(value: Task["deadline"]) {
   if (!value) return "";
   if (typeof value === "string") return value.split("T")[0] ?? "";
   return value.toISOString().split("T")[0] ?? "";
+}
+
+function formatLogDate(value: Date | string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function matchesControlFilter(task: Task, filter: ControlFilter) {
@@ -118,6 +129,9 @@ function ControlTableRow({
   const [priority, setPriority] = useState(task.priority);
   const [status, setStatus] = useState<Task["status"]>(task.status);
   const [saving, setSaving] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [logContent, setLogContent] = useState("");
+  const [logging, setLogging] = useState(false);
 
   const missing = getMissingFields({
     ...task,
@@ -165,6 +179,29 @@ function ControlTableRow({
     }
   }
 
+  async function submitProgressLog() {
+    if (!logContent.trim() || logging) return;
+    setLogging(true);
+    try {
+      const formData = new FormData();
+      formData.set("taskId", task.id);
+      formData.set("content", logContent);
+
+      const result = await addProgressLog(formData);
+      if (result.success) {
+        toast.success("进度更新已记录");
+        setLogContent("");
+        router.refresh();
+      } else {
+        toast.error(result.message ?? "记录失败");
+      }
+    } catch {
+      toast.error("记录失败");
+    } finally {
+      setLogging(false);
+    }
+  }
+
   function saveOnEnter(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -173,13 +210,15 @@ function ControlTableRow({
   }
 
   return (
-    <tr
-      id={`control-task-${task.id}`}
-      className={cn(
-        "bg-card transition-colors hover:bg-muted/30",
-        focused && "bg-primary/5 ring-1 ring-inset ring-primary/30"
-      )}
-    >
+    <Fragment>
+      <tr
+        id={`control-task-${task.id}`}
+        className={cn(
+          "bg-card transition-colors hover:bg-muted/30",
+          focused && "bg-primary/5 ring-1 ring-inset ring-primary/30",
+          historyOpen && "bg-primary/5"
+        )}
+      >
       <td className="px-3 py-2 text-muted-foreground">
         <span className="line-clamp-1">{phaseName}</span>
       </td>
@@ -261,7 +300,16 @@ function ControlTableRow({
         </Select>
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-        {task._count.logs}
+        <Button
+          type="button"
+          size="sm"
+          variant={historyOpen ? "secondary" : "ghost"}
+          className="h-6 gap-1 px-2 text-[11px]"
+          onClick={() => setHistoryOpen((value) => !value)}
+        >
+          <MessageSquarePlus className="size-3" />
+          {task._count.logs}
+        </Button>
       </td>
       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
         {task._count.budgets > 0 ? (
@@ -334,7 +382,65 @@ function ControlTableRow({
           )}
         </div>
       </td>
-    </tr>
+      </tr>
+      {historyOpen && (
+        <tr className="border-t bg-primary/[0.03]">
+          <td colSpan={12} className="px-3 py-3">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium">追加管控进展</p>
+                  <span className="text-[11px] text-muted-foreground">直接沉淀到该事项历史，不改变其他字段</span>
+                </div>
+                <textarea
+                  value={logContent}
+                  onChange={(event) => setLogContent(event.target.value)}
+                  placeholder="例如：供应商已反馈报价，待明天 12:00 前确认最终版本。"
+                  rows={3}
+                  className="w-full resize-none rounded-md border bg-background px-3 py-2 text-xs leading-5 outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+                />
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={submitProgressLog}
+                    disabled={logging || !logContent.trim()}
+                  >
+                    {logging ? "记录中" : "记录更新"}
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium">最近更新</p>
+                {task.logs.length === 0 ? (
+                  <div className="rounded-md border border-dashed bg-background/60 px-3 py-4 text-xs text-muted-foreground">
+                    暂无更新记录。第一条进展会从这里开始。
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {task.logs.map((log) => (
+                      <div key={log.id} className="rounded-md border bg-background px-3 py-2">
+                        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                          <span>{log.createdBy}</span>
+                          <span>{formatLogDate(log.createdAt)}</span>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-xs leading-5">{log.content}</p>
+                      </div>
+                    ))}
+                    {task._count.logs > task.logs.length && (
+                      <p className="text-[11px] text-muted-foreground">
+                        还有 {task._count.logs - task.logs.length} 条更早记录，可在项目活动中查看。
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </Fragment>
   );
 }
 

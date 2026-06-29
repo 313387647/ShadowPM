@@ -12,7 +12,7 @@ export function TaskViewToggle({
   projectId, tasks, phases,
 }: {
   projectId: string;
-  tasks: { id: string; projectId: string; name: string; description: string | null; notes: string | null; assignee: string | null; department: string | null; deadline: Date | string | null; status: "PENDING" | "IN_PROGRESS" | "COMPLETED"; phaseId: string | null; priority: string; _count: { logs: number; budgets: number; calendarEntries: number } }[];
+  tasks: { id: string; projectId: string; name: string; description: string | null; notes: string | null; assignee: string | null; department: string | null; deadline: Date | string | null; status: "PENDING" | "IN_PROGRESS" | "COMPLETED"; phaseId: string | null; priority: string; logs: { id: string; content: string; createdBy: string; createdAt: Date | string }[]; _count: { logs: number; budgets: number; calendarEntries: number } }[];
   phases: { id: string; name: string }[];
 }) {
   const [view, setView] = useState<View>("control");
