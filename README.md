@@ -42,6 +42,9 @@ Known gaps:
 ## Review Entry Points
 
 - [Review Package](./project-docs/REVIEW_PACKAGE.md)
+- [User Guide](./project-docs/USER_GUIDE.md)
+- [Feedback Template](./project-docs/FEEDBACK_TEMPLATE.md)
+- [Test Deployment Checklist](./project-docs/TEST_DEPLOYMENT.md)
 - [Current Roadmap](./project-docs/TASKS.md)
 - [Architecture](./project-docs/ARCHITECTURE.md)
 - [Database](./project-docs/DATABASE.md)

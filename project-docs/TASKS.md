@@ -176,6 +176,7 @@ Minimum gate before sharing a test URL:
 - [x] P0.3 project creation does not require confirmed budget
 - [x] P0.4 import draft budget candidates no longer default to expense
 - [ ] Shared deployment is configured with `SHADOWPM_SESSION_SECRET`, `DEEPSEEK_API_KEY`, and database access
+- [x] Complete reviewer user guide and feedback template are available
 - [ ] Test flow is smoke-tested with `project-docs/review-assets/one-million-project-control-sample.xlsx`
 
 Tester flow:

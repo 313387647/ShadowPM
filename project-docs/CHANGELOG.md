@@ -122,6 +122,18 @@
 - Added an external tester gate and tester flow to `project-docs/TASKS.md`.
 - The product is now closer to being safe for spreadsheet-upload testing by non-developers, pending shared deployment setup and smoke testing.
 
+## [2026-06-29] Reviewer Testing Documentation
+
+### Docs added
+- Added `project-docs/USER_GUIDE.md` as the complete non-developer testing tutorial.
+- Added `project-docs/FEEDBACK_TEMPLATE.md` for structured reviewer feedback.
+- Added `project-docs/TEST_DEPLOYMENT.md` for private Alpha deployment setup and smoke testing.
+
+### Docs linked
+- Updated root `README.md` review entry points.
+- Updated `project-docs/README.md` documentation index.
+- Updated `project-docs/TASKS.md` external tester gate.
+
 ## [2026-06-24] Phase 1 — Task 1: 初始化 Next.js 14 项目
 - 使用 `create-next-app@14` 初始化项目，包含 TypeScript、Tailwind CSS、ESLint、App Router、src/ 目录
 - 配置 `@/*` 路径别名指向 `./src/*`

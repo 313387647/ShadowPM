@@ -5,6 +5,9 @@ This folder is the durable project memory for ShadowPM.
 Start here:
 
 - `REVIEW_PACKAGE.md` - current Alpha review brief
+- `USER_GUIDE.md` - complete reviewer user guide
+- `FEEDBACK_TEMPLATE.md` - structured feedback template
+- `TEST_DEPLOYMENT.md` - private test deployment checklist
 - `TASKS.md` - current roadmap and P0/P1/P2 plan
 - `PROJECT.md` - product and engineering context
 - `API.md` - Server Actions API map
