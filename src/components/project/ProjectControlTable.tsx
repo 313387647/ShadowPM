@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Circle, History, Play, Target } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, History, Loader2, Play, Plus, Target } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TASK_STATUS_MAP } from "@/lib/constants";
-import { fillMissingTaskFields, updateTask } from "@/actions/task-actions";
+import { createTask, fillMissingTaskFields, updateTask } from "@/actions/task-actions";
 import { cn } from "@/lib/utils";
 
 type Task = {
@@ -326,16 +326,21 @@ function ControlTableRow({
 }
 
 export function ProjectControlTable({
+  projectId,
   tasks,
   phases,
 }: {
+  projectId: string;
   tasks: Task[];
   phases: Phase[];
 }) {
   const router = useRouter();
+  const createFormRef = useRef<HTMLFormElement>(null);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ControlFilter>("ALL");
   const [query, setQuery] = useState("");
+  const [showCreate, setShowCreate] = useState(tasks.length === 0);
+  const [creating, setCreating] = useState(false);
   const [bulkAssignee, setBulkAssignee] = useState("");
   const [bulkDepartment, setBulkDepartment] = useState("");
   const [bulkDeadline, setBulkDeadline] = useState("");
@@ -469,6 +474,29 @@ export function ProjectControlTable({
     }
   }
 
+  async function handleCreate(formData: FormData) {
+    if (creating) return;
+    setCreating(true);
+    try {
+      formData.set("projectId", projectId);
+      const result = await createTask(formData);
+      if (result.success) {
+        toast.success("管控事项已添加");
+        createFormRef.current?.reset();
+        setShowCreate(false);
+        setFilter("ALL");
+        setQuery("");
+        router.refresh();
+      } else {
+        toast.error(result.message ?? "添加失败");
+      }
+    } catch {
+      toast.error("添加失败");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -479,6 +507,15 @@ export function ProjectControlTable({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={() => setShowCreate((value) => !value)}
+          >
+            <Plus className="size-3.5" />
+            新增管控事项
+          </Button>
           <Badge variant={missingCount > 0 ? "destructive" : "secondary"}>
             {missingCount} 个待补字段
           </Badge>
@@ -487,6 +524,62 @@ export function ProjectControlTable({
           </Badge>
         </div>
       </div>
+
+      {showCreate && (
+        <form
+          ref={createFormRef}
+          action={handleCreate}
+          className="rounded-lg border bg-card p-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">新增管控事项</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                手动项目可以从这里直接补充管控表，不需要切换视图。
+              </p>
+            </div>
+            <Button type="submit" size="sm" className="h-8 gap-1.5" disabled={creating}>
+              {creating ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+              添加
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-2 lg:grid-cols-[1.5fr_1fr_1fr_150px]">
+            <input
+              name="name"
+              required
+              placeholder="管控事项，例如：发布会场地确认"
+              className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+            />
+            <input
+              name="assignee"
+              placeholder="负责人"
+              className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+            />
+            <input
+              name="department"
+              placeholder="部门"
+              className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+            />
+            <input
+              name="deadline"
+              type="date"
+              className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+            />
+          </div>
+          <div className="mt-2 grid gap-2 lg:grid-cols-2">
+            <input
+              name="description"
+              placeholder="详细描述，可选"
+              className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+            />
+            <input
+              name="notes"
+              placeholder="进度/结论，可选"
+              className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+            />
+          </div>
+        </form>
+      )}
 
       {tasks.length > 0 && (
         <div className="rounded-lg border bg-muted/20 p-3">
@@ -618,7 +711,7 @@ export function ProjectControlTable({
         <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed py-16 text-center">
           <p className="text-sm text-muted-foreground">暂无管控事项</p>
           <p className="mt-1 text-xs text-muted-foreground/60">
-            用 AI 生成项目，或切到看板新增第一条事项
+            使用上方「新增管控事项」添加第一条，或用 AI 生成项目
           </p>
         </div>
       ) : (

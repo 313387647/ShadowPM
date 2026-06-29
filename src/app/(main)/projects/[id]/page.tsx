@@ -100,7 +100,6 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
       </div>
 
       <ImportDraftPanel drafts={importDrafts} tasks={taskOptions} />
-      <ProjectFeedbackPanel projectId={params.id} feedbacks={feedbacks} />
 
       {/* 四 Tab 布局 */}
       <Tabs defaultValue={activeTab} className="w-full">
@@ -179,6 +178,8 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
           <WikiExplorer projectId={params.id} folders={folders} />
         </TabsContent>
       </Tabs>
+
+      <ProjectFeedbackPanel projectId={params.id} feedbacks={feedbacks} />
     </div>
   );
 }
