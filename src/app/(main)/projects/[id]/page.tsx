@@ -11,6 +11,7 @@ import { getProjectPhases } from "@/actions/phase-actions";
 import { getPendingImportDrafts } from "@/actions/import-draft-actions";
 import { getProjectCalendarEntries } from "@/actions/calendar-actions";
 import { getProjectRisks } from "@/actions/risk-actions";
+import { getProjectFeedback } from "@/actions/feedback-actions";
 import { LedgerTable } from "@/components/project/LedgerTable";
 import { TimelineView } from "@/components/project/TimelineView";
 import { WikiExplorer } from "@/components/wiki/WikiExplorer";
@@ -18,6 +19,7 @@ import { TaskViewToggle } from "@/components/project/TaskViewToggle";
 import { ImportDraftPanel } from "@/components/project/ImportDraftPanel";
 import { ExecutionCalendarView } from "@/components/project/ExecutionCalendarView";
 import { RiskView } from "@/components/project/RiskView";
+import { ProjectFeedbackPanel } from "@/components/project/ProjectFeedbackPanel";
 
 interface Props {
   params: { id: string };
@@ -40,6 +42,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
     importDrafts,
     calendarEntries,
     risks,
+    feedbacks,
   ] = await Promise.all([
     getProjectDetail(params.id),
     getProjectTasks(params.id),
@@ -52,6 +55,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
     getPendingImportDrafts(params.id),
     getProjectCalendarEntries(params.id),
     getProjectRisks(params.id),
+    getProjectFeedback(params.id),
   ]);
 
   if (!project) notFound();
@@ -96,6 +100,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
       </div>
 
       <ImportDraftPanel drafts={importDrafts} tasks={taskOptions} />
+      <ProjectFeedbackPanel projectId={params.id} feedbacks={feedbacks} />
 
       {/* 四 Tab 布局 */}
       <Tabs defaultValue={activeTab} className="w-full">

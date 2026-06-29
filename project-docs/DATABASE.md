@@ -39,6 +39,7 @@ model User {
   role      Role     @default(MEMBER)
   createdAt DateTime @default(now())
   projects  Project[]
+  feedbacks ProjectFeedback[]
 }
 
 model Project {
@@ -53,6 +54,7 @@ model Project {
   owner       User     @relation(fields: [ownerId], references: [id])
   tasks       Task[]
   folders     AssetFolder[]
+  feedbacks   ProjectFeedback[]
 }
 
 model Task {
@@ -110,4 +112,25 @@ model AssetItem {
   version   Int       @default(1)
   
   folder    AssetFolder @relation(fields: [folderId], references: [id])
+}
+
+model ProjectFeedback {
+  id             String   @id @default(cuid())
+  projectId      String
+  createdById    String
+  testerName     String
+  rating         Int
+  aiAccuracy     String   // GOOD | PARTIAL | POOR | NOT_TESTED
+  uploadOutcome  String   // CREATED | CREATED_WITH_EDITS | FAILED | BLOCKED
+  wouldUse       String   // YES | MAYBE | NO
+  budgetIssue    Boolean  @default(false)
+  calendarIssue  Boolean  @default(false)
+  ownerIssue     Boolean  @default(false)
+  missingInfo    Boolean  @default(false)
+  friction       String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
 }

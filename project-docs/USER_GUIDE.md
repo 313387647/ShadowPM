@@ -175,9 +175,24 @@ Expected result:
 - Copilot should answer from official project data.
 - It should not invent missing budget, owners, or dates.
 
+### Step 10: Submit In-App Feedback
+
+On the project detail page, use the `外测反馈` panel.
+
+Please submit:
+
+- Overall rating
+- AI extraction quality
+- Upload/create outcome
+- Whether you would keep using the product
+- Budget/calendar/owner/missing-info issues
+- The step that felt confusing or risky
+
+Leader users can review all submitted feedback in `/feedback`.
+
 ## 5. What Feedback To Provide
 
-Please record feedback using `project-docs/FEEDBACK_TEMPLATE.md`.
+Please submit feedback inside the app first. Use `project-docs/FEEDBACK_TEMPLATE.md` only when you need a longer written review.
 
 Useful feedback examples:
 
@@ -197,7 +212,7 @@ Current known gaps:
 - Field-level confidence is not fully implemented yet
 - Control table inline editing is still limited
 - Execution calendar V2 is not complete
-- Feedback collection is document-based for now
+- Feedback collection is structured but still lightweight
 - Business-rule tests need expansion
 - Team/member permission model is still lightweight
 

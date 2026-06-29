@@ -33,7 +33,7 @@ Required before sharing the URL:
 - [ ] Database initialized
 - [ ] Seed users available
 - [ ] Sample spreadsheet smoke-tested
-- [ ] Feedback collection path prepared
+- [x] Feedback collection path prepared
 
 ## 3. Required Environment Variables
 
@@ -95,8 +95,9 @@ project-docs/review-assets/one-million-project-control-sample.xlsx
    - `执行日历`
    - `风险/待定`
    - `AI 导入审核队列`
-9. Confirm a budget candidate only after manually selecting the flow type if AI type is unclear.
-10. Record issues in `project-docs/FEEDBACK_TEMPLATE.md`.
+9. Submit the in-app `外测反馈` form on the project page.
+10. Confirm a leader user can see the feedback in `/feedback`.
+11. Confirm a budget candidate only after manually selecting the flow type if AI type is unclear.
 
 ## 6. Reviewer Instructions
 
@@ -105,7 +106,6 @@ Send reviewers:
 - Test site URL
 - Recommended login user
 - `project-docs/USER_GUIDE.md`
-- `project-docs/FEEDBACK_TEMPLATE.md`
 - The sample spreadsheet if they do not have repo access
 
 Suggested message:
@@ -118,6 +118,8 @@ Suggested message:
 2. AI 有没有把预算误当任务或支出
 3. 日历有没有混淆渠道/负责人/内容
 4. 哪些缺失信息应该进入表格补齐
+
+创建项目后，请在项目页的「外测反馈」面板提交结构化反馈。
 ```
 
 ## 7. Data Reset During Testing

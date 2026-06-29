@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, FolderKanban, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Users, LogOut, MessageSquareText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { logout } from "@/actions/auth-actions";
 const ICON_MAP: Record<string, React.ReactNode> = {
   "AI 工作台": <FolderKanban className="size-4" />,
   "全局大盘": <LayoutDashboard className="size-4" />,
+  "外测反馈": <MessageSquareText className="size-4" />,
   "团队负载": <Users className="size-4" />,
 };
 

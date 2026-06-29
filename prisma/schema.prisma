@@ -39,6 +39,7 @@ model User {
   role      Role     @default(MEMBER)
   createdAt DateTime @default(now())
   projects  Project[]
+  feedbacks ProjectFeedback[]
 }
 
 model Project {
@@ -59,6 +60,7 @@ model Project {
   importDrafts ImportDraft[]
   calendarEntries ExecutionCalendarEntry[]
   activityLogs ActivityLog[]
+  feedbacks ProjectFeedback[]
 }
 
 model Phase {
@@ -247,4 +249,30 @@ model ImportDraft {
 
   @@index([projectId])
   @@index([status])
+}
+
+model ProjectFeedback {
+  id             String   @id @default(cuid())
+  projectId      String
+  createdById    String
+  testerName     String
+  rating         Int
+  aiAccuracy     String   // GOOD | PARTIAL | POOR | NOT_TESTED
+  uploadOutcome  String   // CREATED | CREATED_WITH_EDITS | FAILED | BLOCKED
+  wouldUse       String   // YES | MAYBE | NO
+  budgetIssue    Boolean  @default(false)
+  calendarIssue  Boolean  @default(false)
+  ownerIssue     Boolean  @default(false)
+  missingInfo    Boolean  @default(false)
+  friction       String?
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User  @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([createdById])
+  @@index([createdAt])
+  @@index([rating])
 }
