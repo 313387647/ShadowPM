@@ -21,7 +21,7 @@ The product must optimize for:
 ShadowPM projects are organized around three primary work surfaces:
 
 1. Project Control Table
-   The main operating artifact. It tracks workstreams, control items, owners, departments, deadlines, status, progress, risks, and links to budget/calendar/assets.
+   The main operating artifact. It tracks workstreams, control items, owners, departments, deadlines, status, progress conclusions, watch items, and links to budget/calendar records.
 
 2. Budget Ledger
    Budget must not be hidden inside the control table. It is an append-only ledger with allocation, expense, refund, and adjustment flows.
@@ -48,8 +48,6 @@ The product currently supports:
 - Budget ledger
 - Execution calendar
 - Progress timeline
-- Risk register
-- Wiki/assets
 - AI copilot suggestions and confirmation flows
 - Dashboard overview
 

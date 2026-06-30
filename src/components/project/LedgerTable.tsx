@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Loader2, TrendingUp, TrendingDown, Wallet, Search, X } from "lucide-react";
+import { Plus, Loader2, TrendingUp, TrendingDown, Wallet, Search, X, Pencil, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BUDGET_OPERATION_MAP, FLOW_TYPE_MAP } from "@/lib/constants";
-import { recordBudget } from "@/actions/ledger-actions";
+import { recordBudget, reverseBudgetFlow, updateBudgetFlowDescription } from "@/actions/ledger-actions";
 import { cn } from "@/lib/utils";
 
 type Flow = {
@@ -64,6 +64,10 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
   const [query, setQuery] = useState("");
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [operation, setOperation] = useState("EXPENSE");
+  const [editingFlow, setEditingFlow] = useState<Flow | null>(null);
+  const [reversingFlow, setReversingFlow] = useState<Flow | null>(null);
+  const [editingDescription, setEditingDescription] = useState("");
+  const [reversalReason, setReversalReason] = useState("");
 
   const normalizedQuery = query.trim().toLowerCase();
   const visibleFlows = useMemo(() => {
@@ -108,6 +112,52 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
       }
     } catch {
       toast.error("记账失败，请重试");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleUpdateDescription() {
+    if (!editingFlow || submitting) return;
+    setSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.set("flowId", editingFlow.id);
+      formData.set("description", editingDescription);
+      const result = await updateBudgetFlowDescription(formData);
+      if (result.success) {
+        toast.success(result.message ?? "说明已更新");
+        setEditingFlow(null);
+        setEditingDescription("");
+        router.refresh();
+      } else {
+        toast.error(result.message ?? "更新失败");
+      }
+    } catch {
+      toast.error("更新失败，请重试");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleReverseFlow() {
+    if (!reversingFlow || submitting) return;
+    setSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.set("flowId", reversingFlow.id);
+      formData.set("reason", reversalReason);
+      const result = await reverseBudgetFlow(formData);
+      if (result.success) {
+        toast.success(result.message ?? "流水已冲正");
+        setReversingFlow(null);
+        setReversalReason("");
+        router.refresh();
+      } else {
+        toast.error(result.message ?? "冲正失败");
+      }
+    } catch {
+      toast.error("冲正失败，请重试");
     } finally {
       setSubmitting(false);
     }
@@ -235,6 +285,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
                   <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">金额</th>
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">事由</th>
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">操作人</th>
+                  <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -264,8 +315,46 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
                       {flow.amount > 0 ? "+" : ""}
                       {flow.amount.toLocaleString("zh-CN")}
                     </td>
-                    <td className="px-4 py-2.5 max-w-xs truncate">{flow.description}</td>
+                    <td className="px-4 py-2.5 max-w-xs">
+                      <p className="truncate">{flow.description}</p>
+                      {flow.operation === "REVERSAL" && (
+                        <span className="mt-1 inline-block rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
+                          冲正记录
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{flow.createdBy}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() => {
+                            setEditingFlow(flow);
+                            setEditingDescription(flow.description);
+                          }}
+                        >
+                          <Pencil className="mr-1 size-3" />
+                          说明
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-[11px]"
+                          disabled={flow.operation === "REVERSAL"}
+                          onClick={() => {
+                            setReversingFlow(flow);
+                            setReversalReason("");
+                          }}
+                        >
+                          <RotateCcw className="mr-1 size-3" />
+                          冲正
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -367,6 +456,62 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingFlow)} onOpenChange={(nextOpen) => !nextOpen && setEditingFlow(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>修改流水说明</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              只修改说明，不改变金额和余额。修改记录会写入项目活动。
+            </div>
+            <textarea
+              value={editingDescription}
+              onChange={(event) => setEditingDescription(event.target.value)}
+              rows={4}
+              className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            />
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={() => setEditingFlow(null)}>取消</Button>
+              <Button type="button" disabled={submitting || !editingDescription.trim()} onClick={handleUpdateDescription}>
+                {submitting ? "保存中" : "保存说明"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(reversingFlow)} onOpenChange={(nextOpen) => !nextOpen && setReversingFlow(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>冲正预算流水</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+              冲正会新增一条反向流水，不删除原记录。适合修正 AI 误入账、金额方向错误或人工误记。
+            </div>
+            {reversingFlow && (
+              <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                原流水：{reversingFlow.task.name} · {reversingFlow.description} · ¥{reversingFlow.amount.toLocaleString("zh-CN")}
+              </div>
+            )}
+            <textarea
+              value={reversalReason}
+              onChange={(event) => setReversalReason(event.target.value)}
+              placeholder="填写冲正原因，例如：AI 将预算估算误入账，需撤回。"
+              rows={3}
+              className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            />
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={() => setReversingFlow(null)}>取消</Button>
+              <Button type="button" variant="destructive" disabled={submitting || !reversalReason.trim()} onClick={handleReverseFlow}>
+                {submitting ? "冲正中" : "确认冲正"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

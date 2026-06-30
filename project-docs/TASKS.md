@@ -21,8 +21,6 @@ ShadowPM is not trying to become another task manager. Every item below must imp
 - [x] Budget ledger
 - [x] Execution calendar
 - [x] Progress timeline
-- [x] Risk view
-- [x] Wiki/assets explorer
 - [x] Dashboard overview
 
 ### AI-Native Workflow
@@ -30,11 +28,10 @@ ShadowPM is not trying to become another task manager. Every item below must imp
 - [x] AI-assisted project import
 - [x] Spreadsheet/text parsing entry
 - [x] Import preview before creation
-- [x] Import draft queue
+- [x] Direct editable AI import into control table, budget ledger, and execution calendar
 - [x] AI project summary and judgment
 - [x] AI next actions converted to control tasks
 - [x] AI next actions converted to execution calendar entries
-- [x] AI risks converted to formal risks
 - [x] AI budget signals converted to budget flows
 - [x] User confirmation before important AI mutations
 
@@ -74,37 +71,43 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Require project name only
   - [x] Allow unknown or zero total budget when source does not contain a reliable budget pool
   - [x] Show "budget pool needs confirmation" instead of blocking project creation
-  - [x] Keep budget candidates in review queue
+  - [x] Write identifiable budget rows into the editable ledger
   - [x] Do not create an initial `ALLOCATE` flow when no confirmed budget exists
   - [x] Align manual project creation with the same optional budget rule
-- [x] P0.4 Import draft safety
-  - [x] Stop defaulting budget candidates to `EXPENSE`
-  - [x] Use AI candidate type when it maps directly to `ALLOCATE`, `EXPENSE`, or `REFUND`
-  - [x] Require manual flow type selection for estimate, transfer, or unclear budget candidates
-  - [x] Handle multiple pending import drafts by switching between import batches
-  - [x] Prevent import candidates from being applied to tasks outside the project
-- [ ] P0.5 AI import quality V2
+- [x] P0.4 Direct editable AI import
+  - [x] Remove the separate import draft/review queue from the Alpha core
+  - [x] Stop defaulting ambiguous budget signals to `EXPENSE`
+  - [x] Write AI-generated budget rows into the official ledger
+  - [x] Write AI-generated calendar rows into the official execution calendar
+  - [x] Keep blockers/open questions in editable table notes and activity summaries
+- [x] P0.5 Product surface pruning
+  - [x] Remove independent risk and assets surfaces from the Alpha core
+  - [x] Remove AI-to-risk conversion actions
+  - [x] Convert Copilot risk-style prompts into control-table attention queries
+  - [x] Update current docs to reflect the three core work surfaces
+  - [ ] Clean legacy database models with an explicit migration plan
+- [ ] P0.6 AI import quality V2
   - Add field-level confidence
   - Separate required gaps from optional gaps
   - Surface conflicts and ambiguous fields before confirmation
-  - Add `sourceRef` for control items, budget candidates, calendar entries, and risks
+  - Add `sourceRef` for control items, budget rows, and calendar entries
   - Add `missingFields` and `conflicts` to the import preview model
   - Group preview rows as "ready to create", "needs confirmation", and "can fill later"
   - Keep low-confidence items editable instead of blocking creation
-- [ ] P0.6 Control table V2
+- [ ] P0.7 Control table V2
   - Introduce a product-language adapter: database may stay `Task`, but UI/actions should expose "Control Item / 管控事项"
   - Replace task-manager wording in core surfaces
   - Improve inline edit coverage
   - Add missing-field and needs-confirmation filters
   - Add low-confidence filters once import confidence is available
   - Expose department, description, owner, deadline, status, latest progress, and blocker editing
-  - Show clearer relationship indicators for budget/calendar/risk/assets
-- [ ] P0.7 Execution calendar V2
+  - Show clearer relationship indicators for budget/calendar/log history
+- [ ] P0.8 Execution calendar V2
   - Optimize for execution orchestration, not decorative month browsing
   - Add workstream/channel/owner/status grouping
   - Improve overdue and upcoming signal density
   - Keep channel and owner separate
-- [ ] P0.8 Business-rule tests
+- [ ] P0.9 Business-rule tests
   - Budget balance from flow sum
   - Cross-project read/write protection
   - Status change creates progress log
@@ -174,7 +177,8 @@ Minimum gate before sharing a test URL:
 - [x] P0.1 permissions are hardened enough for private testing
 - [x] P0.2 budget formulas are unified
 - [x] P0.3 project creation does not require confirmed budget
-- [x] P0.4 import draft budget candidates no longer default to expense
+- [x] P0.4 AI import writes official editable budget/calendar records
+- [x] P0.5 independent risk/assets/import-review surfaces are removed from the Alpha core
 - [ ] Shared deployment is configured with `SHADOWPM_SESSION_SECRET`, `DEEPSEEK_API_KEY`, and database access
 - [x] Complete reviewer user guide and feedback template are available
 - [ ] Test flow is smoke-tested with `project-docs/review-assets/one-million-project-control-sample.xlsx`
@@ -186,5 +190,5 @@ Tester flow:
 3. Upload `project-docs/review-assets/one-million-project-control-sample.xlsx`.
 4. Review AI preview.
 5. Create the project even if budget is missing.
-6. Check project control table, budget draft queue, execution calendar candidates, and risk candidates.
+6. Check project control table, editable budget ledger, editable execution calendar, and project activity records.
 7. Submit feedback on wrong extraction, missing fields, confusing labels, and unsafe AI assumptions.

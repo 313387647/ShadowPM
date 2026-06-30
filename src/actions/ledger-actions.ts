@@ -205,3 +205,115 @@ export async function recordBudget(formData: FormData): Promise<ActionResult> {
   revalidatePath(`/projects/${task.projectId}`);
   return { success: true, message: "预算流转已记录" };
 }
+
+export async function updateBudgetFlowDescription(formData: FormData): Promise<ActionResult> {
+  const flowId = formData.get("flowId") as string;
+  const description = (formData.get("description") as string) || "";
+
+  if (!flowId || !description.trim()) {
+    return { success: false, message: "流水和事由为必填项" };
+  }
+
+  const flow = await prisma.budgetFlow.findUnique({
+    where: { id: flowId },
+    include: { task: { select: { id: true, projectId: true, name: true } } },
+  });
+  if (!flow) return { success: false, message: "预算流水不存在" };
+  const { user } = await assertCanWriteTask(flow.taskId);
+  if (flow.description === description.trim()) {
+    return { success: true, message: "事由无变化" };
+  }
+
+  await prisma.$transaction([
+    prisma.budgetFlow.update({
+      where: { id: flowId },
+      data: { description: description.trim() },
+    }),
+    prisma.activityLog.create({
+      data: {
+        projectId: flow.task.projectId,
+        targetType: "BUDGET_ITEM",
+        targetId: flow.id,
+        changeType: "UPDATE",
+        source: "HUMAN",
+        createdBy: user.name,
+        summary: `💰 预算流水说明更新：${flow.task.name}\n- ${flow.description} → ${description.trim()}`,
+        beforeState: { description: flow.description },
+        afterState: { description: description.trim() },
+      },
+    }),
+  ]);
+
+  revalidatePath(`/projects/${flow.task.projectId}`);
+  return { success: true, message: "预算流水说明已更新" };
+}
+
+export async function reverseBudgetFlow(formData: FormData): Promise<ActionResult> {
+  const flowId = formData.get("flowId") as string;
+  const reason = ((formData.get("reason") as string) || "").trim();
+
+  if (!flowId || !reason) {
+    return { success: false, message: "流水和冲正原因为必填项" };
+  }
+
+  const flow = await prisma.budgetFlow.findUnique({
+    where: { id: flowId },
+    include: { task: { select: { id: true, projectId: true, name: true } } },
+  });
+  if (!flow) return { success: false, message: "预算流水不存在" };
+  const { user } = await assertCanWriteTask(flow.taskId);
+
+  const alreadyReversed = await prisma.budgetFlow.findFirst({
+    where: {
+      taskId: flow.taskId,
+      operation: "REVERSAL",
+      description: { contains: flow.id },
+    },
+    select: { id: true },
+  });
+  if (alreadyReversed) return { success: false, message: "这条流水已经冲正过" };
+
+  const reversal = await prisma.$transaction(async (tx) => {
+    const created = await tx.budgetFlow.create({
+      data: {
+        taskId: flow.taskId,
+        counterpartyTaskId: flow.counterpartyTaskId,
+        groupId: flow.groupId ?? randomUUID(),
+        flowType: flow.flowType,
+        operation: "REVERSAL",
+        amount: flow.amount.negated(),
+        description: `冲正 ${flow.id}：${reason}`,
+        createdBy: user.name,
+      },
+    });
+
+    await tx.activityLog.create({
+      data: {
+        projectId: flow.task.projectId,
+        targetType: "BUDGET_ITEM",
+        targetId: created.id,
+        changeType: "UPDATE",
+        source: "HUMAN",
+        createdBy: user.name,
+        summary: `↩️ 预算流水已冲正：${flow.task.name}\n原流水：${flow.description}\n原因：${reason}`,
+        beforeState: {
+          flowId: flow.id,
+          amount: flow.amount.toString(),
+          operation: flow.operation,
+          description: flow.description,
+        },
+        afterState: {
+          reversalFlowId: created.id,
+          amount: created.amount.toString(),
+          operation: created.operation,
+          description: created.description,
+        },
+      },
+    });
+
+    return created;
+  });
+
+  revalidatePath(`/projects/${flow.task.projectId}`);
+  return { success: true, message: `预算流水已冲正：${reversal.id}` };
+}

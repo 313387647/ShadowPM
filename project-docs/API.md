@@ -9,20 +9,14 @@ All backend mutations and reads live in `src/actions/` and should remain typed, 
 ### `src/actions/ai-actions.ts`
 
 - Parses pasted briefs and uploaded spreadsheet content into structured project drafts.
-- Produces project profile, control tasks, budget signals, calendar entries, risks, and next actions.
-- Should continue moving toward confidence scoring, conflict detection, and missing-field classification.
-
-### `src/actions/import-draft-actions.ts`
-
-- Stores AI import drafts before final confirmation.
-- Confirms drafts into real project data.
-- Records import confirmation activity for traceability.
+- Creates the project profile, editable control table, direct budget ledger flows, and execution calendar entries.
+- Should continue moving toward confidence scoring, conflict detection, and missing-field classification without reintroducing a second import review queue.
 
 ### `src/actions/copilot-actions.ts`
 
 - Handles natural-language project queries and AI action suggestions.
 - Converts AI suggestions into controlled mutations only after user confirmation.
-- Supports task, calendar, risk, and budget proposal flows.
+- Supports task, calendar, budget, and project-control attention queries.
 
 ## Project And Workspace
 
@@ -97,31 +91,6 @@ Rules:
 - Channel, owner, workstream, and content must remain separate fields.
 - Calendar import should not copy messy spreadsheet matrices as-is.
 - Calendar changes should be traceable when they affect execution accountability.
-
-## Risks
-
-### `src/actions/risk-actions.ts`
-
-- Reads and creates project risks.
-- Converts AI risk signals into formal risk records after confirmation.
-
-Rules:
-
-- Risks and open issues are not ordinary tasks unless the user intentionally converts them.
-- Risk status and owner should remain visible in the project cockpit.
-
-## Wiki And Assets
-
-### `src/actions/wiki-actions.ts`
-
-- Reads project folders and assets.
-- Creates folders.
-- Saves document, link, and file records.
-
-Rules:
-
-- Assets should support project context and AI grounding.
-- Wiki should not become a disconnected document dump.
 
 ## Auth And Health
 

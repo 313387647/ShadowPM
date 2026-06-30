@@ -30,6 +30,7 @@ export const BUDGET_OPERATION_MAP = {
   MERGE: "预算合并",
   EXPENSE: "实际支出",
   REFUND: "支出退款",
+  REVERSAL: "冲正",
 } as const
 
 // 资产类型映射

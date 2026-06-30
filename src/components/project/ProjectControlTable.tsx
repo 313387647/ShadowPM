@@ -28,6 +28,19 @@ type Task = {
 };
 
 type ControlFilter = "ALL" | "MISSING" | "OVERDUE" | "WITH_BUDGET" | "WITH_LOGS" | "WITH_CALENDAR";
+type PhaseOption = { id: string; name: string };
+type CreateDraft = {
+  template: string;
+  phaseName: string;
+  name: string;
+  assignee: string;
+  department: string;
+  deadline: string;
+  status: Task["status"];
+  priority: string;
+  description: string;
+  notes: string;
+};
 
 const CONTROL_FILTERS: { value: ControlFilter; label: string }[] = [
   { value: "ALL", label: "全部" },
@@ -37,6 +50,86 @@ const CONTROL_FILTERS: { value: ControlFilter; label: string }[] = [
   { value: "WITH_LOGS", label: "有日志" },
   { value: "WITH_CALENDAR", label: "有日历" },
 ];
+
+const CREATE_TEMPLATES: Array<{
+  id: string;
+  label: string;
+  draft: Partial<CreateDraft>;
+}> = [
+  {
+    id: "custom",
+    label: "自定义事项",
+    draft: {
+      phaseName: "",
+      name: "",
+      description: "",
+      notes: "",
+      status: "PENDING",
+      priority: "P2",
+    },
+  },
+  {
+    id: "approval",
+    label: "审批/确认",
+    draft: {
+      phaseName: "审批确认",
+      name: "关键审批确认",
+      description: "确认审批口径、责任人、材料版本、截止时间和下一步动作。",
+      notes: "待确认审批节点和反馈时间。",
+      status: "PENDING",
+      priority: "P1",
+    },
+  },
+  {
+    id: "execution",
+    label: "执行交付",
+    draft: {
+      phaseName: "执行交付",
+      name: "执行事项落地",
+      description: "明确交付内容、验收标准、依赖方、执行窗口和风险点。",
+      notes: "待补执行进度和当前结论。",
+      status: "IN_PROGRESS",
+      priority: "P1",
+    },
+  },
+  {
+    id: "budget",
+    label: "预算跟进",
+    draft: {
+      phaseName: "预算管理",
+      name: "预算确认与流转",
+      description: "确认预算金额、用途、关联事项、付款/报销状态和后续流转动作。",
+      notes: "预算金额待在资金账本补齐。",
+      status: "PENDING",
+      priority: "P1",
+    },
+  },
+  {
+    id: "calendar",
+    label: "日历排期",
+    draft: {
+      phaseName: "执行日历",
+      name: "排期与发布确认",
+      description: "确认日期、渠道、负责人、内容版本、发布状态和复盘信息。",
+      notes: "待同步到执行日历。",
+      status: "PENDING",
+      priority: "P2",
+    },
+  },
+];
+
+const EMPTY_CREATE_DRAFT: CreateDraft = {
+  template: "custom",
+  phaseName: "",
+  name: "",
+  assignee: "",
+  department: "",
+  deadline: "",
+  status: "PENDING",
+  priority: "P2",
+  description: "",
+  notes: "",
+};
 
 function getMissingFields(task: Task) {
   const missing: string[] = [];
@@ -451,9 +544,11 @@ function ControlTableRow({
 export function ProjectControlTable({
   projectId,
   tasks,
+  phases,
 }: {
   projectId: string;
   tasks: Task[];
+  phases: PhaseOption[];
 }) {
   const router = useRouter();
   const createFormRef = useRef<HTMLFormElement>(null);
@@ -462,6 +557,7 @@ export function ProjectControlTable({
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(tasks.length === 0);
   const [creating, setCreating] = useState(false);
+  const [createDraft, setCreateDraft] = useState<CreateDraft>(EMPTY_CREATE_DRAFT);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
 
@@ -536,6 +632,7 @@ export function ProjectControlTable({
       if (result.success) {
         toast.success("管控事项已添加");
         createFormRef.current?.reset();
+        setCreateDraft(EMPTY_CREATE_DRAFT);
         setShowCreate(false);
         setFilter("ALL");
         setQuery("");
@@ -548,6 +645,22 @@ export function ProjectControlTable({
     } finally {
       setCreating(false);
     }
+  }
+
+  function updateCreateDraft(patch: Partial<CreateDraft>) {
+    setCreateDraft((draft) => ({ ...draft, ...patch }));
+  }
+
+  function applyTemplate(templateId: string) {
+    const template = CREATE_TEMPLATES.find((item) => item.id === templateId) ?? CREATE_TEMPLATES[0];
+    setCreateDraft({
+      ...EMPTY_CREATE_DRAFT,
+      ...template.draft,
+      template: template.id,
+      assignee: createDraft.assignee,
+      department: createDraft.department,
+      deadline: createDraft.deadline,
+    });
   }
 
   return (
@@ -585,7 +698,7 @@ export function ProjectControlTable({
             <div>
               <p className="text-sm font-medium">新增管控事项</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                手动项目可以从这里直接补充管控表，不需要切换视图。
+                选择模板后补负责人和日期即可；缺的信息创建后也能在表格里直接改。
               </p>
             </div>
             <Button type="submit" size="sm" className="h-8 gap-1.5" disabled={creating}>
@@ -593,36 +706,76 @@ export function ProjectControlTable({
               添加
             </Button>
           </div>
-          <div className="mt-3 grid gap-2 lg:grid-cols-[1.4fr_1fr_1fr_150px]">
+          <div className="mt-3 grid gap-2 lg:grid-cols-[170px_1fr_1.4fr]">
+            <Select
+              value={createDraft.template}
+              onChange={(event) => applyTemplate(event.target.value)}
+              className="h-9 text-sm"
+            >
+              {CREATE_TEMPLATES.map((template) => (
+                <option key={template.id} value={template.id}>{template.label}</option>
+              ))}
+            </Select>
+            <input
+              name="phaseName"
+              list="control-phase-options"
+              value={createDraft.phaseName}
+              onChange={(event) => updateCreateDraft({ phaseName: event.target.value, template: "custom" })}
+              placeholder="模块/工作流，例如：公关传播"
+              className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+            />
+            <datalist id="control-phase-options">
+              {phases.map((phase) => (
+                <option key={phase.id} value={phase.name} />
+              ))}
+            </datalist>
             <input
               name="name"
               required
+              value={createDraft.name}
+              onChange={(event) => updateCreateDraft({ name: event.target.value, template: "custom" })}
               placeholder="管控事项，例如：发布会场地确认"
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
             />
+          </div>
+          <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_1fr_150px_150px_150px]">
             <input
               name="assignee"
+              value={createDraft.assignee}
+              onChange={(event) => updateCreateDraft({ assignee: event.target.value })}
               placeholder="负责人"
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
             />
             <input
               name="department"
+              value={createDraft.department}
+              onChange={(event) => updateCreateDraft({ department: event.target.value })}
               placeholder="部门"
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
             />
             <input
               name="deadline"
               type="date"
+              value={createDraft.deadline}
+              onChange={(event) => updateCreateDraft({ deadline: event.target.value })}
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
             />
-          </div>
-          <div className="mt-2 grid gap-2 lg:grid-cols-2">
-            <Select name="status" defaultValue="PENDING" className="h-9 text-sm">
+            <Select
+              name="status"
+              value={createDraft.status}
+              onChange={(event) => updateCreateDraft({ status: event.target.value as Task["status"] })}
+              className="h-9 text-sm"
+            >
               <option value="PENDING">待启动</option>
               <option value="IN_PROGRESS">进行中</option>
               <option value="COMPLETED">已完成</option>
             </Select>
-            <Select name="priority" defaultValue="P2" className="h-9 text-sm">
+            <Select
+              name="priority"
+              value={createDraft.priority}
+              onChange={(event) => updateCreateDraft({ priority: event.target.value })}
+              className="h-9 text-sm"
+            >
               <option value="P0">P0 - 必须马上处理</option>
               <option value="P1">P1 - 关键事项</option>
               <option value="P2">P2 - 常规事项</option>
@@ -630,15 +783,21 @@ export function ProjectControlTable({
             </Select>
           </div>
           <div className="mt-2 grid gap-2 lg:grid-cols-2">
-            <input
+            <textarea
               name="description"
+              value={createDraft.description}
+              onChange={(event) => updateCreateDraft({ description: event.target.value, template: "custom" })}
               placeholder="详细描述，例如：确认场地档期、面积、搭建限制和报价"
-              className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+              rows={2}
+              className="min-h-16 resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
             />
-            <input
+            <textarea
               name="notes"
+              value={createDraft.notes}
+              onChange={(event) => updateCreateDraft({ notes: event.target.value, template: "custom" })}
               placeholder="进度/结论，例如：待供应商周五前反馈"
-              className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+              rows={2}
+              className="min-h-16 resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
             />
           </div>
         </form>

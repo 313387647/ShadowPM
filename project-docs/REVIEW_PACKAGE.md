@@ -49,13 +49,12 @@ ShadowPM maps messy inputs into:
 4. Execution Calendar
 5. Progress Change Log
 6. Budget Flow Log
-7. Risk and Open Issues
-8. Assets and References
 
 Important modeling decision:
 
 - Budget does not belong as a loose column inside the project control table.
 - Execution calendar should separate date, channel, owner, workstream, content, and status.
+- Blockers, open questions, and uncertain information should stay editable in control-table notes or activity summaries instead of becoming a separate risk module.
 - Progress and budget changes need append-only records.
 
 ## Current Implemented Scope
@@ -73,19 +72,16 @@ Important modeling decision:
 - Budget ledger with append-only flow records
 - Execution calendar with future/week/month views
 - Progress timeline
-- Risk register
-- Wiki/assets explorer
 
 ### AI Workflow
 
 - AI-assisted project import from text/spreadsheet input
 - Import preview before creation
-- Import draft queue
+- Direct creation into editable control table, budget ledger, and execution calendar
 - AI project summary and structured judgment
 - AI suggestions that can become:
   - Control tasks
   - Execution calendar entries
-  - Risks
   - Budget flows
 - User confirmation for important AI-driven mutations
 
@@ -112,8 +108,8 @@ Known source issues:
 
 Expected ShadowPM behavior:
 
-- Split budget signals into Budget Ledger candidates
-- Split calendar fields when possible
+- Split budget signals into editable Budget Ledger rows
+- Split calendar fields into editable Execution Calendar rows when possible
 - Preserve uncertainty and expose missing fields
 - Do not invent critical missing information
 - Allow the user to confirm and continue quickly
@@ -152,16 +148,17 @@ Updated P0 order:
 1. Reliability hardening
 2. Budget ledger truth
 3. AI creation without mandatory budget
-4. Import draft safety
-5. AI import quality V2
-6. Control table V2
-7. Execution calendar V2
-8. Business-rule tests
+4. Direct editable AI import
+5. Product surface pruning
+6. AI import quality V2
+7. Control table V2
+8. Execution calendar V2
+9. Business-rule tests
 
 Key P0 gaps:
 
 - AI import needs field-level confidence, missing-field priority, source references, and conflict review.
-- Import draft budget candidates must not default unclear estimates to expense flows.
+- Ambiguous budget signals must stay editable and must not default unclear estimates to expense flows.
 - Control table needs stronger inline editing and "needs confirmation" workflows.
 - Execution calendar needs V2 orchestration around workstream/channel/owner/status.
 - Business-rule tests need to cover budget, permissions, logs, import confirmation, and linking.

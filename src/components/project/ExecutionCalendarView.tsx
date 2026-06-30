@@ -120,7 +120,13 @@ function ExecutionCalendarRow({
 }) {
   const router = useRouter();
   const [date, setDate] = useState(toDateInputValue(entry.date));
+  const [startTime, setStartTime] = useState(entry.startTime ?? "");
+  const [endTime, setEndTime] = useState(entry.endTime ?? "");
+  const [workstream, setWorkstream] = useState(entry.workstream ?? "");
+  const [channel, setChannel] = useState(entry.channel ?? "");
+  const [content, setContent] = useState(entry.content);
   const [owner, setOwner] = useState(entry.owner ?? "");
+  const [department, setDepartment] = useState(entry.department ?? "");
   const [status, setStatus] = useState(entry.status);
   const [notes, setNotes] = useState(entry.notes ?? "");
   const [taskId, setTaskId] = useState(entry.taskId ?? "");
@@ -128,7 +134,13 @@ function ExecutionCalendarRow({
 
   const dirty =
     date !== toDateInputValue(entry.date) ||
+    startTime !== (entry.startTime ?? "") ||
+    endTime !== (entry.endTime ?? "") ||
+    workstream !== (entry.workstream ?? "") ||
+    channel !== (entry.channel ?? "") ||
+    content !== entry.content ||
     owner !== (entry.owner ?? "") ||
+    department !== (entry.department ?? "") ||
     status !== entry.status ||
     notes !== (entry.notes ?? "") ||
     taskId !== (entry.taskId ?? "");
@@ -140,7 +152,13 @@ function ExecutionCalendarRow({
       const formData = new FormData();
       formData.set("entryId", entry.id);
       formData.set("date", date);
+      formData.set("startTime", startTime);
+      formData.set("endTime", endTime);
+      formData.set("workstream", workstream);
+      formData.set("channel", channel);
+      formData.set("content", content);
       formData.set("owner", owner);
+      formData.set("department", department);
       formData.set("status", status);
       formData.set("notes", notes);
       formData.set("taskId", taskId);
@@ -189,13 +207,41 @@ function ExecutionCalendarRow({
         </div>
       </td>
       <td className="px-3 py-2 font-mono text-muted-foreground">
-        {formatTime(entry) || "-"}
+        <div className="flex items-center gap-1">
+          <input
+            type="time"
+            value={startTime}
+            onChange={(event) => setStartTime(event.target.value)}
+            onKeyDown={saveOnEnter}
+            className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
+          />
+          <span className="text-muted-foreground/50">-</span>
+          <input
+            type="time"
+            value={endTime}
+            onChange={(event) => setEndTime(event.target.value)}
+            onKeyDown={saveOnEnter}
+            className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
+          />
+        </div>
       </td>
       <td className="px-3 py-2">
-        <span className="line-clamp-1">{entry.workstream ?? "未分组"}</span>
+        <input
+          value={workstream}
+          onChange={(event) => setWorkstream(event.target.value)}
+          onKeyDown={saveOnEnter}
+          placeholder="未分组"
+          className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
+        />
       </td>
       <td className="px-3 py-2">
-        <span className="line-clamp-1">{entry.channel ?? "渠道待确认"}</span>
+        <input
+          value={channel}
+          onChange={(event) => setChannel(event.target.value)}
+          onKeyDown={saveOnEnter}
+          placeholder="渠道待确认"
+          className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
+        />
       </td>
       <td className="px-3 py-2">
         <div className="flex items-center gap-1.5">
@@ -224,7 +270,18 @@ function ExecutionCalendarRow({
       </td>
       <td className="px-3 py-2">
         <div className="space-y-0.5">
-          <p className="font-medium leading-5">{entry.content}</p>
+          <textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                save();
+              }
+            }}
+            rows={2}
+            className="w-full resize-none rounded border border-transparent bg-transparent px-1 py-1 font-medium leading-5 outline-none transition-colors focus:border-primary focus:bg-background"
+          />
           <input
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
@@ -235,13 +292,22 @@ function ExecutionCalendarRow({
         </div>
       </td>
       <td className="px-3 py-2">
-        <input
-          value={owner}
-          onChange={(event) => setOwner(event.target.value)}
-          onKeyDown={saveOnEnter}
-          placeholder={entry.department ?? "待确认"}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-        />
+        <div className="space-y-1">
+          <input
+            value={owner}
+            onChange={(event) => setOwner(event.target.value)}
+            onKeyDown={saveOnEnter}
+            placeholder="负责人"
+            className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
+          />
+          <input
+            value={department}
+            onChange={(event) => setDepartment(event.target.value)}
+            onKeyDown={saveOnEnter}
+            placeholder="部门"
+            className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
+          />
+        </div>
       </td>
       <td className="px-3 py-2">
         <select
@@ -292,6 +358,10 @@ export function ExecutionCalendarView({
   const normalizedQuery = query.trim().toLowerCase();
   const scheduledCount = entries.filter((entry) => entry.date).length;
   const unscheduledCount = entries.length - scheduledCount;
+  const unscheduledEntries = useMemo(
+    () => entries.filter((entry) => !entry.date).slice(0, 6),
+    [entries]
+  );
   const filterCounts = useMemo(() => {
     return CALENDAR_FILTERS.reduce<Record<CalendarFilter, number>>((counts, item) => {
       counts[item.value] = entries.filter((entry) => matchesCalendarFilter(entry, item.value)).length;
@@ -514,6 +584,49 @@ export function ExecutionCalendarView({
         )}
       </div>
 
+      {unscheduledEntries.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-amber-950">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">待排期队列</p>
+              <p className="mt-0.5 text-xs text-amber-900/75">
+                这些日历项缺少日期，优先补日期和关联事项即可进入周/月历。
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 border-amber-300 bg-background px-2 text-xs"
+              onClick={() => {
+                setFilter("UNSCHEDULED");
+                setQuery("");
+              }}
+            >
+              查看全部 {unscheduledCount} 条
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {unscheduledEntries.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => {
+                  setFilter("UNSCHEDULED");
+                  setQuery(entry.content);
+                }}
+                className="rounded-md border border-amber-200 bg-background/80 px-3 py-2 text-left text-xs transition-colors hover:border-amber-400"
+              >
+                <p className="line-clamp-1 font-medium">{entry.content}</p>
+                <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">
+                  {[entry.workstream, entry.channel, entry.owner ?? entry.department].filter(Boolean).join(" · ") || "缺工作流/渠道/负责人"}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {CALENDAR_FILTERS.map((item) => (
           <Button
@@ -566,7 +679,7 @@ export function ExecutionCalendarView({
           <CalendarDays className="mb-3 size-6 text-muted-foreground/60" />
           <p className="text-sm text-muted-foreground">暂无正式执行日历</p>
           <p className="mt-1 text-xs text-muted-foreground/60">
-            从 AI 导入候选确认日历项后，会出现在这里
+            AI 生成或手动排期的执行节点会出现在这里
           </p>
         </div>
       ) : visibleEntries.length === 0 ? (
@@ -581,12 +694,12 @@ export function ExecutionCalendarView({
             <thead className="bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="w-[110px] px-3 py-2 font-medium">日期</th>
-                <th className="w-[88px] px-3 py-2 font-medium">时间</th>
+                <th className="w-[180px] px-3 py-2 font-medium">时间</th>
                 <th className="w-[140px] px-3 py-2 font-medium">工作流</th>
                 <th className="w-[140px] px-3 py-2 font-medium">渠道</th>
                 <th className="w-[180px] px-3 py-2 font-medium">关联事项</th>
                 <th className="px-3 py-2 font-medium">内容</th>
-                <th className="w-[110px] px-3 py-2 font-medium">负责人</th>
+                <th className="w-[130px] px-3 py-2 font-medium">负责人/部门</th>
                 <th className="w-[96px] px-3 py-2 font-medium">状态</th>
                 <th className="w-[82px] px-3 py-2 font-medium">来源</th>
               </tr>

@@ -99,7 +99,7 @@ const ACTIVITY_BLUEPRINTS = [
   },
   {
     title: "AI 导入",
-    description: "表格识别、候选确认和结构化入库",
+    description: "表格识别、直接入表和可追溯修正",
     Icon: Sparkles,
     className: "border-gray-200 text-gray-600",
   },

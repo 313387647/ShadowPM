@@ -12,7 +12,7 @@ The goal is a private Alpha test site where reviewers can:
 2. Upload a project spreadsheet
 3. Review AI extraction
 4. Create a project control workspace
-5. Confirm budget/calendar/risk candidates
+5. Edit the generated control table, budget ledger, and execution calendar
 6. Submit structured feedback
 
 Recommended share URL:
@@ -28,7 +28,8 @@ Required before sharing the URL:
 - [x] P0.1 permission hardening
 - [x] P0.2 budget formula unification
 - [x] P0.3 project creation without confirmed budget
-- [x] P0.4 import draft budget safety
+- [x] P0.4 direct editable AI import without a separate review queue
+- [x] P0.5 remove independent risk/assets surfaces from the Alpha core
 - [ ] Shared deployment configured
 - [ ] Database initialized
 - [ ] Seed users available
@@ -93,11 +94,10 @@ project-docs/review-assets/one-million-project-control-sample.xlsx
    - `任务总控`
    - `资金账本`
    - `执行日历`
-   - `风险/待定`
-   - `AI 导入审核队列`
+   - `项目活动`
 9. Submit the in-app `外测反馈` form on the project page.
 10. Confirm a leader user can see the feedback in `/feedback`.
-11. Confirm a budget candidate only after manually selecting the flow type if AI type is unclear.
+11. Confirm AI-generated budget rows and calendar rows can be edited after project creation.
 
 ## 6. Reviewer Instructions
 
@@ -112,13 +112,13 @@ Send reviewers:
 Suggested message:
 
 ```text
-请测试 ShadowPM Alpha：打开 Demo 链接，按照《ShadowPM 小白测试教程》上传案例表格，查看 AI 是否能生成可用的项目管控表，并重点反馈预算、日历、风险是否被正确拆分。
+请测试 ShadowPM Alpha：打开 Demo 链接，按照《ShadowPM 小白测试教程》上传案例表格，查看 AI 是否能生成可用的项目管控表，并重点反馈预算和执行日历是否被正确拆分。
 
 请不要只评价页面是否好看，重点看：
 1. 是否比原 Excel 更容易理解
 2. AI 有没有把预算误当任务或支出
 3. 日历有没有混淆渠道/负责人/内容
-4. 哪些缺失信息应该进入表格补齐
+4. 哪些缺失信息应该直接在表格里补齐
 
 创建项目后，请在项目页的「外测反馈」面板提交结构化反馈。
 ```

@@ -11,87 +11,6 @@ export type CopilotResponse = {
   actions?: { label: string; href: string }[];
 };
 
-// ── 风险检测（Copilot 内嵌，无需额外 Action） ──
-
-export async function detectProjectRisks(): Promise<CopilotResponse> {
-  const user = await requireCurrentUser();
-
-  const now = new Date();
-  const projects = await prisma.project.findMany({
-    where: user.role === "LEADER" ? {} : { ownerId: user.id },
-    include: {
-      _count: { select: { tasks: true } },
-      tasks: { select: { id: true, name: true, status: true, deadline: true } },
-    },
-  });
-
-  const findings: string[] = [];
-  let newRiskCount = 0;
-
-  for (const project of projects) {
-    const overdue = project.tasks.filter(
-      (t) => t.deadline && new Date(t.deadline) < now && t.status !== "COMPLETED"
-    );
-    const total = project._count.tasks;
-    const completed = project.tasks.filter((t) => t.status === "COMPLETED").length;
-
-    // 检测逾期风险
-    if (overdue.length > 0) {
-      const existingScheduleRisk = await prisma.risk.findFirst({
-        where: {
-          projectId: project.id,
-          type: "SCHEDULE",
-          source: "AI_DETECTION",
-          status: { not: "CLOSED" },
-        },
-        orderBy: { createdAt: "desc" },
-      });
-
-      const scheduleRiskData = {
-        title: "任务逾期风险",
-        level: overdue.length >= 3 ? "HIGH" : "MEDIUM",
-        description: `${overdue.length} 个任务已逾期，最早为「${overdue[0].name}」`,
-        suggestion: "请与负责人确认延期原因并更新截止日期",
-      };
-
-      if (existingScheduleRisk) {
-        await prisma.risk.update({
-          where: { id: existingScheduleRisk.id },
-          data: scheduleRiskData,
-        });
-      } else {
-        await prisma.risk.create({
-          data: {
-            projectId: project.id,
-            type: "SCHEDULE",
-            source: "AI_DETECTION",
-            ...scheduleRiskData,
-          },
-        });
-      }
-      findings.push(`🔴 ${project.name}：${overdue.length} 个任务逾期`);
-      newRiskCount++;
-    }
-
-    // 检测进度风险
-    if (total > 0 && completed === 0 && project.tasks.some((t) => t.deadline && new Date(t.deadline) < new Date(Date.now() + 7 * 86400000))) {
-      findings.push(`🟡 ${project.name}：有任务即将到期但尚未启动`);
-    }
-  }
-
-  if (findings.length === 0) {
-    return { message: "✅ 风险检测完成：当前所有项目状态正常，未发现风险。" };
-  }
-
-  return {
-    message: `⚠️ 风险检测发现 ${newRiskCount} 个风险项：\n\n${findings.join("\n")}`,
-    actions: projects.filter((p) => findings.some((f) => f.includes(p.name))).slice(0, 3).map((p) => ({
-      label: `进入 ${p.name}`,
-      href: `/projects/${p.id}`,
-    })),
-  };
-}
-
 const SYSTEM_PROMPT = `你是 ShadowPM 的 AI 项目助手。用户会用自然语言跟你对话，你需要：
 
 1. 判断用户意图（查询 or 操作）
@@ -135,20 +54,6 @@ const CALENDAR_STATUS_LABEL: Record<string, string> = {
   CONFIRMED: "已确认",
   DONE: "已完成",
   CANCELED: "已取消",
-};
-
-const RISK_LEVEL_LABEL: Record<string, string> = {
-  LOW: "低",
-  MEDIUM: "中",
-  HIGH: "高",
-  CRITICAL: "严重",
-};
-
-const RISK_STATUS_LABEL: Record<string, string> = {
-  OPEN: "未处理",
-  ACKNOWLEDGED: "已知悉",
-  MITIGATED: "已缓解",
-  CLOSED: "已关闭",
 };
 
 function formatCalendarDate(value: Date | null) {
@@ -225,47 +130,35 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
             : undefined,
           status: { not: "COMPLETED" },
         },
-        select: { id: true, name: true, status: true, project: { select: { id: true, name: true } } },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          assignee: true,
+          department: true,
+          deadline: true,
+          project: { select: { id: true, name: true } },
+        },
         orderBy: { deadline: "asc" },
       }),
     ]);
     const userProjectIds = userProjects.map((project) => project.id);
-    const [userCalendarEntries, openRisks] = await Promise.all([
-      prisma.executionCalendarEntry.findMany({
-        where: { projectId: { in: userProjectIds } },
-        select: {
-          id: true,
-          date: true,
-          startTime: true,
-          channel: true,
-          workstream: true,
-          content: true,
-          owner: true,
-          status: true,
-          project: { select: { id: true, name: true } },
-        },
-        orderBy: [{ date: "asc" }, { createdAt: "desc" }],
-        take: 20,
-      }),
-      prisma.risk.findMany({
-        where: {
-          projectId: { in: userProjectIds },
-          status: { not: "CLOSED" },
-        },
-        select: {
-          id: true,
-          title: true,
-          type: true,
-          level: true,
-          description: true,
-          suggestion: true,
-          status: true,
-          project: { select: { id: true, name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      }),
-    ]);
+    const userCalendarEntries = await prisma.executionCalendarEntry.findMany({
+      where: { projectId: { in: userProjectIds } },
+      select: {
+        id: true,
+        date: true,
+        startTime: true,
+        channel: true,
+        workstream: true,
+        content: true,
+        owner: true,
+        status: true,
+        project: { select: { id: true, name: true } },
+      },
+      orderBy: [{ date: "asc" }, { createdAt: "desc" }],
+      take: 20,
+    });
 
     const budgetSummaries = userProjects.map((project) => {
       const flows = project.tasks.flatMap((task) => task.budgets);
@@ -320,20 +213,32 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
       };
     }
 
-    const matchedRisks = openRisks.filter((risk) => textMatchesInput(input, risk.project.name));
-    const risksToShow = matchedRisks.length > 0 ? matchedRisks : openRisks.slice(0, 8);
+    const now = new Date();
+    const soon = new Date(Date.now() + 7 * 86400000);
+    const attentionTasks = userTasks.filter((task) =>
+      !task.assignee?.trim() ||
+      !task.deadline ||
+      (task.deadline < now && task.status !== "COMPLETED") ||
+      (task.deadline <= soon && task.status === "PENDING")
+    );
 
-    if (/风险|待关闭|没关|未关闭|未处理/.test(input)) {
-      if (risksToShow.length === 0) {
-        return { message: "✅ 当前没有未关闭的正式风险。" };
+    if (/风险|逾期|快到期|快要|待确认|阻塞|未处理|没人|缺负责人/.test(input)) {
+      if (attentionTasks.length === 0) {
+        return { message: "✅ 当前管控表里没有明显的逾期、缺负责人或日期待确认事项。" };
       }
 
       return {
-        message: `⚠️ 当前未关闭风险：\n\n${risksToShow.map((risk) =>
-          `• [${RISK_LEVEL_LABEL[risk.level] ?? risk.level}｜${RISK_STATUS_LABEL[risk.status] ?? risk.status}] ${risk.title ?? risk.type}\n  项目：${risk.project.name}\n  ${risk.description}${risk.suggestion ? `\n  建议：${risk.suggestion}` : ""}`
-        ).join("\n")}`,
-        actions: risksToShow[0]
-          ? [{ label: `进入 ${risksToShow[0].project.name}`, href: `/projects/${risksToShow[0].project.id}` }]
+        message: `⚠️ 需要优先处理的管控事项：\n\n${attentionTasks.slice(0, 8).map((task) => {
+          const signals = [
+            !task.assignee?.trim() ? "缺负责人" : null,
+            !task.deadline ? "缺截止日期" : null,
+            task.deadline && task.deadline < now ? "已逾期" : null,
+            task.deadline && task.deadline <= soon && task.status === "PENDING" ? "即将到期未启动" : null,
+          ].filter(Boolean).join("、");
+          return `• ${task.name}\n  项目：${task.project.name}｜状态：${task.status}｜负责人：${task.assignee ?? "待确认"}｜部门：${task.department ?? "待确认"}｜截止：${task.deadline ? task.deadline.toLocaleDateString("zh-CN") : "待确认"}｜${signals}`;
+        }).join("\n")}`,
+        actions: attentionTasks[0]
+          ? [{ label: `进入 ${attentionTasks[0].project.name}`, href: `/projects/${attentionTasks[0].project.id}` }]
           : undefined,
       };
     }
@@ -365,8 +270,8 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
     const calendarList = userCalendarEntries.map((entry) =>
       `• [${CALENDAR_STATUS_LABEL[entry.status] ?? entry.status}] ${formatCalendarDate(entry.date)}${entry.startTime ? ` ${entry.startTime}` : ""} · ${entry.content} → 项目: ${entry.project.name} · ${entry.workstream ?? "未分组"} · ${entry.channel ?? "渠道待确认"} · ${entry.owner ?? "负责人待确认"}`
     ).join("\n");
-    const riskList = openRisks.map((risk) =>
-      `• [${risk.level}/${risk.status}] ${risk.title ?? risk.type} → 项目: ${risk.project.name} · ${risk.description}`
+    const attentionList = attentionTasks.slice(0, 12).map((task) =>
+      `• [${task.status}] ${task.name} → 项目: ${task.project.name} · 负责人:${task.assignee ?? "待确认"} · 截止:${task.deadline ? task.deadline.toISOString().slice(0, 10) : "待确认"}`
     ).join("\n");
 
     if (/日历|排期|传播节点|执行节点|发布|什么时候|哪天/.test(input)) {
@@ -407,12 +312,12 @@ ${budgetList || "（无）"}
 正式执行日历：
 ${calendarList || "（无）"}
 
-未关闭风险：
-${riskList || "（无）"}
+需要优先处理的管控事项：
+${attentionList || "（无）"}
 
 用户说：${input}
 
-请分析用户意图并返回 JSON。如果是操作，taskName 必须从上面正在进行中的任务列表中精确匹配。如果是查询，必须优先使用上面的正式项目、任务、预算、执行日历和风险数据。`;
+请分析用户意图并返回 JSON。如果是操作，taskName 必须从上面正在进行中的任务列表中精确匹配。如果是查询，必须优先使用上面的正式项目、任务、预算、执行日历和待处理管控事项。`;
 
     // 3. 调 LLM
     const openai = new OpenAI({

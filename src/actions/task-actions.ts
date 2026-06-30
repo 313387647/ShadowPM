@@ -95,6 +95,7 @@ export async function createTask(formData: FormData): Promise<ActionResult> {
   const name = formData.get("name") as string;
   const assignee = (formData.get("assignee") as string) || null;
   const phaseId = (formData.get("phaseId") as string) || null;
+  const phaseName = normalizeText((formData.get("phaseName") as string) || null);
   const description = (formData.get("description") as string) || null;
   const notes = (formData.get("notes") as string) || null;
   const department = (formData.get("department") as string) || null;
@@ -107,12 +108,26 @@ export async function createTask(formData: FormData): Promise<ActionResult> {
 
   const deadlineRaw = formData.get("deadline") as string;
 
+  const phase = !phaseId && phaseName
+    ? await prisma.phase.findFirst({
+        where: { projectId, name: phaseName },
+        select: { id: true },
+      }) ?? await prisma.phase.create({
+        data: {
+          projectId,
+          name: phaseName,
+          sortOrder: await prisma.phase.count({ where: { projectId } }),
+        },
+        select: { id: true },
+      })
+    : null;
+
   await prisma.task.create({
     data: {
       projectId,
       name: name.trim(),
       assignee,
-      phaseId,
+      phaseId: phaseId || phase?.id || null,
       description: description?.trim() || null,
       notes: notes?.trim() || null,
       department: department?.trim() || null,

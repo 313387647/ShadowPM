@@ -6,7 +6,7 @@ import {
   Bot, Send, Loader2, X, ChevronRight, Lightbulb, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { processCopilotMessage, detectProjectRisks, type CopilotResponse } from "@/actions/copilot-actions";
+import { processCopilotMessage, type CopilotResponse } from "@/actions/copilot-actions";
 
 type Message = {
   role: "user" | "copilot";
@@ -18,7 +18,7 @@ const QUICK_COMMANDS = [
   { label: "📊 仰望一万台预算", query: "仰望一万台预算还有多少" },
   { label: "📆 执行日历", query: "仰望一万台接下来有哪些执行日历" },
   { label: "✅ 汇报完成", query: "公关线的通稿已经发给客户了" },
-  { label: "⚠️ 检查风险", query: "有哪些任务快到期了" },
+  { label: "⚠️ 待处理项", query: "有哪些事项逾期或待确认" },
   { label: "📂 项目列表", query: "现在有哪些项目" },
 ];
 
@@ -61,11 +61,7 @@ export function CopilotPanel() {
     setLoading(true);
 
     try {
-      // 明确要求“检查/检测/逾期”时才触发自动风险扫描；普通风险查询走正式风险列表。
-      const isRiskDetectionQuery = /检查风险|检测风险|风险检测|逾期|报警|危险|快到期|快要/.test(text);
-      const result: CopilotResponse = isRiskDetectionQuery
-        ? await detectProjectRisks()
-        : await processCopilotMessage(text);
+      const result: CopilotResponse = await processCopilotMessage(text);
       setMessages((prev) => [
         ...prev,
         { role: "copilot", content: result.message, actions: result.actions },

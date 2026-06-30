@@ -15,19 +15,10 @@ const prisma = new PrismaClient({
   }),
 })
 
-const DEFAULT_FOLDERS = [
-  "01 策略与Brief",
-  "02 文案与物料",
-  "03 大文件索引",
-  "04 复盘总结",
-];
-
 async function main() {
   console.log("🌱 开始填充种子数据...\n")
 
   // ── 清理旧数据（保证幂等） ──
-  await prisma.assetItem.deleteMany()
-  await prisma.assetFolder.deleteMany()
   await prisma.budgetFlow.deleteMany()
   await prisma.progressLog.deleteMany()
   await prisma.task.deleteMany()
@@ -179,64 +170,6 @@ async function main() {
   console.log(`  📝 已录入 6 条进度日志`)
 
   // ════════════════════════════════════════
-  // 6. 知识库目录 + 示例资产
-  //    使用默认 4 模板文件夹
-  // ════════════════════════════════════════
-  // 为仰望一万台创建默认模板
-  const p1Folders: Record<string, string> = {};
-  for (const name of DEFAULT_FOLDERS) {
-    const f = await prisma.assetFolder.create({
-      data: { projectId: project1.id, name },
-    });
-    p1Folders[name] = f.id;
-  }
-
-  // 为品牌升级也创建默认模板
-  for (const name of DEFAULT_FOLDERS) {
-    await prisma.assetFolder.create({
-      data: { projectId: project2.id, name },
-    });
-  }
-
-  // 添加示例资产到"02 文案与物料"
-  await prisma.assetItem.create({
-    data: {
-      folderId: p1Folders["02 文案与物料"],
-      title: "仰望一万台 — 新闻通稿 V1",
-      type: "DOCUMENT",
-      content: "# 仰望一万台整合营销 — 新闻通稿\n\n**发布日期**：2026 年 6 月 15 日\n\n仰望汽车今日宣布启动一万台整合营销项目，旨在通过全链路营销手段，实现品牌声量与销量的双重突破……",
-    },
-  });
-
-  // 添加示例链接到"03 大文件索引"
-  await prisma.assetItem.create({
-    data: {
-      folderId: p1Folders["03 大文件索引"],
-      title: "竞品投放策略分析报告",
-      type: "LINK",
-      content: "https://pan.baidu.com/s/example-report-link",
-    },
-  });
-
-  // 品牌升级也加一条示例
-  const p2Folders = await prisma.assetFolder.findMany({
-    where: { projectId: project2.id },
-  });
-  const p2Folder02 = p2Folders.find((f) => f.name === "02 文案与物料");
-  if (p2Folder02) {
-    await prisma.assetItem.create({
-      data: {
-        folderId: p2Folder02.id,
-        title: "品牌升级 — 初步创意方案",
-        type: "DOCUMENT",
-        content: "## 品牌升级初步方案\n\n围绕「年轻化、国际化、科技感」三个关键词进行品牌视觉重塑……",
-      },
-    });
-  }
-
-  console.log(`  📚 已创建 ${DEFAULT_FOLDERS.length * 2} 个知识库目录 + 3 条资产\n`)
-
-  // ════════════════════════════════════════
   // 汇总
   // ════════════════════════════════════════
   const userCount = await prisma.user.count()
@@ -244,8 +177,6 @@ async function main() {
   const taskCount = await prisma.task.count()
   const budgetCount = await prisma.budgetFlow.count()
   const logCount = await prisma.progressLog.count()
-  const folderCount = await prisma.assetFolder.count()
-  const assetCount = await prisma.assetItem.count()
 
   console.log("═══════════════════════════════════════")
   console.log("🌱 种子数据填充完成！")
@@ -254,7 +185,6 @@ async function main() {
   console.log(`   ✅ 任务: ${taskCount}`)
   console.log(`   💰 流水: ${budgetCount}`)
   console.log(`   📝 日志: ${logCount}`)
-  console.log(`   📚 目录: ${folderCount} / 资产: ${assetCount}`)
   console.log("═══════════════════════════════════════\n")
 }
 

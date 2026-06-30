@@ -54,9 +54,9 @@ Which rows should have been removed, merged, or split?
 
 - 
 
-## 4. Budget Review
+## 4. Budget Ledger
 
-Did budget candidates appear in the review queue instead of being written directly?
+Were budget rows separated from the project control table and written into the ledger correctly?
 
 - 
 
@@ -78,17 +78,17 @@ Which calendar entries were wrong or missing?
 
 - 
 
-## 6. Risks And Open Issues
+## 6. Missing Information And Watch Items
 
-Were real risks detected?
-
-- 
-
-Were any normal tasks incorrectly treated as risks?
+Were blockers, open questions, and uncertain information preserved somewhere editable?
 
 - 
 
-Were any risks incorrectly treated as ordinary tasks?
+Did anything become a separate module or warning when it should have stayed in the control table?
+
+- 
+
+Which missing fields should have been easier to fix directly?
 
 - 
 

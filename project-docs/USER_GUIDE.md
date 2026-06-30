@@ -12,8 +12,8 @@ It is designed to help internal teams:
 
 - Upload or paste messy project information
 - Generate a project control table
-- Separate budget, execution calendar, and risks from messy source rows
-- Review AI candidates before they become official records
+- Separate budget and execution calendar from messy source rows
+- Directly edit the generated control table, budget ledger, and execution calendar
 - Keep progress and budget changes traceable
 
 ShadowPM is not a task board. Please evaluate whether it makes project control faster and clearer.
@@ -48,9 +48,9 @@ Expected ShadowPM behavior:
 
 - Do not blindly copy the source structure
 - Create a usable project control table
-- Keep budget candidates in the review queue
-- Keep calendar candidates in the review queue
-- Keep risk/open-issue candidates in the review queue
+- Write identifiable budget rows into the budget ledger
+- Write identifiable calendar rows into the execution calendar
+- Keep blockers, open questions, and uncertain information in editable table notes or activity summaries
 - Allow missing budget or missing owners to be completed later
 
 ## 4. Full Test Flow
@@ -87,11 +87,11 @@ Check:
 - Deadlines
 - Budget candidates
 - Calendar candidates
-- Risk candidates
+- Watch items or uncertain information in editable notes
 
 Important:
 
-- Budget, calendar, and risk candidates should not be automatically written into official records.
+- Budget and calendar rows should become official editable records when AI can identify them.
 - Budget candidates should not default to `支出` unless AI clearly identified an expense.
 - `预算池待确认` is acceptable. It means the project can be created first.
 
@@ -104,7 +104,7 @@ Expected result:
 - The project detail page opens.
 - The project control table exists.
 - If no confirmed budget was entered, no initial `ALLOCATE` budget flow is created.
-- AI import candidates appear in the review queue.
+- AI-generated budget rows and calendar rows appear in their official editable modules.
 
 ### Step 5: Review The Project Control Table
 
@@ -118,16 +118,16 @@ Check:
 - Are missing fields visible enough?
 - Is the table easier to work with than the original spreadsheet?
 
-### Step 6: Review Budget Candidates
+### Step 6: Review Budget And Calendar
 
-Look at the `AI 导入审核队列`.
+Open the project detail page after creation.
 
-For budget candidates:
+Check:
 
-1. Pick a candidate.
-2. Select the related control item.
-3. Choose `分配`, `支出`, or `退款`.
-4. Confirm only if the candidate is meaningful.
+1. `资金账本`: AI-generated budget rows should be visible and editable through normal budget operations.
+2. `执行日历`: AI-generated calendar rows should show date, channel, owner, content, and status.
+3. `项目活动`: creation and later edits should leave traceable records.
+4. Missing or uncertain fields should be fixed directly in the table.
 
 Expected result:
 
@@ -135,9 +135,7 @@ Expected result:
 - Confirmed candidates become official budget flows.
 - The budget ledger updates after refresh.
 
-### Step 7: Review Calendar Candidates
-
-Confirm a calendar candidate only if it looks useful.
+### Step 7: Review Execution Calendar
 
 Check:
 
@@ -149,24 +147,24 @@ Check:
 
 Expected result:
 
-- Confirmed calendar candidates appear in `执行日历`.
+- AI-generated calendar rows appear in `执行日历`.
 - Channel and owner should not be merged when AI can separate them.
 
-### Step 8: Review Risk Candidates
+### Step 8: Review Uncertain Information
 
-Confirm risk/open-issue candidates only if they are real project risks.
+Check whether uncertain or incomplete information stays editable instead of becoming a separate risk module.
 
 Expected result:
 
-- Confirmed risks appear in `风险/待定`.
-- Risks should not be mixed into the control table as ordinary tasks by default.
+- Blockers and open questions appear in control-table notes, activity summaries, or missing fields.
+- They should be easy to fix directly in the project table.
 
 ### Step 9: Test Copilot Queries
 
 Try questions such as:
 
 - `这个项目预算还有多少`
-- `有哪些未关闭风险`
+- `有哪些事项逾期或待确认`
 - `接下来有哪些执行日历`
 - `哪些事项缺负责人`
 

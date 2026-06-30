@@ -91,6 +91,12 @@ export type CreateProjectFromAIDTO = {
   createBudgetFlow: boolean;
 };
 
+type CreatedTaskRef = {
+  id: string;
+  name: string;
+  workstream: string | null;
+};
+
 const SYSTEM_PROMPT = `你是 ShadowPM 的 AI 项目导入引擎。你必须把混乱的 Word/Excel/PDF/文本归一化为 ShadowPM canonical project draft，而不是照抄源表结构。
 
 {
@@ -273,6 +279,35 @@ function isLikelyTruncatedJson(content: string) {
   return Boolean(trimmed) && !trimmed.endsWith("}");
 }
 
+function normalizeCalendarStatus(status: string | null | undefined) {
+  const normalized = status?.trim().toUpperCase() ?? "";
+  return ["PLANNED", "CONFIRMED", "DONE", "CANCELED"].includes(normalized)
+    ? normalized
+    : "PLANNED";
+}
+
+function findRelatedTaskId(
+  candidate: { title?: string | null; relatedItemName?: string | null; workstream?: string | null },
+  tasks: CreatedTaskRef[],
+  fallbackTaskId: string | null
+) {
+  const tokens = [candidate.relatedItemName, candidate.title, candidate.workstream]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  for (const token of tokens) {
+    const exact = tasks.find((task) => task.name === token || task.workstream === token);
+    if (exact) return exact.id;
+  }
+
+  for (const token of tokens) {
+    const fuzzy = tasks.find((task) => task.name.includes(token) || token.includes(task.name));
+    if (fuzzy) return fuzzy.id;
+  }
+
+  return fallbackTaskId;
+}
+
 export async function createProjectFromAI(
   dto: CreateProjectFromAIDTO
 ): Promise<ActionResult<{ projectId: string }>> {
@@ -286,14 +321,8 @@ export async function createProjectFromAI(
     typeof dto.totalBudget === "number" && dto.totalBudget > 0
       ? new Prisma.Decimal(dto.totalBudget.toString())
       : new Prisma.Decimal(0);
-  const importCandidates = {
-    budgetItems: dto.budgetItems ?? [],
-    calendarEntries: dto.calendarEntries ?? [],
-    risks: [],
-  };
-  const hasImportCandidates =
-    importCandidates.budgetItems.length > 0 ||
-    importCandidates.calendarEntries.length > 0;
+  const budgetItems = dto.budgetItems ?? [];
+  const calendarEntries = dto.calendarEntries ?? [];
 
   const tasksToCreate = dto.tasks.filter((task) => task.name.trim());
   if (tasksToCreate.length === 0) {
@@ -338,6 +367,7 @@ export async function createProjectFromAI(
       phaseByWorkstream.set(workstreams[i], phase.id);
     }
 
+    const createdTasks: CreatedTaskRef[] = [];
     let firstTaskId: string | null = null;
     for (let i = 0; i < tasksToCreate.length; i++) {
       const t = tasksToCreate[i];
@@ -360,9 +390,14 @@ export async function createProjectFromAI(
         },
       });
       if (i === 0) firstTaskId = task.id;
+      createdTasks.push({ id: task.id, name: task.name, workstream });
     }
 
-    if (dto.createBudgetFlow && confirmedTotalBudget.gt(0) && firstTaskId) {
+    const validBudgetItems = budgetItems.filter(
+      (item) => item.title?.trim() && typeof item.amount === "number" && item.amount > 0
+    );
+
+    if (dto.createBudgetFlow && confirmedTotalBudget.gt(0) && firstTaskId && validBudgetItems.length === 0) {
       await tx.budgetFlow.create({
         data: {
           taskId: firstTaskId,
@@ -375,18 +410,65 @@ export async function createProjectFromAI(
       });
     }
 
-    if (hasImportCandidates) {
-      await tx.importDraft.create({
+    const createdBudgetFlows: { id: string; title: string; amount: number; taskId: string }[] = [];
+    for (const item of validBudgetItems) {
+      const taskId = findRelatedTaskId(item, createdTasks, firstTaskId);
+      if (!taskId || typeof item.amount !== "number") continue;
+
+      const flow = await tx.budgetFlow.create({
+        data: {
+          taskId,
+          flowType: "ALLOCATE",
+          operation: "ALLOCATE",
+          amount: new Prisma.Decimal(item.amount.toString()),
+          description: `AI 导入预算：${item.title.trim()}${item.description ? `｜${item.description.trim()}` : ""}`,
+          createdBy: user.name,
+        },
+      });
+      createdBudgetFlows.push({ id: flow.id, title: item.title.trim(), amount: item.amount, taskId });
+    }
+
+    const createdCalendarEntries: { id: string; content: string }[] = [];
+    for (const entry of calendarEntries.filter((item) => item.content?.trim())) {
+      const calendarEntry = await tx.executionCalendarEntry.create({
         data: {
           projectId: createdProject.id,
-          sourceType: "AI_IMPORT",
-          status: "PENDING",
-          sourceQuality: dto.sourceQuality ?? "messy",
-          confidence: dto.confidence ?? "low",
-          budgetItems: importCandidates.budgetItems,
-          calendarEntries: importCandidates.calendarEntries,
-          risks: [],
+          taskId: null,
+          date: entry.date ? new Date(`${entry.date}T00:00:00.000Z`) : null,
+          startTime: entry.startTime?.trim() || null,
+          endTime: entry.endTime?.trim() || null,
+          channel: entry.channel?.trim() || null,
+          workstream: entry.workstream?.trim() || null,
+          content: entry.content.trim(),
+          owner: entry.owner?.trim() || null,
+          department: entry.department?.trim() || null,
+          status: normalizeCalendarStatus(entry.status),
+          notes: entry.notes?.trim() || null,
+          source: "AI_IMPORT",
           createdBy: user.name,
+        },
+      });
+      createdCalendarEntries.push({ id: calendarEntry.id, content: entry.content.trim() });
+    }
+
+    if (createdBudgetFlows.length > 0 || createdCalendarEntries.length > 0) {
+      await tx.activityLog.create({
+        data: {
+          projectId: createdProject.id,
+          targetType: "PROJECT",
+          targetId: createdProject.id,
+          changeType: "IMPORT",
+          source: "AI",
+          createdBy: user.name,
+          summary: [
+            "🤖 AI 导入已自动生成项目三件套",
+            createdBudgetFlows.length > 0 ? `预算流水：${createdBudgetFlows.length} 条` : null,
+            createdCalendarEntries.length > 0 ? `执行日历：${createdCalendarEntries.length} 条` : null,
+          ].filter(Boolean).join("\n"),
+          afterState: {
+            budgetFlowIds: createdBudgetFlows.map((flow) => flow.id),
+            calendarEntryIds: createdCalendarEntries.map((entry) => entry.id),
+          },
         },
       });
     }

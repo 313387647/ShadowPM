@@ -20,8 +20,8 @@ const steps = [
   },
   {
     icon: CheckCircle2,
-    title: "4. 审核并创建",
-    detail: "检查项目管控表、预算候选和执行日历候选，再创建项目。",
+    title: "4. 检查并创建",
+    detail: "检查项目管控表、将生成的预算流水和执行日历，再创建项目。",
   },
   {
     icon: MessageSquareText,
@@ -44,7 +44,7 @@ export default function DemoPage() {
               上传一份混乱项目表格，测试 AI 是否能生成可用的项目管控系统
             </h1>
             <p className="text-base leading-7 text-muted-foreground">
-              这个测试站用于收集 ShadowPM Alpha 反馈。请重点看 AI 是否正确生成可编辑的项目管控表，并拆分预算候选和执行日历，而不是只评价页面是否好看。
+              这个测试站用于收集 ShadowPM Alpha 反馈。请重点看 AI 是否正确生成可编辑的项目管控表，并同步生成预算流水和执行日历，而不是只评价页面是否好看。
               也请测试手动创建项目、修改管控事项、记录预算和维护日历是否足够顺手。
             </p>
           </div>

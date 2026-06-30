@@ -55,6 +55,11 @@ export function AIProjectCreator({ onClose }: Props) {
     return (project.budgetItems?.length ?? 0) + (project.calendarEntries?.length ?? 0);
   }
 
+  function validBudgetItemCount(project: { budgetItems?: AIParsedProject["budgetItems"] } | null) {
+    if (!project) return 0;
+    return (project.budgetItems ?? []).filter((item) => typeof item.amount === "number" && item.amount > 0).length;
+  }
+
   function removeBudgetCandidate(index: number) {
     if (!edited) return;
     setEdited({
@@ -359,7 +364,7 @@ export function AIProjectCreator({ onClose }: Props) {
                   </p>
                 </div>
                 <span className="rounded-full bg-background px-2 py-1 text-xs text-muted-foreground">
-                  候选 {candidateCount(edited)}
+                  同步生成 {candidateCount(edited)}
                 </span>
               </div>
 
@@ -394,12 +399,14 @@ export function AIProjectCreator({ onClose }: Props) {
                   <p className="font-medium">本次创建范围</p>
                   <p className="text-xs leading-relaxed text-blue-900/80">
                     将创建项目资料和项目管控总表。
-                    {edited.totalBudget && edited.totalBudget > 0 && edited.createBudgetFlow
+                    {validBudgetItemCount(edited) > 0
+                      ? ` 将直接生成 ${validBudgetItemCount(edited)} 条预算流水，项目总预算作为计划预算保留，避免重复入账。`
+                      : edited.totalBudget && edited.totalBudget > 0 && edited.createBudgetFlow
                       ? " 已确认的总预算会生成一条初始 ALLOCATE 预算流水。"
                       : " 当前预算池未确认，不会自动生成初始预算流水。"}
                     {candidateCount(edited) > 0
-                      ? ` AI 还识别出 ${candidateCount(edited)} 条预算/日历候选，暂不自动写入正式账本或日历，后续需要确认后再生成记录。你可以在创建前排除明显错误的候选。`
-                      : " 未识别到需要额外确认的预算或日历候选。"}
+                      ? ` AI 识别出的预算和日历会随项目一起生成；你可以在创建前排除明显错误项，创建后直接在表格中修改。`
+                      : " 未识别到可同步生成的预算或日历。"}
                   </p>
                 </div>
               </div>
@@ -553,14 +560,14 @@ export function AIProjectCreator({ onClose }: Props) {
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    待确认预算候选 ({edited.budgetItems?.length ?? 0})
+                    将生成预算流水 ({edited.budgetItems?.length ?? 0})
                   </h4>
-                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                    不自动入账
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                    自动入账
                   </span>
                 </div>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  这些是 AI 从文档中识别出的预算线索。确认前不会生成预算流转记录，避免污染正式账本。
+                  有明确金额的预算项会直接进入资金账本；无金额线索不会入账，后续可在管控表或资金账本中补齐。
                 </p>
               </div>
               {(edited.budgetItems?.length ?? 0) === 0 ? (
@@ -585,7 +592,7 @@ export function AIProjectCreator({ onClose }: Props) {
                     </div>
                   ))}
                   {(edited.budgetItems?.length ?? 0) > 8 && (
-                    <p className="text-[11px] text-muted-foreground">还有 {(edited.budgetItems?.length ?? 0) - 8} 条预算候选未显示</p>
+                    <p className="text-[11px] text-muted-foreground">还有 {(edited.budgetItems?.length ?? 0) - 8} 条预算项未显示</p>
                   )}
                 </div>
               )}
@@ -596,10 +603,10 @@ export function AIProjectCreator({ onClose }: Props) {
             <div className="space-y-2 rounded-lg border border-dashed bg-muted/10 p-3">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  待确认日历候选 ({edited.calendarEntries?.length ?? 0})
+                  将生成执行日历 ({edited.calendarEntries?.length ?? 0})
                 </h4>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                  不自动创建
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                  自动创建
                 </span>
               </div>
               {(edited.calendarEntries ?? []).slice(0, 5).map((entry, i) => (
@@ -636,7 +643,7 @@ export function AIProjectCreator({ onClose }: Props) {
             </label>
           ) : (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              未确认总预算：项目会先创建，预算池和预算候选稍后在资金账本中确认。
+              未确认总预算：项目会先创建，预算可稍后在资金账本中补齐。
             </div>
           )}
 

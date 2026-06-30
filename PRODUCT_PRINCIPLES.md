@@ -25,7 +25,7 @@ Every product, design, architecture, and implementation decision must serve the 
    ShadowPM should feel closer to a sharp operating cockpit than a decorative dashboard. Dense data is good when hierarchy, spacing, and states remain readable.
 
 7. The project control table is the core artifact.
-   Tasks, budget, timeline, risks, owners, departments, phases, notes, assets, and AI summaries should converge into the control table experience instead of living as disconnected modules.
+   Control items, owners, departments, deadlines, progress conclusions, watch items, budget links, calendar links, and AI summaries should converge into the control table experience instead of living as disconnected modules. Do not create separate risk or asset centers unless they directly accelerate the control table workflow.
    The canonical project structure is defined in `CANONICAL_PROJECT_SCHEMA.md`; new AI import, data model, and UI work should follow that schema unless it is intentionally revised.
 
 8. Missing information is allowed.

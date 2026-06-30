@@ -8,8 +8,7 @@ It is not a task manager. Its core job is to turn messy project inputs such as s
 - Budget ledger
 - Execution calendar
 - Progress change log
-- Risk and issue register
-- Project assets and references
+- AI action traceability
 
 The product direction is defined in [PRODUCT_PRINCIPLES.md](./PRODUCT_PRINCIPLES.md). The canonical data contract is defined in [CANONICAL_PROJECT_SCHEMA.md](./CANONICAL_PROJECT_SCHEMA.md).
 
@@ -26,8 +25,7 @@ Implemented:
 - Budget ledger with append-only flow records
 - Execution calendar with week/month/future views and task linkage
 - Progress timeline with append-only change records
-- Risk view and AI-to-risk conversion
-- AI copilot actions for task, calendar, risk, and budget suggestions
+- AI copilot actions for task, calendar, budget, and project-control queries
 - Dashboard with project and budget overview
 - Auth shell with role-aware navigation
 
@@ -35,6 +33,7 @@ Known gaps:
 
 - AI import needs stronger confidence, conflict, and missing-field review UX
 - Execution calendar needs a true execution orchestration V2
+- Legacy database models for removed risk/assets/import-draft experiments still need a migration cleanup
 - Permissions are still lightweight and not enterprise-grade
 - Test coverage is mostly typecheck/lint/build level; business-rule tests need expansion
 - Product documentation is being kept in `project-docs/` and should stay in sync with development

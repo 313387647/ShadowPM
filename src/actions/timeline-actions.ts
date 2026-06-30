@@ -38,7 +38,7 @@ export async function getProjectTimeline(projectId: string) {
 
   return [
     ...progressLogs
-      .filter((log) => !isLegacyBudgetImportProgress(log.content))
+      .filter((log) => !isLegacyImportBudgetProgress(log.content))
       .filter((log) => !isBulkControlFillProgress(log.content))
       .map((log) => {
         const legacyRiskStatus = isLegacyRiskStatusProgress(log.content);
@@ -74,8 +74,8 @@ export async function getProjectTimeline(projectId: string) {
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-function isLegacyBudgetImportProgress(content: string) {
-  return content.startsWith("💰 AI 导入预算候选已确认入账：");
+function isLegacyImportBudgetProgress(content: string) {
+  return content.startsWith("💰 AI 导入预算") && content.includes("已确认入账");
 }
 
 function isLegacyRiskStatusProgress(content: string) {
@@ -149,18 +149,6 @@ export async function generateProjectActivitySummary(projectId: string): Promise
         },
         orderBy: [{ priority: "asc" }, { deadline: "asc" }],
         take: 80,
-      },
-      risks: {
-        select: {
-          title: true,
-          type: true,
-          level: true,
-          status: true,
-          description: true,
-          suggestion: true,
-        },
-        orderBy: { createdAt: "desc" },
-        take: 20,
       },
       activityLogs: {
         select: {
@@ -590,110 +578,6 @@ export async function scheduleAIActionSuggestion(formData: FormData): Promise<Ac
   return { success: true, message: "AI 行动建议已排入执行日历", data: { calendarEntryId: calendarEntry.id } };
 }
 
-export async function adoptAIRiskSignal(formData: FormData): Promise<ActionResult<{ riskId: string }>> {
-  const projectId = formData.get("projectId") as string;
-  const user = await assertCanWriteProject(projectId);
-  const activityLogId = formData.get("activityLogId") as string;
-  const riskIndex = Number(formData.get("riskIndex"));
-  const title = normalizeOptionalText(formData.get("title"));
-  const description = normalizeOptionalText(formData.get("description"));
-  const suggestion = normalizeOptionalText(formData.get("suggestion"));
-  const type = normalizeRiskType(normalizeOptionalText(formData.get("type")));
-  const level = normalizeRiskLevel(normalizeOptionalText(formData.get("level")));
-
-  if (!projectId || !activityLogId || !Number.isInteger(riskIndex) || riskIndex < 0) {
-    return { success: false, message: "AI 风险信号参数无效" };
-  }
-
-  const log = await prisma.activityLog.findFirst({
-    where: {
-      id: activityLogId,
-      projectId,
-      targetType: "PROJECT",
-      changeType: "AI_ACTION",
-      source: "AI",
-    },
-  });
-  if (!log) return { success: false, message: "AI 判断记录不存在" };
-
-  const insight = parseStoredProjectAIInsight(log.afterState);
-  if (!insight) return { success: false, message: "AI 判断结构不完整，无法确认风险" };
-
-  const riskSignal = insight.risks[riskIndex];
-  if (!riskSignal) return { success: false, message: "AI 风险信号不存在" };
-  if (insight.adoptedRiskIndexes.includes(riskIndex)) {
-    return { success: false, message: "这条 AI 风险信号已确认" };
-  }
-
-  const riskDescription = description ?? riskSignal;
-  const risk = await prisma.$transaction(async (tx) => {
-    const createdRisk = await tx.risk.create({
-      data: {
-        projectId,
-        title: title ?? riskSignal.slice(0, 80),
-        type,
-        level,
-        description: riskDescription,
-        suggestion,
-        status: "OPEN",
-        source: "AI_DETECTION",
-      },
-    });
-
-    const nextInsightState = {
-      ...insight.raw,
-      adoptedRiskIndexes: [...insight.adoptedRiskIndexes, riskIndex],
-      adoptedRisks: [
-        ...insight.adoptedRisks,
-        {
-          riskIndex,
-          riskId: createdRisk.id,
-          title: createdRisk.title,
-          type,
-          level,
-          adoptedBy: user.name,
-          adoptedAt: new Date().toISOString(),
-        },
-      ],
-    } as Prisma.InputJsonValue;
-
-    await tx.activityLog.update({
-      where: { id: activityLogId },
-      data: { afterState: nextInsightState },
-    });
-
-    await tx.activityLog.create({
-      data: {
-        projectId,
-        targetType: "RISK",
-        targetId: createdRisk.id,
-        changeType: "AI_ACTION",
-        summary: `⚠️ 已确认 AI 风险信号：${createdRisk.title ?? createdRisk.type}`,
-        source: "AI",
-        createdBy: user.name,
-        afterState: {
-          sourceActivityLogId: activityLogId,
-          riskIndex,
-          riskId: createdRisk.id,
-          riskSignal,
-          adoptedRisk: {
-            title: createdRisk.title,
-            type,
-            level,
-            description: riskDescription,
-            suggestion,
-          },
-        },
-      },
-    });
-
-    return createdRisk;
-  });
-
-  revalidatePath(`/projects/${projectId}`);
-  return { success: true, message: "AI 风险信号已确认为正式风险", data: { riskId: risk.id } };
-}
-
 export async function adoptAIBudgetSignal(formData: FormData): Promise<ActionResult<{ budgetFlowId: string }>> {
   const projectId = formData.get("projectId") as string;
   const user = await assertCanWriteProject(projectId);
@@ -855,12 +739,6 @@ function parseStoredProjectAIInsight(value: Prisma.JsonValue | null) {
     scheduledCalendarEntries: Array.isArray(state.scheduledCalendarEntries)
       ? state.scheduledCalendarEntries.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
       : [],
-    adoptedRiskIndexes: Array.isArray(state.adoptedRiskIndexes)
-      ? state.adoptedRiskIndexes.filter((item): item is number => Number.isInteger(item))
-      : [],
-    adoptedRisks: Array.isArray(state.adoptedRisks)
-      ? state.adoptedRisks.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
-      : [],
     adoptedBudgetSignalIndexes: Array.isArray(state.adoptedBudgetSignalIndexes)
       ? state.adoptedBudgetSignalIndexes.filter((item): item is number => Number.isInteger(item))
       : [],
@@ -889,16 +767,6 @@ function parseDateSafe(value: string | null) {
   if (!value) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   return new Date(`${value}T00:00:00.000Z`);
-}
-
-function normalizeRiskType(value: string | null) {
-  const allowed = ["BUDGET", "SCHEDULE", "RESOURCE", "SCOPE", "COMMUNICATION", "OTHER"];
-  return value && allowed.includes(value) ? value : "OTHER";
-}
-
-function normalizeRiskLevel(value: string | null) {
-  const allowed = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
-  return value && allowed.includes(value) ? value : "MEDIUM";
 }
 
 function normalizeFlowType(value: string | null) {
