@@ -126,6 +126,7 @@ function ControlTableRow({
   const [saving, setSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [logContent, setLogContent] = useState("");
+  const [syncLogToNotes, setSyncLogToNotes] = useState(true);
   const [logging, setLogging] = useState(false);
 
   const missing = getMissingFields({
@@ -181,10 +182,12 @@ function ControlTableRow({
       const formData = new FormData();
       formData.set("taskId", task.id);
       formData.set("content", logContent);
+      if (syncLogToNotes) formData.set("syncTaskNotes", "on");
 
       const result = await addProgressLog(formData);
       if (result.success) {
-        toast.success("进度更新已记录");
+        toast.success(syncLogToNotes ? "进度更新已记录，当前结论已同步" : "进度更新已记录");
+        if (syncLogToNotes) setNotes(logContent.trim());
         setLogContent("");
         router.refresh();
       } else {
@@ -391,7 +394,16 @@ function ControlTableRow({
                   rows={3}
                   className="w-full resize-none rounded-md border bg-background px-3 py-2 text-xs leading-5 outline-none placeholder:text-muted-foreground/50 focus:border-primary"
                 />
-                <div className="flex justify-end">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={syncLogToNotes}
+                      onChange={(event) => setSyncLogToNotes(event.target.checked)}
+                      className="size-3.5 rounded border"
+                    />
+                    同时更新进度/结论
+                  </label>
                   <Button
                     type="button"
                     size="sm"

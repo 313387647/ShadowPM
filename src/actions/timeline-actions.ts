@@ -91,6 +91,7 @@ export async function addProgressLog(formData: FormData): Promise<ActionResult> 
   const taskId = formData.get("taskId") as string;
   const { user } = await assertCanWriteTask(taskId);
   const content = formData.get("content") as string;
+  const syncTaskNotes = formData.get("syncTaskNotes") === "on";
 
   if (!taskId || !content?.trim()) {
     return { success: false, message: "所属任务和汇报内容为必填项" };
@@ -102,16 +103,26 @@ export async function addProgressLog(formData: FormData): Promise<ActionResult> 
   });
   if (!task) return { success: false, message: "任务不存在" };
 
-  await prisma.progressLog.create({
-    data: {
-      taskId,
-      content: content.trim(),
-      createdBy: user.name,
-    },
-  });
+  await prisma.$transaction([
+    prisma.progressLog.create({
+      data: {
+        taskId,
+        content: content.trim(),
+        createdBy: user.name,
+      },
+    }),
+    ...(syncTaskNotes
+      ? [
+          prisma.task.update({
+            where: { id: taskId },
+            data: { notes: content.trim() },
+          }),
+        ]
+      : []),
+  ]);
 
   revalidatePath(`/projects/${task.projectId}`);
-  return { success: true, message: "进度汇报已追加" };
+  return { success: true, message: syncTaskNotes ? "进度汇报已追加，当前结论已同步" : "进度汇报已追加" };
 }
 
 export async function generateProjectActivitySummary(projectId: string): Promise<ActionResult<ProjectAIInsight>> {
