@@ -1,13 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CalendarDays, ChevronDown, ChevronUp, Loader2, ShieldAlert, Sparkles, WalletCards } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronUp, Loader2, Sparkles, WalletCards } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   applyBudgetImportCandidate,
   applyCalendarImportCandidate,
-  applyRiskImportCandidate,
 } from "@/actions/import-draft-actions";
 import { Button } from "@/components/ui/button";
 
@@ -32,24 +31,14 @@ type CalendarPreview = {
   status?: string | null;
 };
 
-type RiskPreview = {
-  candidateIndex: number;
-  title?: string;
-  level?: string | null;
-  description?: string | null;
-  type?: string | null;
-};
-
 type ImportDraftSummary = {
   id: string;
   sourceQuality: string;
   confidence: string;
   budgetCount: number;
   calendarCount: number;
-  riskCount: number;
   budgetPreview: BudgetPreview[];
   calendarPreview: CalendarPreview[];
-  riskPreview: RiskPreview[];
   createdBy: string;
   createdAt: Date | string;
 };
@@ -110,11 +99,9 @@ export function ImportDraftPanel({
 
   const totalBudget = drafts.reduce((sum, draft) => sum + draft.budgetCount, 0);
   const totalCalendar = drafts.reduce((sum, draft) => sum + draft.calendarCount, 0);
-  const totalRisks = drafts.reduce((sum, draft) => sum + draft.riskCount, 0);
   const pendingBudgetPreview = activeDraft.budgetPreview;
   const pendingCalendarPreview = activeDraft.calendarPreview;
-  const pendingRiskPreview = activeDraft.riskPreview;
-  const pendingTotal = pendingBudgetPreview.length + pendingCalendarPreview.length + pendingRiskPreview.length;
+  const pendingTotal = pendingBudgetPreview.length + pendingCalendarPreview.length;
   const expanded = manualExpanded ?? pendingTotal <= 6;
 
   async function handleApplyBudget(formData: FormData) {
@@ -153,24 +140,6 @@ export function ImportDraftPanel({
     }
   }
 
-  async function handleApplyRisk(formData: FormData) {
-    const key = `risk:${formData.get("draftId")}:${formData.get("candidateIndex")}`;
-    setApplyingKey(key);
-    try {
-      const result = await applyRiskImportCandidate(formData);
-      if (result.success) {
-        toast.success("风险候选已确认");
-        router.refresh();
-      } else {
-        toast.error(result.message ?? "确认失败");
-      }
-    } catch {
-      toast.error("确认失败");
-    } finally {
-      setApplyingKey(null);
-    }
-  }
-
   return (
     <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-950">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -189,17 +158,16 @@ export function ImportDraftPanel({
               </span>
             </div>
             <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
-              当前批次 {pendingTotal} 条，全部批次共 {totalBudget + totalCalendar + totalRisks} 条待处理。
-              确认后才会写入正式预算账本、执行日历或风险列表。
+              当前批次 {pendingTotal} 条，全部批次共 {totalBudget + totalCalendar} 条待处理。
+              确认后才会写入正式预算账本或执行日历。
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="grid grid-cols-3 gap-1.5 text-center text-[11px]">
+          <div className="grid grid-cols-2 gap-1.5 text-center text-[11px]">
             <QueueStat icon={<WalletCards className="size-3" />} label="预算" value={totalBudget} />
             <QueueStat icon={<CalendarDays className="size-3" />} label="日历" value={totalCalendar} />
-            <QueueStat icon={<ShieldAlert className="size-3" />} label="风险" value={totalRisks} />
           </div>
           <Button
             type="button"
@@ -216,7 +184,7 @@ export function ImportDraftPanel({
 
       {!expanded && pendingTotal > 0 && (
         <div className="rounded-md border border-amber-200 bg-background/70 px-3 py-2 text-xs text-amber-900">
-          队列已折叠：{pendingBudgetPreview.length} 条预算、{pendingCalendarPreview.length} 条日历、{pendingRiskPreview.length} 条风险待确认。展开后可逐条写入正式表。
+          队列已折叠：{pendingBudgetPreview.length} 条预算、{pendingCalendarPreview.length} 条日历待确认。展开后可逐条写入正式表。
         </div>
       )}
 
@@ -235,7 +203,7 @@ export function ImportDraftPanel({
             className="h-8 min-w-64 rounded border bg-background px-2 text-xs outline-none"
           >
             {drafts.map((draft, index) => {
-              const count = draft.budgetCount + draft.calendarCount + draft.riskCount;
+              const count = draft.budgetCount + draft.calendarCount;
               return (
                 <option key={draft.id} value={draft.id}>
                   {index === 0 ? "最新批次" : `较早批次 ${index + 1}`} · {count} 条 · {new Date(draft.createdAt).toLocaleString("zh-CN")}
@@ -247,7 +215,7 @@ export function ImportDraftPanel({
       )}
 
       {expanded && (
-        <div className="grid gap-3 xl:grid-cols-[1.15fr_1fr_1fr]">
+        <div className="grid gap-3 xl:grid-cols-[1.15fr_1fr]">
           <BudgetQueue
             draftId={activeDraft.id}
             items={pendingBudgetPreview}
@@ -260,12 +228,6 @@ export function ImportDraftPanel({
             items={pendingCalendarPreview}
             applyingKey={applyingKey}
             onApply={handleApplyCalendar}
-          />
-          <RiskQueue
-            draftId={activeDraft.id}
-            items={pendingRiskPreview}
-            applyingKey={applyingKey}
-            onApply={handleApplyRisk}
           />
         </div>
       )}
@@ -440,58 +402,6 @@ function CalendarQueue({
                 disabled={applyingKey === `calendar:${draftId}:${entry.candidateIndex}`}
               >
                 {applyingKey === `calendar:${draftId}:${entry.candidateIndex}` ? <Loader2 className="size-3 animate-spin" /> : "确认"}
-              </Button>
-            </form>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RiskQueue({
-  draftId,
-  items,
-  applyingKey,
-  onApply,
-}: {
-  draftId: string;
-  items: RiskPreview[];
-  applyingKey: string | null;
-  onApply: (formData: FormData) => void;
-}) {
-  return (
-    <div className="rounded-md border border-amber-200/70 bg-background/75">
-      <QueueHeader icon={<ShieldAlert className="size-3.5 text-amber-700" />} title="风险/待确定项" count={items.length} />
-      {items.length === 0 ? (
-        <EmptyQueue label="暂无待确认风险" />
-      ) : (
-        <div className="max-h-72 divide-y overflow-y-auto">
-          {items.map((risk) => (
-            <form
-              key={`risk-${draftId}-${risk.candidateIndex}`}
-              action={onApply}
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-xs"
-            >
-              <input type="hidden" name="draftId" value={draftId} />
-              <input type="hidden" name="candidateIndex" value={risk.candidateIndex} />
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="min-w-0 truncate font-medium">{risk.title ?? "未命名风险"}</p>
-                  {risk.level && <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{risk.level}</span>}
-                </div>
-                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                  {[risk.type, risk.description].filter(Boolean).join(" · ") || "需要补充处理动作"}
-                </p>
-              </div>
-              <Button
-                type="submit"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-[11px]"
-                disabled={applyingKey === `risk:${draftId}:${risk.candidateIndex}`}
-              >
-                {applyingKey === `risk:${draftId}:${risk.candidateIndex}` ? <Loader2 className="size-3 animate-spin" /> : "确认"}
               </Button>
             </form>
           ))}

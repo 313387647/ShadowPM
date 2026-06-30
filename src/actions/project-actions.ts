@@ -5,7 +5,6 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertCanReadProject, assertCanWriteProject, requireCurrentUser } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/types";
-import { initProjectFolders } from "@/actions/wiki-actions";
 
 /** 安全解析 HTML date input（"YYYY-MM-DD"），强制 UTC 午夜，杜绝时区偏移 */
 function parseDateSafe(dateRaw: string | null): Date | null {
@@ -39,9 +38,6 @@ export async function createProject(formData: FormData): Promise<ActionResult<{ 
       endDate: parseDateSafe(formData.get("endDate") as string),
     },
   });
-
-  // 自动生成 4 个默认文件夹
-  await initProjectFolders(project.id);
 
   // 自动创建占位任务；有确认预算时才创建初始 ALLOCATE 流水
   const placeholderTask = await prisma.task.create({

@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, CalendarCheck, CircleDollarSign, ClipboardList, Clock, Loader2, MessageSquare, Plus, Search, Sparkles, X } from "lucide-react";
+import { ArrowRight, CalendarCheck, CircleDollarSign, ClipboardList, Clock, Loader2, MessageSquare, Plus, Search, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { TASK_STATUS_MAP } from "@/lib/constants";
-import { addProgressLog, adoptAIActionSuggestion, adoptAIBudgetSignal, adoptAIRiskSignal, generateProjectActivitySummary, scheduleAIActionSuggestion } from "@/actions/timeline-actions";
+import { addProgressLog, adoptAIActionSuggestion, adoptAIBudgetSignal, generateProjectActivitySummary, scheduleAIActionSuggestion } from "@/actions/timeline-actions";
 import { cn } from "@/lib/utils";
 
 type Log = {
@@ -28,20 +28,19 @@ type Log = {
 };
 
 type TaskOption = { id: string; name: string; status: string };
-type ActivityFilter = "ALL" | "PROGRESS" | "CONTROL" | "BUDGET" | "CALENDAR" | "RISK" | "AI";
+type ActivityFilter = "ALL" | "PROGRESS" | "CONTROL" | "BUDGET" | "CALENDAR" | "AI";
 type ActivityCategory = Exclude<ActivityFilter, "ALL">;
 type ActivityInsight = {
   recentCount: number;
   focusLabel: string;
   focusCount: number;
-  riskCount: number;
   budgetCount: number;
   latestTitle: string;
   latestContent: string;
 };
 type ProjectAIInsight = {
   summary: string;
-  risks: string[];
+  watchItems: string[];
   nextActions: string[];
   missingInfo: string[];
   budgetSignals: string[];
@@ -55,11 +54,6 @@ type PendingSchedule = {
   activityLogId: string;
   actionIndex: number;
   action: string;
-} | null;
-type PendingRisk = {
-  activityLogId: string;
-  riskIndex: number;
-  risk: string;
 } | null;
 type PendingBudget = {
   activityLogId: string;
@@ -75,7 +69,6 @@ const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "CONTROL", label: "管控" },
   { value: "BUDGET", label: "预算" },
   { value: "CALENDAR", label: "日历" },
-  { value: "RISK", label: "风险" },
   { value: "AI", label: "AI 导入" },
 ];
 
@@ -105,12 +98,6 @@ const ACTIVITY_BLUEPRINTS = [
     className: "border-violet-200 text-violet-600",
   },
   {
-    title: "风险/待定",
-    description: "风险识别、状态变更和处理建议",
-    Icon: AlertTriangle,
-    className: "border-amber-200 text-amber-600",
-  },
-  {
     title: "AI 导入",
     description: "表格识别、候选确认和结构化入库",
     Icon: Sparkles,
@@ -127,12 +114,10 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [adoptingAction, setAdoptingAction] = useState<string | null>(null);
   const [schedulingAction, setSchedulingAction] = useState<string | null>(null);
-  const [adoptingRisk, setAdoptingRisk] = useState<string | null>(null);
   const [adoptingBudget, setAdoptingBudget] = useState<string | null>(null);
   const [aiInsight, setAiInsight] = useState<ProjectAIInsight | null>(null);
   const [pendingAdoption, setPendingAdoption] = useState<PendingAdoption>(null);
   const [pendingSchedule, setPendingSchedule] = useState<PendingSchedule>(null);
-  const [pendingRisk, setPendingRisk] = useState<PendingRisk>(null);
   const [pendingBudget, setPendingBudget] = useState<PendingBudget>(null);
   const [filter, setFilter] = useState<ActivityFilter>("ALL");
   const [query, setQuery] = useState("");
@@ -148,7 +133,6 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
       CONTROL: 0,
       BUDGET: 0,
       CALENDAR: 0,
-      RISK: 0,
       AI: 0,
     });
   }, [logs]);
@@ -263,29 +247,6 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
     }
   }
 
-  async function handleAdoptAIRisk(formData: FormData) {
-    if (!pendingRisk) return;
-    const key = `${pendingRisk.activityLogId}-${pendingRisk.riskIndex}`;
-    setAdoptingRisk(key);
-    try {
-      formData.set("projectId", projectId);
-      formData.set("activityLogId", pendingRisk.activityLogId);
-      formData.set("riskIndex", String(pendingRisk.riskIndex));
-      const result = await adoptAIRiskSignal(formData);
-      if (result.success && result.data?.riskId) {
-        toast.success("已确认为正式风险");
-        setPendingRisk(null);
-        router.push(`/projects/${projectId}?tab=risks`);
-      } else {
-        toast.error(result.message ?? "确认风险失败");
-      }
-    } catch {
-      toast.error("确认风险失败，请重试");
-    } finally {
-      setAdoptingRisk(null);
-    }
-  }
-
   async function handleAdoptAIBudget(formData: FormData) {
     if (!pendingBudget) return;
     const key = `${pendingBudget.activityLogId}-${pendingBudget.budgetIndex}`;
@@ -315,7 +276,7 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
         <div>
           <h2 className="text-base font-semibold">项目活动流</h2>
           <p className="text-sm text-muted-foreground">
-            共 {logs.length} 条记录，包含人工进度、预算流转、风险变更与 AI 导入确认
+            共 {logs.length} 条记录，包含人工进度、预算流转、执行日历与 AI 导入确认
           </p>
         </div>
         <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
@@ -349,7 +310,6 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
               )}
               <p className="mt-1 line-clamp-2 text-sm leading-6 text-foreground/80">
                 最近 7 天有 {insight.recentCount} 条活动，主要变化集中在「{insight.focusLabel}」。
-                {insight.riskCount > 0 ? ` 风险相关 ${insight.riskCount} 条，需要优先确认。` : " 暂无新的风险活动。"}
                 {insight.budgetCount > 0 ? ` 预算流转 ${insight.budgetCount} 条，建议和预算页交叉核对。` : ""}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -359,7 +319,6 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
             <div className="grid grid-cols-2 gap-2 text-right sm:grid-cols-4">
               <InsightMetric label="7 天活动" value={insight.recentCount} />
               <InsightMetric label={insight.focusLabel} value={insight.focusCount} />
-              <InsightMetric label="风险" value={insight.riskCount} />
               <InsightMetric label="预算" value={insight.budgetCount} />
             </div>
           </div>
@@ -459,7 +418,6 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
               const aiLogInsight = getAIInsight(log);
               const adoptedActionIndexes = getAdoptedAIActionIndexes(log);
               const scheduledActionIndexes = getScheduledAIActionIndexes(log);
-              const adoptedRiskIndexes = getAdoptedAIRiskIndexes(log);
               const adoptedBudgetSignalIndexes = getAdoptedAIBudgetSignalIndexes(log);
               const overflowCount = Math.max(affectedTasks.length - 5, 0);
 
@@ -492,16 +450,13 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
                         compact
                         adoptedActionIndexes={adoptedActionIndexes}
                         scheduledActionIndexes={scheduledActionIndexes}
-                        adoptedRiskIndexes={adoptedRiskIndexes}
                         adoptedBudgetSignalIndexes={adoptedBudgetSignalIndexes}
                         adoptingKey={adoptingAction}
                         schedulingKey={schedulingAction}
-                        adoptingRiskKey={adoptingRisk}
                         adoptingBudgetKey={adoptingBudget}
                         activityLogId={log.id}
                         onAdopt={(activityLogId, actionIndex, action) => setPendingAdoption({ activityLogId, actionIndex, action })}
                         onSchedule={(activityLogId, actionIndex, action) => setPendingSchedule({ activityLogId, actionIndex, action })}
-                        onAdoptRisk={(activityLogId, riskIndex, risk) => setPendingRisk({ activityLogId, riskIndex, risk })}
                         onAdoptBudget={(activityLogId, budgetIndex, signal) => setPendingBudget({ activityLogId, budgetIndex, signal })}
                       />
                     )}
@@ -694,68 +649,6 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(pendingRisk)} onOpenChange={(nextOpen) => !nextOpen && setPendingRisk(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>确认 AI 风险信号</DialogTitle>
-          </DialogHeader>
-          <form action={handleAdoptAIRisk} className="space-y-3">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">风险标题</label>
-              <Input name="title" defaultValue={pendingRisk?.risk.slice(0, 80) ?? ""} className="h-9" />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">类型</label>
-                <select name="type" defaultValue="OTHER" className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none">
-                  <option value="BUDGET">预算</option>
-                  <option value="SCHEDULE">进度</option>
-                  <option value="RESOURCE">资源</option>
-                  <option value="SCOPE">范围</option>
-                  <option value="COMMUNICATION">沟通</option>
-                  <option value="OTHER">其他</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">等级</label>
-                <select name="level" defaultValue="MEDIUM" className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none">
-                  <option value="LOW">低</option>
-                  <option value="MEDIUM">中</option>
-                  <option value="HIGH">高</option>
-                  <option value="CRITICAL">严重</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">风险描述</label>
-              <textarea
-                name="description"
-                defaultValue={pendingRisk?.risk ?? ""}
-                required
-                rows={3}
-                className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">处理建议</label>
-              <Input name="suggestion" placeholder="可留空" className="h-9" />
-            </div>
-            <p className="rounded-md bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
-              确认后会创建正式风险记录，并在活动流保留 AI 原风险信号与确认记录。
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setPendingRisk(null)}>
-                取消
-              </Button>
-              <Button type="submit" disabled={Boolean(adoptingRisk)} className="gap-1.5">
-                {adoptingRisk && <Loader2 className="size-3.5 animate-spin" />}
-                创建风险
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={Boolean(pendingBudget)} onOpenChange={(nextOpen) => !nextOpen && setPendingBudget(null)}>
         <DialogContent>
           <DialogHeader>
@@ -822,37 +715,31 @@ function AIInsightPanel({
   compact = false,
   adoptedActionIndexes = [],
   scheduledActionIndexes = [],
-  adoptedRiskIndexes = [],
   adoptedBudgetSignalIndexes = [],
   adoptingKey,
   schedulingKey,
-  adoptingRiskKey,
   adoptingBudgetKey,
   activityLogId,
   onAdopt,
   onSchedule,
-  onAdoptRisk,
   onAdoptBudget,
 }: {
   insight: ProjectAIInsight;
   compact?: boolean;
   adoptedActionIndexes?: number[];
   scheduledActionIndexes?: number[];
-  adoptedRiskIndexes?: number[];
   adoptedBudgetSignalIndexes?: number[];
   adoptingKey?: string | null;
   schedulingKey?: string | null;
-  adoptingRiskKey?: string | null;
   adoptingBudgetKey?: string | null;
   activityLogId?: string;
   onAdopt?: (activityLogId: string, actionIndex: number, action: string) => void;
   onSchedule?: (activityLogId: string, actionIndex: number, action: string) => void;
-  onAdoptRisk?: (activityLogId: string, riskIndex: number, risk: string) => void;
   onAdoptBudget?: (activityLogId: string, budgetIndex: number, signal: string) => void;
 }) {
   const sections = [
     { label: "下一步", items: insight.nextActions },
-    { label: "风险", items: insight.risks },
+    { label: "待确认", items: insight.watchItems },
     { label: "缺失", items: insight.missingInfo },
     { label: "预算", items: insight.budgetSignals },
   ].filter((section) => section.items.length > 0);
@@ -870,21 +757,16 @@ function AIInsightPanel({
               <div className="space-y-1">
                 {section.items.map((item, index) => {
                   const isNextAction = section.label === "下一步";
-                  const isRisk = section.label === "风险";
                   const isBudget = section.label === "预算";
                   const actionIndex = isNextAction ? index : -1;
-                  const riskIndex = isRisk ? index : -1;
                   const budgetIndex = isBudget ? index : -1;
                   const isAdopted = isNextAction && adoptedActionIndexes.includes(actionIndex);
                   const isScheduled = isNextAction && scheduledActionIndexes.includes(actionIndex);
-                  const isRiskAdopted = isRisk && adoptedRiskIndexes.includes(riskIndex);
                   const isBudgetAdopted = isBudget && adoptedBudgetSignalIndexes.includes(budgetIndex);
                   const key = activityLogId ? `${activityLogId}-${actionIndex}` : null;
-                  const riskKey = activityLogId ? `${activityLogId}-${riskIndex}` : null;
                   const budgetKey = activityLogId ? `${activityLogId}-${budgetIndex}` : null;
                   const canAdopt = isNextAction && activityLogId && onAdopt && actionIndex >= 0;
                   const canSchedule = isNextAction && activityLogId && onSchedule && actionIndex >= 0;
-                  const canAdoptRisk = isRisk && activityLogId && onAdoptRisk && riskIndex >= 0;
                   const canAdoptBudget = isBudget && activityLogId && onAdoptBudget && budgetIndex >= 0;
 
                   return (
@@ -912,18 +794,6 @@ function AIInsightPanel({
                           className="h-6 shrink-0 px-2 text-[11px]"
                         >
                           {schedulingKey === key ? <Loader2 className="size-3 animate-spin" /> : isScheduled ? "已排期" : "排期"}
-                        </Button>
-                      )}
-                      {canAdoptRisk && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={isRiskAdopted ? "secondary" : "ghost"}
-                          disabled={isRiskAdopted || adoptingRiskKey === riskKey}
-                          onClick={() => onAdoptRisk(activityLogId, riskIndex, item)}
-                          className="h-6 shrink-0 px-2 text-[11px]"
-                        >
-                          {adoptingRiskKey === riskKey ? <Loader2 className="size-3 animate-spin" /> : isRiskAdopted ? "已确认" : "确认"}
                         </Button>
                       )}
                       {canAdoptBudget && (
@@ -956,7 +826,6 @@ function matchesFilter(log: Log, filter: ActivityFilter) {
   if (filter === "CONTROL") return log.targetType === "CONTROL_ITEM";
   if (filter === "BUDGET") return log.targetType === "BUDGET_ITEM";
   if (filter === "CALENDAR") return log.targetType === "CALENDAR_ENTRY";
-  if (filter === "RISK") return log.targetType === "RISK";
   if (filter === "AI") return log.source === "IMPORT" || log.source === "AI";
   return true;
 }
@@ -981,7 +850,6 @@ function getActivityInsight(logs: Log[]): ActivityInsight | null {
     CONTROL: 0,
     BUDGET: 0,
     CALENDAR: 0,
-    RISK: 0,
     AI: 0,
   });
   const focus = (Object.entries(categoryCounts) as [ActivityCategory, number][])
@@ -993,7 +861,6 @@ function getActivityInsight(logs: Log[]): ActivityInsight | null {
     recentCount: recentLogs.length,
     focusLabel: activityCategoryLabel(focus[0]),
     focusCount: focus[1],
-    riskCount: categoryCounts.RISK,
     budgetCount: categoryCounts.BUDGET,
     latestTitle: latestMeta.title,
     latestContent: compactText(latestLog.content, 80),
@@ -1004,7 +871,6 @@ function getActivityCategory(log: Log): ActivityCategory {
   if (log.targetType === "CONTROL_ITEM") return "CONTROL";
   if (log.targetType === "BUDGET_ITEM") return "BUDGET";
   if (log.targetType === "CALENDAR_ENTRY") return "CALENDAR";
-  if (log.targetType === "RISK") return "RISK";
   if (log.source === "IMPORT" || log.source === "AI") return "AI";
   return "PROGRESS";
 }
@@ -1015,7 +881,6 @@ function activityCategoryLabel(category: ActivityCategory) {
     CONTROL: "管控",
     BUDGET: "预算",
     CALENDAR: "日历",
-    RISK: "风险",
     AI: "AI 导入",
   };
 
@@ -1046,7 +911,7 @@ function matchesQuery(log: Log, query: string) {
     sourceLabel(log.source ?? ""),
     affectedTasks,
     aiInsight?.summary,
-    aiInsight?.risks.join(" "),
+    aiInsight?.watchItems.join(" "),
     aiInsight?.nextActions.join(" "),
     aiInsight?.missingInfo.join(" "),
     aiInsight?.budgetSignals.join(" "),
@@ -1097,10 +962,10 @@ function getLogMeta(log: Log) {
 
   if (log.targetType === "RISK") {
     return {
-      title: "风险/待定",
+      title: "待确认记录",
       badge: changeTypeLabel(log.changeType),
-      Icon: AlertTriangle,
-      dotClass: "border-amber-300 text-amber-600",
+      Icon: ClipboardList,
+      dotClass: "border-sky-300 text-sky-600",
     };
   }
 
@@ -1141,7 +1006,7 @@ function getAIInsight(log: Log): ProjectAIInsight | null {
 
   return {
     summary: state.summary,
-    risks: normalizeStringList(state.risks),
+    watchItems: normalizeStringList((state as { risks?: unknown; watchItems?: unknown }).watchItems ?? (state as { risks?: unknown }).risks),
     nextActions: normalizeStringList(state.nextActions),
     missingInfo: normalizeStringList(state.missingInfo),
     budgetSignals: normalizeStringList(state.budgetSignals),
@@ -1162,14 +1027,6 @@ function getScheduledAIActionIndexes(log: Log) {
   const scheduledActionIndexes = (log.afterState as { scheduledActionIndexes?: unknown }).scheduledActionIndexes;
   if (!Array.isArray(scheduledActionIndexes)) return [];
   return scheduledActionIndexes.filter((item): item is number => Number.isInteger(item));
-}
-
-function getAdoptedAIRiskIndexes(log: Log) {
-  if (log.targetType !== "PROJECT" || log.changeType !== "AI_ACTION") return [];
-  if (!log.afterState || typeof log.afterState !== "object") return [];
-  const adoptedRiskIndexes = (log.afterState as { adoptedRiskIndexes?: unknown }).adoptedRiskIndexes;
-  if (!Array.isArray(adoptedRiskIndexes)) return [];
-  return adoptedRiskIndexes.filter((item): item is number => Number.isInteger(item));
 }
 
 function getAdoptedAIBudgetSignalIndexes(log: Log) {

@@ -12,7 +12,6 @@ export async function takeHealthSnapshot() {
   const projects = await prisma.project.findMany({
     include: {
       tasks: { select: { status: true, deadline: true } },
-      risks: { select: { id: true } },
     },
   });
 
@@ -26,11 +25,10 @@ export async function takeHealthSnapshot() {
 
     const scheduleHealth = Math.max(0, 100 - (overdue / total) * 100);
     const budgetHealth = 100; // Stubbed — full budget analysis needs per-project flow aggregation
-    const riskCount = p.risks.length;
-    const overallScore = Math.round((scheduleHealth + budgetHealth) / 2) - riskCount * 5;
+    const overallScore = Math.round((scheduleHealth + budgetHealth) / 2);
 
     await prisma.healthSnapshot.create({
-      data: { projectId: p.id, budgetHealth, scheduleHealth: Math.round(scheduleHealth), riskCount, overallScore: Math.max(0, overallScore) },
+      data: { projectId: p.id, budgetHealth, scheduleHealth: Math.round(scheduleHealth), riskCount: 0, overallScore: Math.max(0, overallScore) },
     });
     count++;
   }

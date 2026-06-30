@@ -23,20 +23,6 @@ type BudgetCandidate = {
   appliedFlowId?: string;
 };
 
-type RiskCandidate = {
-  title?: string;
-  description?: string | null;
-  type?: string | null;
-  level?: string | null;
-  status?: string | null;
-  owner?: string | null;
-  relatedItemName?: string | null;
-  applied?: boolean;
-  appliedAt?: string;
-  appliedBy?: string;
-  appliedRiskId?: string;
-};
-
 type CalendarCandidate = {
   date?: string | null;
   startTime?: string | null;
@@ -61,23 +47,7 @@ const FLOW_TO_OPERATION = {
   REFUND: "REFUND",
 } as const;
 const BUDGET_TYPES_REQUIRING_MANUAL_FLOW = ["ESTIMATE", "TRANSFER"] as const;
-const RISK_TYPES = ["BUDGET", "SCHEDULE", "RESOURCE", "SCOPE", "COMMUNICATION", "OTHER"] as const;
-const RISK_LEVELS = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
 const CALENDAR_STATUSES = ["PLANNED", "CONFIRMED", "DONE", "CANCELED"] as const;
-
-function normalizeRiskType(type: string | null | undefined) {
-  const normalized = type?.trim().toUpperCase();
-  return RISK_TYPES.includes(normalized as (typeof RISK_TYPES)[number])
-    ? normalized ?? "OTHER"
-    : "OTHER";
-}
-
-function normalizeRiskLevel(level: string | null | undefined) {
-  const normalized = level?.trim().toUpperCase();
-  return RISK_LEVELS.includes(normalized as (typeof RISK_LEVELS)[number])
-    ? normalized ?? "MEDIUM"
-    : "MEDIUM";
-}
 
 function normalizeCalendarStatus(status: string | null | undefined) {
   const normalized = status?.trim().toUpperCase();
@@ -111,7 +81,6 @@ export async function getPendingImportDrafts(projectId: string) {
   return drafts.map((draft) => {
     const budgetItems = asArray(draft.budgetItems);
     const calendarEntries = asArray(draft.calendarEntries);
-    const risks = asArray(draft.risks);
 
     return {
       id: draft.id,
@@ -120,15 +89,11 @@ export async function getPendingImportDrafts(projectId: string) {
       confidence: draft.confidence,
       budgetCount: budgetItems.filter((item) => !(item as BudgetCandidate).applied).length,
       calendarCount: calendarEntries.filter((item) => !(item as CalendarCandidate).applied).length,
-      riskCount: risks.filter((item) => !(item as RiskCandidate).applied).length,
       budgetPreview: budgetItems
         .map((item, index) => ({ ...(item as BudgetCandidate), candidateIndex: index }))
         .filter((item) => !item.applied),
       calendarPreview: calendarEntries
         .map((item, index) => ({ ...(item as CalendarCandidate), candidateIndex: index }))
-        .filter((item) => !item.applied),
-      riskPreview: risks
-        .map((item, index) => ({ ...(item as RiskCandidate), candidateIndex: index }))
         .filter((item) => !item.applied),
       createdBy: draft.createdBy,
       createdAt: draft.createdAt,
@@ -250,96 +215,6 @@ export async function applyBudgetImportCandidate(
 
   revalidatePath(`/projects/${task.projectId}`);
   return { success: true, message: `预算候选已入账：${flow.id}` };
-}
-
-export async function applyRiskImportCandidate(
-  formData: FormData
-): Promise<ActionResult> {
-  const draftId = formData.get("draftId") as string;
-  const indexRaw = formData.get("candidateIndex") as string;
-  const candidateIndex = Number(indexRaw);
-
-  if (!draftId || !Number.isInteger(candidateIndex) || candidateIndex < 0) {
-    return { success: false, message: "风险候选为必填项" };
-  }
-
-  const draft = await prisma.importDraft.findUnique({
-    where: { id: draftId },
-    select: { id: true, projectId: true, status: true, risks: true },
-  });
-  if (!draft || draft.status !== "PENDING") {
-    return { success: false, message: "导入候选不存在或已处理" };
-  }
-  const user = await assertCanWriteProject(draft.projectId);
-
-  const risks = asArray(draft.risks) as RiskCandidate[];
-  const candidate = risks[candidateIndex];
-  if (!candidate) return { success: false, message: "风险候选不存在" };
-  if (candidate.applied) return { success: false, message: "风险候选已确认" };
-
-  const title = candidate.title?.trim() || "未命名风险";
-  const description = candidate.description?.trim() || title;
-  const type = normalizeRiskType(candidate.type);
-  const level = normalizeRiskLevel(candidate.level);
-
-  const risk = await prisma.$transaction(async (tx) => {
-    const createdRisk = await tx.risk.create({
-      data: {
-        projectId: draft.projectId,
-        title,
-        type,
-        level,
-        description,
-        suggestion: candidate.relatedItemName
-          ? `建议优先关联并核对「${candidate.relatedItemName}」的责任人、截止日期和预算影响。`
-          : "建议确认责任人、影响范围和下一步处理动作。",
-        status: "OPEN",
-        source: "AI_IMPORT",
-      },
-    });
-
-    const nextRisks = risks.map((item, index) =>
-      index === candidateIndex
-        ? {
-            ...item,
-            applied: true,
-            appliedAt: new Date().toISOString(),
-            appliedBy: user.name,
-            appliedRiskId: createdRisk.id,
-          }
-        : item
-    );
-
-    await tx.importDraft.update({
-      where: { id: draftId },
-      data: { risks: nextRisks },
-    });
-
-    await tx.activityLog.create({
-      data: {
-        projectId: draft.projectId,
-        targetType: "RISK",
-        targetId: createdRisk.id,
-        changeType: "IMPORT",
-        source: "IMPORT",
-        createdBy: user.name,
-        summary: `⚠️ AI 导入风险候选已确认：${title}`,
-        beforeState: candidate as Prisma.InputJsonObject,
-        afterState: {
-          riskId: createdRisk.id,
-          title,
-          type,
-          level,
-          status: "OPEN",
-        },
-      },
-    });
-
-    return createdRisk;
-  });
-
-  revalidatePath(`/projects/${draft.projectId}`);
-  return { success: true, message: `风险已确认：${risk.id}` };
 }
 
 export async function applyCalendarImportCandidate(

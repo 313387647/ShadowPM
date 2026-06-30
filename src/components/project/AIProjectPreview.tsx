@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CalendarDays, Loader2, Plus, ShieldAlert, Sparkles, Table2, Upload, WalletCards, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, Loader2, Plus, Sparkles, Table2, Upload, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { AIParsedProject, CreateProjectFromAIDTO } from "@/actions/ai-actions";
@@ -30,7 +30,7 @@ export function AIProjectCreator({ onClose }: Props) {
       tasks: project.tasks.map((t) => ({ ...t })),
       budgetItems: project.budgetItems,
       calendarEntries: project.calendarEntries,
-      risks: project.risks,
+      risks: [],
       sourceQuality: project.sourceQuality,
       confidence: project.confidence,
       createBudgetFlow: Boolean(project.totalBudget && project.totalBudget > 0),
@@ -50,10 +50,9 @@ export function AIProjectCreator({ onClose }: Props) {
   function candidateCount(project: {
     budgetItems?: AIParsedProject["budgetItems"];
     calendarEntries?: AIParsedProject["calendarEntries"];
-    risks?: AIParsedProject["risks"];
   } | null) {
     if (!project) return 0;
-    return (project.budgetItems?.length ?? 0) + (project.calendarEntries?.length ?? 0) + (project.risks?.length ?? 0);
+    return (project.budgetItems?.length ?? 0) + (project.calendarEntries?.length ?? 0);
   }
 
   function removeBudgetCandidate(index: number) {
@@ -69,14 +68,6 @@ export function AIProjectCreator({ onClose }: Props) {
     setEdited({
       ...edited,
       calendarEntries: (edited.calendarEntries ?? []).filter((_, i) => i !== index),
-    });
-  }
-
-  function removeRiskCandidate(index: number) {
-    if (!edited) return;
-    setEdited({
-      ...edited,
-      risks: (edited.risks ?? []).filter((_, i) => i !== index),
     });
   }
 
@@ -391,12 +382,6 @@ export function AIProjectCreator({ onClose }: Props) {
                   </div>
                   <p className="mt-1 text-base font-semibold">{edited.calendarEntries?.length ?? 0}</p>
                 </div>
-                <div className="rounded-md bg-background p-2">
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <ShieldAlert className="size-3" /> 风险
-                  </div>
-                  <p className="mt-1 text-base font-semibold">{edited.risks?.length ?? 0}</p>
-                </div>
               </div>
             </div>
           )}
@@ -413,8 +398,8 @@ export function AIProjectCreator({ onClose }: Props) {
                       ? " 已确认的总预算会生成一条初始 ALLOCATE 预算流水。"
                       : " 当前预算池未确认，不会自动生成初始预算流水。"}
                     {candidateCount(edited) > 0
-                      ? ` AI 还识别出 ${candidateCount(edited)} 条预算/日历/风险候选，暂不自动写入正式账本或日历，后续需要确认后再生成记录。你可以在创建前排除明显错误的候选。`
-                      : " 未识别到需要额外确认的预算、日历或风险候选。"}
+                      ? ` AI 还识别出 ${candidateCount(edited)} 条预算/日历候选，暂不自动写入正式账本或日历，后续需要确认后再生成记录。你可以在创建前排除明显错误的候选。`
+                      : " 未识别到需要额外确认的预算或日历候选。"}
                   </p>
                 </div>
               </div>
@@ -607,69 +592,32 @@ export function AIProjectCreator({ onClose }: Props) {
             </div>
           )}
 
-          {parsed && ((edited.calendarEntries?.length ?? 0) > 0 || (edited.risks?.length ?? 0) > 0) && (
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2 rounded-lg border border-dashed bg-muted/10 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    待确认日历候选 ({edited.calendarEntries?.length ?? 0})
-                  </h4>
-                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                    不自动创建
-                  </span>
-                </div>
-                {(edited.calendarEntries ?? []).slice(0, 5).map((entry, i) => (
-                  <div key={`${entry.content}-${i}`} className="rounded-md bg-background px-2 py-1.5 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-muted-foreground">{entry.date ?? "日期待确认"}</span>
-                      {entry.channel && <span className="min-w-0 flex-1 truncate text-muted-foreground">{entry.channel}</span>}
-                      <button
-                        type="button"
-                        onClick={() => removeCalendarCandidate(i)}
-                        className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        排除
-                      </button>
-                    </div>
-                    <p className="mt-0.5 line-clamp-1">{entry.content}</p>
-                  </div>
-                ))}
-                {(edited.calendarEntries?.length ?? 0) === 0 && (
-                  <p className="text-xs text-muted-foreground">未识别到日历项</p>
-                )}
+          {parsed && (edited.calendarEntries?.length ?? 0) > 0 && (
+            <div className="space-y-2 rounded-lg border border-dashed bg-muted/10 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  待确认日历候选 ({edited.calendarEntries?.length ?? 0})
+                </h4>
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                  不自动创建
+                </span>
               </div>
-
-              <div className="space-y-2 rounded-lg border border-dashed bg-muted/10 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    待确认风险/待确定项 ({edited.risks?.length ?? 0})
-                  </h4>
-                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                    不自动创建
-                  </span>
-                </div>
-                {(edited.risks ?? []).slice(0, 5).map((risk, i) => (
-                  <div key={`${risk.title}-${i}`} className="rounded-md bg-background px-2 py-1.5 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 flex-1 truncate">{risk.title}</span>
-                      {risk.level && <span className="shrink-0 text-muted-foreground">{risk.level}</span>}
-                      <button
-                        type="button"
-                        onClick={() => removeRiskCandidate(i)}
-                        className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        排除
-                      </button>
-                    </div>
-                    {risk.description && (
-                      <p className="mt-0.5 line-clamp-1 text-muted-foreground">{risk.description}</p>
-                    )}
+              {(edited.calendarEntries ?? []).slice(0, 5).map((entry, i) => (
+                <div key={`${entry.content}-${i}`} className="rounded-md bg-background px-2 py-1.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-muted-foreground">{entry.date ?? "日期待确认"}</span>
+                    {entry.channel && <span className="min-w-0 flex-1 truncate text-muted-foreground">{entry.channel}</span>}
+                    <button
+                      type="button"
+                      onClick={() => removeCalendarCandidate(i)}
+                      className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      排除
+                    </button>
                   </div>
-                ))}
-                {(edited.risks?.length ?? 0) === 0 && (
-                  <p className="text-xs text-muted-foreground">未识别到风险项</p>
-                )}
-              </div>
+                  <p className="mt-0.5 line-clamp-1">{entry.content}</p>
+                </div>
+              ))}
             </div>
           )}
 

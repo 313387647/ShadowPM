@@ -10,6 +10,7 @@ import type { ActionResult } from "@/actions/types";
 
 type ProjectAIInsight = {
   summary: string;
+  watchItems: string[];
   risks: string[];
   nextActions: string[];
   missingInfo: string[];
@@ -229,7 +230,6 @@ export async function generateProjectActivitySummary(projectId: string): Promise
     missingOwner: project.tasks.filter((task) => !task.assignee?.trim()).length,
     p0: project.tasks.filter((task) => task.priority === "P0").length,
   };
-  const openRisks = project.risks.filter((risk) => risk.status !== "CLOSED");
   const budget = calculateBudgetSnapshot({
     plannedBudget: project.totalBudget,
     allocated: budgetAllocation._sum.amount,
@@ -239,13 +239,14 @@ export async function generateProjectActivitySummary(projectId: string): Promise
 
   const prompt = `你是 ShadowPM 的项目状态分析助手。ShadowPM 不是任务管理工具，而是 AI Native Project Management Platform。
 
-请基于项目管控总表、预算流转、执行日历、风险和活动流，生成结构化项目判断。
+请基于项目管控总表、预算流转、执行日历和活动流，生成结构化项目判断。
 
 输出要求：
 - 中文
 - 只输出 JSON，不要 Markdown，不要解释
 - summary 不超过 180 字
-- risks / nextActions / missingInfo / budgetSignals 每项不超过 4 条
+- watchItems / nextActions / missingInfo / budgetSignals 每项不超过 4 条
+- watchItems 用来承载阻塞、待确认、依赖、异常信号；不要输出独立风险列表
 - nextActions 必须是可执行动作，不要写“持续关注”
 - missingInfo 只写真正影响判断或执行的信息
 - 不要泛泛而谈，不要说“建议持续关注”这种空话
@@ -254,7 +255,8 @@ export async function generateProjectActivitySummary(projectId: string): Promise
 JSON 结构：
 {
   "summary": "string",
-  "risks": ["string"],
+  "watchItems": ["string"],
+  "risks": [],
   "nextActions": ["string"],
   "missingInfo": ["string"],
   "budgetSignals": ["string"]
@@ -285,9 +287,6 @@ ${project.tasks
   .slice(0, 12)
   .map((task) => `- ${task.name}｜${task.status}｜${task.priority}｜负责人:${task.assignee ?? "缺失"}｜截止:${formatDate(task.deadline)}｜备注:${task.notes ?? "无"}`)
   .join("\n") || "- 暂无"}
-
-未关闭风险：
-${openRisks.slice(0, 8).map((risk) => `- ${risk.level}/${risk.type}｜${risk.title ?? risk.description}｜建议:${risk.suggestion ?? "无"}`).join("\n") || "- 暂无"}
 
 执行日历：
 ${calendarEntries.slice(0, 10).map((entry) => `- ${formatDate(entry.date)}｜${entry.channel ?? "未填渠道"}｜${entry.workstream ?? "未填模块"}｜${entry.content}｜${entry.status}`).join("\n") || "- 暂无"}
@@ -338,7 +337,6 @@ ${recentProgressLogs.slice(0, 8).map((log) => `- ${formatDate(log.createdAt)}｜
             expense: budget.expense.toString(),
             refund: budget.refund.toString(),
           },
-          openRiskCount: openRisks.length,
           generatedAt: new Date().toISOString(),
         },
       },
@@ -821,7 +819,8 @@ function parseProjectAIInsight(content: string): ProjectAIInsight | null {
 
     return {
       summary: parsed.summary.trim().slice(0, 220),
-      risks: normalizeStringList(parsed.risks),
+      watchItems: normalizeStringList((parsed as { watchItems?: unknown; risks?: unknown }).watchItems ?? parsed.risks),
+      risks: [],
       nextActions: normalizeStringList(parsed.nextActions),
       missingInfo: normalizeStringList(parsed.missingInfo),
       budgetSignals: normalizeStringList(parsed.budgetSignals),
@@ -839,6 +838,7 @@ function parseStoredProjectAIInsight(value: Prisma.JsonValue | null) {
   return {
     raw: state,
     summary: state.summary.trim(),
+    watchItems: normalizeStringList(state.watchItems ?? state.risks),
     risks: normalizeStringList(state.risks),
     nextActions: normalizeStringList(state.nextActions),
     missingInfo: normalizeStringList(state.missingInfo),
