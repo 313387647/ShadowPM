@@ -134,17 +134,23 @@ model ActivityLog {
 }
 
 model BudgetFlow {
-  id          String   @id @default(cuid())
-  taskId      String
-  flowType    FlowType
-  amount      Decimal  @db.Decimal(14, 2) // 支出为负数，分配为正数（14位总精度，2位小数）
-  description String   // 事由
-  createdBy   String
-  createdAt   DateTime @default(now())
+  id                 String   @id @default(cuid())
+  taskId             String
+  counterpartyTaskId String?
+  groupId            String?
+  flowType           FlowType
+  operation          String   @default("ALLOCATE") // CONFIRM | SUPPLEMENT | REDUCE | ALLOCATE | RETURN | TRANSFER | SPLIT | MERGE | EXPENSE | REFUND
+  amount             Decimal  @db.Decimal(14, 2) // 正负号表达对当前 task 的预算影响
+  description        String   // 事由
+  createdBy          String
+  createdAt          DateTime @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
+  @@index([counterpartyTaskId])
+  @@index([groupId])
+  @@index([operation])
   @@index([createdAt])
 }
 

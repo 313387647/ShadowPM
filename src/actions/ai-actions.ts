@@ -384,8 +384,9 @@ export async function createProjectFromAI(
         data: {
           taskId: firstTaskId,
           flowType: "ALLOCATE",
+          operation: "CONFIRM",
           amount: confirmedTotalBudget,
-          description: `「${dto.projectName}」项目初始预算分配`,
+          description: `「${dto.projectName}」项目预算确定`,
           createdBy: user.name,
         },
       });

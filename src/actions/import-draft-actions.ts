@@ -55,6 +55,11 @@ type CalendarCandidate = {
 };
 
 const FLOW_TYPES = ["ALLOCATE", "EXPENSE", "REFUND"] as const;
+const FLOW_TO_OPERATION = {
+  ALLOCATE: "ALLOCATE",
+  EXPENSE: "EXPENSE",
+  REFUND: "REFUND",
+} as const;
 const BUDGET_TYPES_REQUIRING_MANUAL_FLOW = ["ESTIMATE", "TRANSFER"] as const;
 const RISK_TYPES = ["BUDGET", "SCHEDULE", "RESOURCE", "SCOPE", "COMMUNICATION", "OTHER"] as const;
 const RISK_LEVELS = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
@@ -185,6 +190,7 @@ export async function applyBudgetImportCandidate(
       data: {
         taskId,
         flowType,
+        operation: FLOW_TO_OPERATION[flowType],
         amount,
         description: `AI 导入预算候选确认：${candidate.title ?? "未命名预算项"}`,
         createdBy: user.name,

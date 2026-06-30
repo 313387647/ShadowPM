@@ -8,19 +8,23 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FLOW_TYPE_MAP } from "@/lib/constants";
+import { BUDGET_OPERATION_MAP, FLOW_TYPE_MAP } from "@/lib/constants";
 import { recordBudget } from "@/actions/ledger-actions";
 import { cn } from "@/lib/utils";
 
 type Flow = {
   id: string;
   taskId: string;
+  counterpartyTaskId: string | null;
+  groupId: string | null;
   flowType: "ALLOCATE" | "EXPENSE" | "REFUND";
+  operation: string;
   amount: number;
   description: string;
   createdBy: string;
   createdAt: Date | string;
   task: { id: string; name: string };
+  counterpartyTask: { id: string; name: string } | null;
 };
 
 type TaskOption = { id: string; name: string; status: string };
@@ -35,11 +39,20 @@ interface Props {
   tasks: TaskOption[];
 }
 
-const FLOW_COLORS: Record<string, string> = {
-  ALLOCATE: "text-emerald-600",
-  EXPENSE: "text-red-500",
-  REFUND: "text-emerald-600",
-};
+const BUDGET_OPERATION_OPTIONS = [
+  { value: "CONFIRM", label: "预算确定", hint: "确认项目预算池或总盘预算" },
+  { value: "SUPPLEMENT", label: "预算增补", hint: "新增预算额度" },
+  { value: "REDUCE", label: "预算调减", hint: "减少已确认预算" },
+  { value: "ALLOCATE", label: "分配到事项", hint: "从预算池分配给某个管控项" },
+  { value: "RETURN", label: "退回预算池", hint: "从事项退回未使用额度" },
+  { value: "TRANSFER", label: "事项间划拨", hint: "从一个事项转给另一个事项" },
+  { value: "SPLIT", label: "预算拆分", hint: "把一个预算项拆成多个执行项" },
+  { value: "MERGE", label: "预算合并", hint: "把预算项合并到目标事项" },
+  { value: "EXPENSE", label: "实际支出", hint: "记录已发生费用" },
+  { value: "REFUND", label: "支出退款", hint: "记录支出退款或冲销" },
+] as const;
+
+const MOVEMENT_OPERATIONS = new Set(["TRANSFER", "SPLIT", "MERGE"]);
 
 export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usagePercent, flows, tasks }: Props) {
   const router = useRouter();
@@ -50,6 +63,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
   const [taskFilter, setTaskFilter] = useState("ALL");
   const [query, setQuery] = useState("");
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+  const [operation, setOperation] = useState("EXPENSE");
 
   const normalizedQuery = query.trim().toLowerCase();
   const visibleFlows = useMemo(() => {
@@ -60,7 +74,10 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
         flow.description,
         flow.createdBy,
         flow.flowType,
+        flow.operation,
+        BUDGET_OPERATION_MAP[flow.operation as keyof typeof BUDGET_OPERATION_MAP],
         FLOW_TYPE_MAP[flow.flowType as keyof typeof FLOW_TYPE_MAP],
+        flow.counterpartyTask?.name,
         new Date(flow.createdAt).toLocaleDateString("zh-CN"),
       ].some((value) => value?.toLowerCase().includes(normalizedQuery));
       return matchesTask && matchesQuery;
@@ -152,7 +169,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
         </p>
         <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
           <Plus className="size-3.5" />
-          新增流水
+          新增预算动作
         </Button>
       </div>
 
@@ -197,7 +214,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
         <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed py-16 text-center">
           <p className="text-sm text-muted-foreground">暂无流水记录</p>
           <p className="text-xs text-muted-foreground/60 mt-1">
-            点击「新增流水」记录第一笔预算
+            点击「新增预算动作」记录第一笔预算
           </p>
         </div>
       ) : visibleFlows.length === 0 ? (
@@ -212,8 +229,9 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
               <thead>
                 <tr className="border-b bg-muted/40 text-left">
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">时间</th>
-                  <th className="px-4 py-2.5 font-medium text-muted-foreground">所属任务</th>
-                  <th className="px-4 py-2.5 font-medium text-muted-foreground">类型</th>
+                  <th className="px-4 py-2.5 font-medium text-muted-foreground">事项</th>
+                  <th className="px-4 py-2.5 font-medium text-muted-foreground">动作</th>
+                  <th className="px-4 py-2.5 font-medium text-muted-foreground">对方事项</th>
                   <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">金额</th>
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">事由</th>
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">操作人</th>
@@ -234,10 +252,15 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
                     <td className="px-4 py-2.5 whitespace-nowrap">{flow.task.name}</td>
                     <td className="px-4 py-2.5">
                       <Badge variant={flow.flowType === "EXPENSE" ? "destructive" : "default"}>
-                        {FLOW_TYPE_MAP[flow.flowType as keyof typeof FLOW_TYPE_MAP] ?? flow.flowType}
+                        {BUDGET_OPERATION_MAP[flow.operation as keyof typeof BUDGET_OPERATION_MAP] ??
+                          FLOW_TYPE_MAP[flow.flowType as keyof typeof FLOW_TYPE_MAP] ??
+                          flow.operation}
                       </Badge>
                     </td>
-                    <td className={`px-4 py-2.5 text-right font-mono font-medium tabular-nums whitespace-nowrap ${FLOW_COLORS[flow.flowType] ?? ""}`}>
+                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                      {flow.counterpartyTask?.name ?? "-"}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right font-mono font-medium tabular-nums whitespace-nowrap ${flow.amount >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                       {flow.amount > 0 ? "+" : ""}
                       {flow.amount.toLocaleString("zh-CN")}
                     </td>
@@ -255,19 +278,19 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>新增流水</DialogTitle>
+            <DialogTitle>新增预算动作</DialogTitle>
           </DialogHeader>
           <form ref={formRef} action={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1.5">
-                所属任务 <span className="text-red-500">*</span>
+                关联事项 <span className="text-red-500">*</span>
               </label>
               <select
                 name="taskId"
                 required
                 className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-background"
               >
-                <option value="">请选择任务</option>
+                <option value="">请选择事项</option>
                 {tasks.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
@@ -276,22 +299,43 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
 
             <div>
               <label className="block text-sm font-medium mb-1.5">
-                流水类型 <span className="text-red-500">*</span>
+                预算动作 <span className="text-red-500">*</span>
               </label>
-              <div className="flex gap-2">
-                {(["ALLOCATE", "EXPENSE", "REFUND"] as const).map((type) => (
-                  <label
-                    key={type}
-                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm cursor-pointer transition-colors hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:checked]:ring-1 has-[:checked]:ring-primary"
-                  >
-                    <input type="radio" name="flowType" value={type} defaultChecked={type === "EXPENSE"} required className="sr-only" />
-                    {type === "ALLOCATE" && "📥 分配"}
-                    {type === "EXPENSE" && "📤 支出"}
-                    {type === "REFUND" && "↩️ 退款"}
-                  </label>
+              <select
+                name="operation"
+                value={operation}
+                onChange={(event) => setOperation(event.target.value)}
+                required
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              >
+                {BUDGET_OPERATION_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label} - {item.hint}
+                  </option>
                 ))}
-              </div>
+              </select>
             </div>
+
+            {MOVEMENT_OPERATIONS.has(operation) && (
+              <div>
+                <label className="block text-sm font-medium mb-1.5">
+                  目标事项 <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="counterpartyTaskId"
+                  required
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">请选择目标事项</option>
+                  {tasks.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  当前“关联事项”为来源事项，目标事项会生成对应的正向入账记录。
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium mb-1.5">
@@ -299,7 +343,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
               </label>
               <input
                 name="amount" type="number" required min="0" step="0.01"
-                placeholder="输入正数金额，支出会自动转为负数"
+                placeholder="输入正数金额，系统会按动作自动记录正负方向"
                 className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
@@ -310,7 +354,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
               </label>
               <input
                 name="description" required
-                placeholder="例如：新闻通稿撰写及媒体投放费用"
+                placeholder="例如：直播执行预算从场地项划拨到投流项"
                 className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
@@ -319,7 +363,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>取消</Button>
               <Button type="submit" disabled={submitting} className="gap-1.5">
                 {submitting && <Loader2 className="size-3.5 animate-spin" />}
-                确认记账
+                确认记录
               </Button>
             </div>
           </form>

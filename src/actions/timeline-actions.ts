@@ -740,6 +740,7 @@ export async function adoptAIBudgetSignal(formData: FormData): Promise<ActionRes
       data: {
         taskId,
         flowType,
+        operation: flowType,
         amount,
         description,
         createdBy: user.name,

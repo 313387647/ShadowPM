@@ -57,8 +57,9 @@ export async function createProject(formData: FormData): Promise<ActionResult<{ 
       data: {
         taskId: placeholderTask.id,
         flowType: "ALLOCATE",
+        operation: "CONFIRM",
         amount: totalBudget,
-        description: `「${name}」项目初始预算分配`,
+        description: `「${name}」项目预算确定`,
         createdBy: user.name,
       },
     });

@@ -18,6 +18,20 @@ export const FLOW_TYPE_MAP = {
   REFUND: "费用退回",
 } as const
 
+// 预算业务动作映射：flowType 负责财务计算，operation 负责业务语义
+export const BUDGET_OPERATION_MAP = {
+  CONFIRM: "预算确定",
+  SUPPLEMENT: "预算增补",
+  REDUCE: "预算调减",
+  ALLOCATE: "分配到事项",
+  RETURN: "退回预算池",
+  TRANSFER: "事项间划拨",
+  SPLIT: "预算拆分",
+  MERGE: "预算合并",
+  EXPENSE: "实际支出",
+  REFUND: "支出退款",
+} as const
+
 // 资产类型映射
 export const ASSET_TYPE_MAP = {
   DOCUMENT: "富文本",
