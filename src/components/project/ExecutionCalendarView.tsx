@@ -81,6 +81,25 @@ function parseEntryDate(value: CalendarEntry["date"]) {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+function isCalendarOverdue(entry: CalendarEntry) {
+  const date = parseEntryDate(entry.date);
+  if (!date || ["DONE", "CANCELED"].includes(entry.status)) return false;
+  date.setHours(23, 59, 59, 999);
+  return date < new Date();
+}
+
+function buildGroupSummary(entries: CalendarEntry[], field: "workstream" | "channel" | "owner") {
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    const value = entry[field]?.trim() || "待确认";
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-CN"))
+    .slice(0, 6);
+}
+
 function getNextSevenDays() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -358,6 +377,10 @@ export function ExecutionCalendarView({
   const normalizedQuery = query.trim().toLowerCase();
   const scheduledCount = entries.filter((entry) => entry.date).length;
   const unscheduledCount = entries.length - scheduledCount;
+  const overdueEntries = useMemo(() => entries.filter(isCalendarOverdue), [entries]);
+  const workstreamGroups = useMemo(() => buildGroupSummary(entries, "workstream"), [entries]);
+  const channelGroups = useMemo(() => buildGroupSummary(entries, "channel"), [entries]);
+  const ownerGroups = useMemo(() => buildGroupSummary(entries, "owner"), [entries]);
   const unscheduledEntries = useMemo(
     () => entries.filter((entry) => !entry.date).slice(0, 6),
     [entries]
@@ -436,6 +459,9 @@ export function ExecutionCalendarView({
           <Badge variant={unscheduledCount > 0 ? "destructive" : "secondary"}>
             {unscheduledCount} 个日期待确认
           </Badge>
+          {overdueEntries.length > 0 && (
+            <Badge variant="destructive">{overdueEntries.length} 个逾期未完成</Badge>
+          )}
         </div>
       </div>
 
@@ -583,6 +609,35 @@ export function ExecutionCalendarView({
           </div>
         )}
       </div>
+
+      {entries.length > 0 && (
+        <div className="grid gap-2 rounded-lg border bg-muted/10 p-3 lg:grid-cols-3">
+          {[
+            { title: "按工作流", items: workstreamGroups },
+            { title: "按渠道", items: channelGroups },
+            { title: "按负责人", items: ownerGroups },
+          ].map((group) => (
+            <div key={group.title} className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">{group.title}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {group.items.map((item) => (
+                  <button
+                    key={`${group.title}-${item.label}`}
+                    type="button"
+                    onClick={() => {
+                      setFilter("ALL");
+                      setQuery(item.label);
+                    }}
+                    className="rounded-full border bg-background px-2 py-1 text-[11px] transition-colors hover:border-primary/50 hover:text-primary"
+                  >
+                    {item.label} <span className="text-muted-foreground">{item.count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {unscheduledEntries.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-amber-950">
@@ -732,10 +787,10 @@ function matchesCalendarQuery(entry: CalendarEntry, query: string) {
   if (!query) return true;
   const haystack = [
     entry.content,
-    entry.channel,
-    entry.workstream,
-    entry.owner,
-    entry.department,
+    entry.channel ?? "渠道待确认",
+    entry.workstream ?? "工作流待确认",
+    entry.owner ?? "负责人待确认",
+    entry.department ?? "部门待确认",
     entry.task?.name,
     entry.task?.status,
     entry.notes,

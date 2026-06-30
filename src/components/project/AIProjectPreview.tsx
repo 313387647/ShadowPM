@@ -33,6 +33,8 @@ export function AIProjectCreator({ onClose }: Props) {
       risks: [],
       sourceQuality: project.sourceQuality,
       confidence: project.confidence,
+      missingFields: project.missingFields,
+      conflicts: project.conflicts,
       createBudgetFlow: Boolean(project.totalBudget && project.totalBudget > 0),
     };
   }
@@ -58,6 +60,28 @@ export function AIProjectCreator({ onClose }: Props) {
   function validBudgetItemCount(project: { budgetItems?: AIParsedProject["budgetItems"] } | null) {
     if (!project) return 0;
     return (project.budgetItems ?? []).filter((item) => typeof item.amount === "number" && item.amount > 0).length;
+  }
+
+  function confidenceLabel(confidence?: string | null) {
+    if (confidence === "high") return "高";
+    if (confidence === "medium") return "中";
+    return "低";
+  }
+
+  function confidenceClass(confidence?: string | null) {
+    if (confidence === "high") return "bg-emerald-50 text-emerald-700";
+    if (confidence === "medium") return "bg-amber-50 text-amber-700";
+    return "bg-red-50 text-red-700";
+  }
+
+  function diagnosticCount(project: CreateProjectFromAIDTO | null) {
+    if (!project) return 0;
+    const rowIssues = [
+      ...project.tasks,
+      ...(project.budgetItems ?? []),
+      ...(project.calendarEntries ?? []),
+    ].reduce((sum, item) => sum + (item.missingFields?.length ?? 0) + (item.conflicts?.length ?? 0), 0);
+    return (project.missingFields?.length ?? 0) + (project.conflicts?.length ?? 0) + rowIssues;
   }
 
   function removeBudgetCandidate(index: number) {
@@ -364,11 +388,11 @@ export function AIProjectCreator({ onClose }: Props) {
                   </p>
                 </div>
                 <span className="rounded-full bg-background px-2 py-1 text-xs text-muted-foreground">
-                  同步生成 {candidateCount(edited)}
+                  同步生成 {candidateCount(edited)} · 诊断 {diagnosticCount(edited)}
                 </span>
               </div>
 
-              <div className="mt-3 grid grid-cols-4 gap-2">
+              <div className="mt-3 grid grid-cols-3 gap-2">
                 <div className="rounded-md bg-background p-2">
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <Table2 className="size-3" /> 管控总表
@@ -388,6 +412,23 @@ export function AIProjectCreator({ onClose }: Props) {
                   <p className="mt-1 text-base font-semibold">{edited.calendarEntries?.length ?? 0}</p>
                 </div>
               </div>
+
+              {((edited.missingFields?.length ?? 0) > 0 || (edited.conflicts?.length ?? 0) > 0) && (
+                <div className="mt-3 space-y-2 rounded-md bg-background p-2 text-xs">
+                  {(edited.missingFields?.length ?? 0) > 0 && (
+                    <div>
+                      <span className="font-medium text-muted-foreground">项目级缺失：</span>
+                      <span>{edited.missingFields?.join("、")}</span>
+                    </div>
+                  )}
+                  {(edited.conflicts?.length ?? 0) > 0 && (
+                    <div>
+                      <span className="font-medium text-red-700">冲突：</span>
+                      <span>{edited.conflicts?.join("；")}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -489,7 +530,7 @@ export function AIProjectCreator({ onClose }: Props) {
 
             {edited.tasks.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-4">
-                未识别到任务，请手动添加
+                未识别到管控事项，请手动添加
               </p>
             ) : (
               <div className="space-y-2">
@@ -505,7 +546,7 @@ export function AIProjectCreator({ onClose }: Props) {
                         copy[i] = { ...copy[i], name: e.target.value };
                         setEdited({ ...edited, tasks: copy });
                       }}
-                      placeholder="任务名称"
+                      placeholder="管控事项"
                       className="flex-1 min-w-0 rounded border-0 bg-transparent px-0 py-0 text-sm outline-none"
                     />
                     <input
@@ -538,6 +579,26 @@ export function AIProjectCreator({ onClose }: Props) {
                       }}
                       className="w-32 rounded border-0 bg-transparent px-0 py-0 text-xs outline-none"
                     />
+                    <div className="hidden min-w-[112px] shrink-0 flex-col gap-0.5 xl:flex">
+                      <span className={`w-fit rounded-full px-1.5 py-0.5 text-[10px] ${confidenceClass(task.confidence)}`}>
+                        置信度{confidenceLabel(task.confidence)}
+                      </span>
+                      {(task.missingFields?.length ?? 0) > 0 && (
+                        <span className="truncate text-[10px] text-amber-700">
+                          缺 {task.missingFields?.join("/")}
+                        </span>
+                      )}
+                      {(task.conflicts?.length ?? 0) > 0 && (
+                        <span className="truncate text-[10px] text-red-700">
+                          冲突 {task.conflicts?.length}
+                        </span>
+                      )}
+                      {task.sourceRef && (
+                        <span className="truncate text-[10px] text-muted-foreground" title={task.sourceRef}>
+                          {task.sourceRef}
+                        </span>
+                      )}
+                    </div>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -575,13 +636,17 @@ export function AIProjectCreator({ onClose }: Props) {
               ) : (
                 <div className="space-y-1.5">
                   {(edited.budgetItems ?? []).slice(0, 8).map((item, i) => (
-                    <div key={`${item.title}-${i}`} className="flex items-center gap-2 rounded-md bg-background px-2 py-1.5 text-xs">
-                      <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                    <div key={`${item.title}-${i}`} className="rounded-md bg-background px-2 py-1.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate">{item.title}</span>
                       {item.workstream && <span className="shrink-0 text-muted-foreground">{item.workstream}</span>}
                       <span className="shrink-0 font-mono">
                         {item.amount ? `¥${item.amount.toLocaleString("zh-CN")}` : "金额待确认"}
                       </span>
                       {item.status && <span className="shrink-0 text-muted-foreground">{item.status}</span>}
+                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] ${confidenceClass(item.confidence)}`}>
+                          {confidenceLabel(item.confidence)}
+                        </span>
                       <button
                         type="button"
                         onClick={() => removeBudgetCandidate(i)}
@@ -589,6 +654,14 @@ export function AIProjectCreator({ onClose }: Props) {
                       >
                         排除
                       </button>
+                      </div>
+                      {((item.missingFields?.length ?? 0) > 0 || (item.conflicts?.length ?? 0) > 0 || item.sourceRef) && (
+                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                          {item.missingFields?.length ? `缺：${item.missingFields.join("/")} ` : ""}
+                          {item.conflicts?.length ? `冲突：${item.conflicts.join("；")} ` : ""}
+                          {item.sourceRef ? `来源：${item.sourceRef}` : ""}
+                        </p>
+                      )}
                     </div>
                   ))}
                   {(edited.budgetItems?.length ?? 0) > 8 && (
@@ -614,6 +687,9 @@ export function AIProjectCreator({ onClose }: Props) {
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-muted-foreground">{entry.date ?? "日期待确认"}</span>
                     {entry.channel && <span className="min-w-0 flex-1 truncate text-muted-foreground">{entry.channel}</span>}
+                    <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] ${confidenceClass(entry.confidence)}`}>
+                      {confidenceLabel(entry.confidence)}
+                    </span>
                     <button
                       type="button"
                       onClick={() => removeCalendarCandidate(i)}
@@ -623,6 +699,13 @@ export function AIProjectCreator({ onClose }: Props) {
                     </button>
                   </div>
                   <p className="mt-0.5 line-clamp-1">{entry.content}</p>
+                  {((entry.missingFields?.length ?? 0) > 0 || (entry.conflicts?.length ?? 0) > 0 || entry.sourceRef) && (
+                    <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                      {entry.missingFields?.length ? `缺：${entry.missingFields.join("/")} ` : ""}
+                      {entry.conflicts?.length ? `冲突：${entry.conflicts.join("；")} ` : ""}
+                      {entry.sourceRef ? `来源：${entry.sourceRef}` : ""}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

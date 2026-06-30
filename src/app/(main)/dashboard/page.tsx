@@ -28,7 +28,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">📊 全局大盘</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          团队 {stats.projectCount} 个项目 · {stats.taskByStatus.PENDING + stats.taskByStatus.IN_PROGRESS + stats.taskByStatus.COMPLETED} 个任务
+          团队 {stats.projectCount} 个项目 · {stats.taskByStatus.PENDING + stats.taskByStatus.IN_PROGRESS + stats.taskByStatus.COMPLETED} 个管控事项
         </p>
       </div>
 
@@ -88,7 +88,7 @@ export default async function DashboardPage() {
           <CardContent className="pt-5">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <AlertTriangle className="size-4" />
-              逾期任务
+              逾期事项
             </div>
             <p
               className={`mt-1 text-2xl font-bold tabular-nums ${
@@ -145,7 +145,7 @@ export default async function DashboardPage() {
                   )}
                   {p.hasOverdueTasks && (
                     <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-destructive/30 text-destructive">
-                      含逾期任务
+                      含逾期事项
                     </Badge>
                   )}
                   <span className="text-muted-foreground">

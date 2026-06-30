@@ -510,10 +510,10 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
           <form ref={formRef} action={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1.5">
-                所属任务 <span className="text-red-500">*</span>
+                所属管控事项 <span className="text-red-500">*</span>
               </label>
               <select name="taskId" required className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-background">
-                <option value="">请选择任务</option>
+                <option value="">请选择管控事项</option>
                 {tasks.map((t) => (
                   <option key={t.id} value={t.id}>{t.name} [{TASK_STATUS_MAP[t.status as keyof typeof TASK_STATUS_MAP] ?? t.status}]</option>
                 ))}

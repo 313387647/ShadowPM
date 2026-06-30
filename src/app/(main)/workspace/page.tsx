@@ -43,7 +43,7 @@ export default async function WorkspacePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">🤖 AI 工作台</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {user.name}，下午好。今天有 {totalMyTasks} 个任务待处理
+            {user.name}，下午好。今天有 {totalMyTasks} 个管控事项待处理
           </p>
         </div>
         <CreateProjectForm />
@@ -54,7 +54,7 @@ export default async function WorkspacePage() {
         {/* 左栏：今日待办 */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">📋 我的任务</h2>
+            <h2 className="text-sm font-semibold">📋 我的管控事项</h2>
             <span className="text-xs text-muted-foreground">
               进行中 {inProgressTasks.length} · 待启动 {pendingTasks.length}
             </span>
@@ -63,9 +63,9 @@ export default async function WorkspacePage() {
           {myTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed py-12 text-center">
               <CheckCircle2 className="size-8 text-emerald-500 mb-2" />
-              <p className="text-sm font-medium">今天没有待处理的任务</p>
+              <p className="text-sm font-medium">今天没有待处理的管控事项</p>
               <p className="text-xs text-muted-foreground mt-1">
-                去项目里给自己分配任务吧
+                去项目管控表里分配事项吧
               </p>
             </div>
           ) : (
@@ -120,7 +120,7 @@ export default async function WorkspacePage() {
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle className="size-4 text-destructive" />
                 <h3 className="text-sm font-semibold text-destructive">
-                  {overdueTasks.length} 个任务已逾期
+                  {overdueTasks.length} 个管控事项已逾期
                 </h3>
               </div>
               {overdueTasks.map((task) => (

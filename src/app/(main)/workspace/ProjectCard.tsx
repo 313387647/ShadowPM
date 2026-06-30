@@ -57,7 +57,7 @@ export function ProjectCard({
         </span>
         <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
           <CheckCircle2 className="size-3" />
-          {taskCount} 个任务
+          {taskCount} 个事项
         </span>
       </div>
 

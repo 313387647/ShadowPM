@@ -18,6 +18,15 @@ import type { ActionResult } from "@/actions/types";
 
 // ══ Enriched Types ══
 
+export type AIConfidence = "high" | "medium" | "low";
+
+type AIImportDiagnostics = {
+  confidence?: AIConfidence | null;
+  sourceRef?: string | null;
+  missingFields?: string[];
+  conflicts?: string[];
+};
+
 export type AIParsedTask = {
   name: string;
   workstream?: string | null;
@@ -27,7 +36,7 @@ export type AIParsedTask = {
   deadline?: string | null;
   status?: string | null;
   notes?: string | null;
-};
+} & AIImportDiagnostics;
 
 export type AIParsedBudgetItem = {
   title: string;
@@ -37,7 +46,7 @@ export type AIParsedBudgetItem = {
   workstream?: string | null;
   description?: string | null;
   relatedItemName?: string | null;
-};
+} & AIImportDiagnostics;
 
 export type AIParsedCalendarEntry = {
   date: string | null;
@@ -50,7 +59,7 @@ export type AIParsedCalendarEntry = {
   department?: string | null;
   status?: string | null;
   notes?: string | null;
-};
+} & AIImportDiagnostics;
 
 export type AIParsedRisk = {
   title: string;
@@ -74,7 +83,9 @@ export type AIParsedProject = {
   calendarEntries: AIParsedCalendarEntry[];
   risks: AIParsedRisk[];
   sourceQuality: "clean" | "usable" | "messy" | "unsafe";
-  confidence: "high" | "medium" | "low";
+  confidence: AIConfidence;
+  missingFields: string[];
+  conflicts: string[];
 };
 
 export type CreateProjectFromAIDTO = {
@@ -88,6 +99,8 @@ export type CreateProjectFromAIDTO = {
   risks?: AIParsedRisk[];
   sourceQuality?: AIParsedProject["sourceQuality"];
   confidence?: AIParsedProject["confidence"];
+  missingFields?: string[];
+  conflicts?: string[];
   createBudgetFlow: boolean;
 };
 
@@ -114,7 +127,11 @@ const SYSTEM_PROMPT = `你是 ShadowPM 的 AI 项目导入引擎。你必须把�
     "department": "负责部门",
     "deadline": "YYYY-MM-DD",
     "status": "PENDING | IN_PROGRESS | COMPLETED",
-    "notes": "进度备注/结论"
+    "notes": "进度备注/结论",
+    "confidence": "high | medium | low",
+    "sourceRef": "来源位置，例如 工作表:项目总控表 行12 列C-F",
+    "missingFields": ["assignee", "deadline"],
+    "conflicts": ["同一事项出现两个负责人"]
   }],
   "budgetItems": [{
     "title": "预算项名称",
@@ -123,7 +140,11 @@ const SYSTEM_PROMPT = `你是 ShadowPM 的 AI 项目导入引擎。你必须把�
     "status": "DRAFT | PENDING_APPROVAL | APPROVED | IN_PROGRESS | SETTLED | PAUSED | CANCELLED",
     "workstream": "关联工作流",
     "description": "说明",
-    "relatedItemName": "关联管控事项名称"
+    "relatedItemName": "关联管控事项名称",
+    "confidence": "high | medium | low",
+    "sourceRef": "来源位置，例如 工作表:预算 行8",
+    "missingFields": ["amount", "type"],
+    "conflicts": ["金额可能是总预算也可能是分项预算"]
   }],
   "calendarEntries": [{
     "date": "YYYY-MM-DD",
@@ -135,11 +156,17 @@ const SYSTEM_PROMPT = `你是 ShadowPM 的 AI 项目导入引擎。你必须把�
     "owner": "负责人",
     "department": "负责部门",
     "status": "PLANNED | READY | PUBLISHED | DONE | DELAYED | CANCELLED",
-    "notes": "备注"
+    "notes": "备注",
+    "confidence": "high | medium | low",
+    "sourceRef": "来源位置，例如 工作表:传播日历 行20 列G",
+    "missingFields": ["date", "owner"],
+    "conflicts": ["单元格混合人名、渠道和内容，无法完全拆分"]
   }],
   "risks": [],
   "sourceQuality": "clean | usable | messy | unsafe",
-  "confidence": "high | medium | low"
+  "confidence": "high | medium | low",
+  "missingFields": ["项目级缺失字段，例如 totalBudget/endDate"],
+  "conflicts": ["项目级冲突，例如 多个不同总预算"]
 }
 
 规则：
@@ -157,7 +184,9 @@ const SYSTEM_PROMPT = `你是 ShadowPM 的 AI 项目导入引擎。你必须把�
 12. 只返回 JSON，不要 markdown。
 13. 返回紧凑 JSON。不要解释，不要缩进，不要重复字段，不要输出 source 原文。
 14. 如果源表很大，优先保留最能代表项目管控、预算、执行日历的高价值条目，避免输出被截断。
-15. 日历单元格里的 "/"、"-"、"无"、"待定" 不是执行内容，不要生成 calendarEntries。`;
+15. 日历单元格里的 "/"、"-"、"无"、"待定" 不是执行内容，不要生成 calendarEntries。
+16. 每条 task/budgetItem/calendarEntry 都要尽量给 confidence 和 sourceRef；不能定位来源时 sourceRef=null。
+17. missingFields 只写可以由用户补齐的字段名；conflicts 只写源数据矛盾或 AI 无法安全判断的信息。`;
 
 const COMPACT_RETRY_PROMPT = `${SYSTEM_PROMPT}
 
@@ -468,6 +497,36 @@ export async function createProjectFromAI(
           afterState: {
             budgetFlowIds: createdBudgetFlows.map((flow) => flow.id),
             calendarEntryIds: createdCalendarEntries.map((entry) => entry.id),
+            importDiagnostics: {
+              sourceQuality: dto.sourceQuality ?? null,
+              confidence: dto.confidence ?? null,
+              missingFields: dto.missingFields ?? [],
+              conflicts: dto.conflicts ?? [],
+              lowConfidenceTasks: tasksToCreate
+                .filter((task) => task.confidence === "low")
+                .map((task) => ({
+                  name: task.name,
+                  sourceRef: task.sourceRef ?? null,
+                  missingFields: task.missingFields ?? [],
+                  conflicts: task.conflicts ?? [],
+                })),
+              lowConfidenceBudgetItems: budgetItems
+                .filter((item) => item.confidence === "low")
+                .map((item) => ({
+                  title: item.title,
+                  sourceRef: item.sourceRef ?? null,
+                  missingFields: item.missingFields ?? [],
+                  conflicts: item.conflicts ?? [],
+                })),
+              lowConfidenceCalendarEntries: calendarEntries
+                .filter((entry) => entry.confidence === "low")
+                .map((entry) => ({
+                  content: entry.content,
+                  sourceRef: entry.sourceRef ?? null,
+                  missingFields: entry.missingFields ?? [],
+                  conflicts: entry.conflicts ?? [],
+                })),
+            },
           },
         },
       });
@@ -482,15 +541,31 @@ export async function createProjectFromAI(
 function validateParsedProject(parsed: AIParsedProject): AIParsedProject {
   const budgetItems = (Array.isArray(parsed.budgetItems) ? parsed.budgetItems : [])
     .filter((item) => item?.title?.trim())
-    .map((item) => ({
-      title: item.title.trim(),
-      amount: typeof item.amount === "number" && !isNaN(item.amount) ? item.amount : null,
-      type: item.type?.trim() || null,
-      status: item.status?.trim() || null,
-      workstream: item.workstream?.trim() || null,
-      description: item.description?.trim() || null,
-      relatedItemName: item.relatedItemName?.trim() || null,
-    }))
+    .map((item) => {
+      const normalized = {
+        title: item.title.trim(),
+        amount: typeof item.amount === "number" && !isNaN(item.amount) ? item.amount : null,
+        type: item.type?.trim() || null,
+        status: item.status?.trim() || null,
+        workstream: item.workstream?.trim() || null,
+        description: item.description?.trim() || null,
+        relatedItemName: item.relatedItemName?.trim() || null,
+        confidence: normalizeConfidence(item.confidence),
+        sourceRef: normalizeOptionalText(item.sourceRef),
+        missingFields: normalizeStringList(item.missingFields),
+        conflicts: normalizeStringList(item.conflicts),
+      };
+      const missingFields = withDerivedMissingFields(normalized.missingFields, {
+        amount: normalized.amount,
+        type: normalized.type,
+        relatedItemName: normalized.relatedItemName,
+      });
+      return {
+        ...normalized,
+        confidence: normalized.confidence ?? inferConfidence(missingFields, normalized.conflicts),
+        missingFields,
+      };
+    })
     .slice(0, 30);
 
   const budgetNames = new Set(
@@ -499,31 +574,40 @@ function validateParsedProject(parsed: AIParsedProject): AIParsedProject {
 
   const tasks = (Array.isArray(parsed.tasks) ? parsed.tasks : [])
     .filter((t) => t?.name?.trim())
-    .map((t) => ({
-      workstream: t.workstream?.trim() || null,
-      name: t.name.trim(),
-      description: t.description?.trim() || null,
-      notes: t.notes?.trim() || null,
-      assignee: t.assignee?.trim() || null,
-      department: t.department?.trim() || null,
-      deadline: isValidDateStr(t.deadline) ? t.deadline : null,
-      status: ["PENDING", "IN_PROGRESS", "COMPLETED"].includes(t.status as string) ? (t.status as string) : null,
-    }))
+    .map((t) => {
+      const normalized = {
+        workstream: t.workstream?.trim() || null,
+        name: t.name.trim(),
+        description: t.description?.trim() || null,
+        notes: t.notes?.trim() || null,
+        assignee: t.assignee?.trim() || null,
+        department: t.department?.trim() || null,
+        deadline: isValidDateStr(t.deadline) ? t.deadline : null,
+        status: ["PENDING", "IN_PROGRESS", "COMPLETED"].includes(t.status as string) ? (t.status as string) : null,
+        confidence: normalizeConfidence(t.confidence),
+        sourceRef: normalizeOptionalText(t.sourceRef),
+        missingFields: normalizeStringList(t.missingFields),
+        conflicts: normalizeStringList(t.conflicts),
+      };
+      const missingFields = withDerivedMissingFields(normalized.missingFields, {
+        assignee: normalized.assignee,
+        department: normalized.department,
+        deadline: normalized.deadline,
+        status: normalized.status,
+      });
+      return {
+        ...normalized,
+        confidence: normalized.confidence ?? inferConfidence(missingFields, normalized.conflicts),
+        missingFields,
+      };
+    })
     .filter((task) => !isBudgetOnlyTask(task, budgetNames))
     .slice(0, 30);
 
-  return {
-    projectName: parsed.projectName?.trim() || "",
-    totalBudget: typeof parsed.totalBudget === "number" && !isNaN(parsed.totalBudget) ? parsed.totalBudget : null,
-    startDate: isValidDateStr(parsed.startDate) ? parsed.startDate : null,
-    endDate: isValidDateStr(parsed.endDate) ? parsed.endDate : null,
-    objective: parsed.objective?.trim() || null,
-    background: parsed.background?.trim() || null,
-    tasks,
-    budgetItems,
-    calendarEntries: (Array.isArray(parsed.calendarEntries) ? parsed.calendarEntries : [])
-      .filter((entry) => isMeaningfulCandidateText(entry?.content))
-      .map((entry) => ({
+  const calendarEntries = (Array.isArray(parsed.calendarEntries) ? parsed.calendarEntries : [])
+    .filter((entry) => isMeaningfulCandidateText(entry?.content))
+    .map((entry) => {
+      const normalized = {
         date: isValidDateStr(entry.date) ? entry.date : null,
         startTime: isValidTimeStr(entry.startTime) ? entry.startTime : null,
         endTime: isValidTimeStr(entry.endTime) ? entry.endTime : null,
@@ -534,11 +618,47 @@ function validateParsedProject(parsed: AIParsedProject): AIParsedProject {
         department: entry.department?.trim() || null,
         status: entry.status?.trim() || null,
         notes: entry.notes?.trim() || null,
-      }))
-      .slice(0, 30),
+        confidence: normalizeConfidence(entry.confidence),
+        sourceRef: normalizeOptionalText(entry.sourceRef),
+        missingFields: normalizeStringList(entry.missingFields),
+        conflicts: normalizeStringList(entry.conflicts),
+      };
+      const missingFields = withDerivedMissingFields(normalized.missingFields, {
+        date: normalized.date,
+        channel: normalized.channel,
+        owner: normalized.owner,
+      });
+      return {
+        ...normalized,
+        confidence: normalized.confidence ?? inferConfidence(missingFields, normalized.conflicts),
+        missingFields,
+      };
+    })
+    .slice(0, 30);
+
+  const projectMissingFields = withDerivedMissingFields(normalizeStringList(parsed.missingFields), {
+    projectName: parsed.projectName?.trim() || null,
+    totalBudget: typeof parsed.totalBudget === "number" && !isNaN(parsed.totalBudget) ? parsed.totalBudget : null,
+    startDate: isValidDateStr(parsed.startDate) ? parsed.startDate : null,
+    endDate: isValidDateStr(parsed.endDate) ? parsed.endDate : null,
+  });
+  const projectConflicts = normalizeStringList(parsed.conflicts);
+
+  return {
+    projectName: parsed.projectName?.trim() || "",
+    totalBudget: typeof parsed.totalBudget === "number" && !isNaN(parsed.totalBudget) ? parsed.totalBudget : null,
+    startDate: isValidDateStr(parsed.startDate) ? parsed.startDate : null,
+    endDate: isValidDateStr(parsed.endDate) ? parsed.endDate : null,
+    objective: parsed.objective?.trim() || null,
+    background: parsed.background?.trim() || null,
+    tasks,
+    budgetItems,
+    calendarEntries,
     risks: [],
     sourceQuality: ["clean", "usable", "messy", "unsafe"].includes(parsed.sourceQuality) ? parsed.sourceQuality : "messy",
-    confidence: ["high", "medium", "low"].includes(parsed.confidence) ? parsed.confidence : "low",
+    confidence: normalizeConfidence(parsed.confidence) ?? inferConfidence(projectMissingFields, projectConflicts),
+    missingFields: projectMissingFields,
+    conflicts: projectConflicts,
   };
 }
 
@@ -550,6 +670,47 @@ function isBudgetOnlyTask(
   const isBudgetLane = /预算|费用|采购报批|报批中/.test(text);
   const hasExplicitBudgetMatch = budgetNames.has(task.name);
   return isBudgetLane && hasExplicitBudgetMatch;
+}
+
+function normalizeConfidence(value: unknown): AIConfidence | null {
+  return value === "high" || value === "medium" || value === "low" ? value : null;
+}
+
+function normalizeOptionalText(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeStringList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 6);
+}
+
+function withDerivedMissingFields(
+  existing: string[],
+  fields: Record<string, string | number | null | undefined>
+) {
+  const missing = new Set(existing);
+  for (const [field, value] of Object.entries(fields)) {
+    if (value === null || value === undefined || value === "") {
+      missing.add(field);
+    }
+  }
+  return Array.from(missing).slice(0, 8);
+}
+
+function inferConfidence(missingFields: string[], conflicts: string[]): AIConfidence {
+  if (conflicts.length > 0 || missingFields.length >= 3) return "low";
+  if (missingFields.length > 0) return "medium";
+  return "high";
 }
 
 function isValidDateStr(s: unknown): s is string {

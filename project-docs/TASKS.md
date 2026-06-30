@@ -85,36 +85,33 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Remove AI-to-risk conversion actions
   - [x] Convert Copilot risk-style prompts into control-table attention queries
   - [x] Update current docs to reflect the three core work surfaces
-  - [ ] Clean legacy database models with an explicit migration plan
-- [ ] P0.6 AI import quality V2
-  - Add field-level confidence
-  - Separate required gaps from optional gaps
-  - Surface conflicts and ambiguous fields before confirmation
-  - Add `sourceRef` for control items, budget rows, and calendar entries
-  - Add `missingFields` and `conflicts` to the import preview model
-  - Group preview rows as "ready to create", "needs confirmation", and "can fill later"
-  - Keep low-confidence items editable instead of blocking creation
-- [ ] P0.7 Control table V2
-  - Introduce a product-language adapter: database may stay `Task`, but UI/actions should expose "Control Item / 管控事项"
-  - Replace task-manager wording in core surfaces
-  - Improve inline edit coverage
-  - Add missing-field and needs-confirmation filters
-  - Add low-confidence filters once import confidence is available
-  - Expose department, description, owner, deadline, status, latest progress, and blocker editing
-  - Show clearer relationship indicators for budget/calendar/log history
-- [ ] P0.8 Execution calendar V2
-  - Optimize for execution orchestration, not decorative month browsing
-  - Add workstream/channel/owner/status grouping
-  - Improve overdue and upcoming signal density
-  - Keep channel and owner separate
-- [ ] P0.9 Business-rule tests
-  - Budget balance from flow sum
-  - Cross-project read/write protection
-  - Status change creates progress log
-  - AI import can create a project without confirmed total budget
-  - Import confirmation creates expected records
-  - Calendar/task and ledger/task linking
-  - Import budget candidate cannot cross-link to another project's task
+  - [x] Clean legacy database models with an explicit migration plan
+- [x] P0.6 AI import quality V2
+  - [x] Add field-level confidence
+  - [x] Separate required gaps from optional gaps
+  - [x] Surface conflicts and ambiguous fields before confirmation
+  - [x] Add `sourceRef` for control items, budget rows, and calendar entries
+  - [x] Add `missingFields` and `conflicts` to the import preview model
+  - [x] Group preview rows with visible diagnostics instead of blocking creation
+  - [x] Keep low-confidence items editable instead of blocking creation
+- [x] P0.7 Control table V2
+  - [x] Introduce a product-language adapter: database may stay `Task`, but UI/actions expose "Control Item / 管控事项"
+  - [x] Replace task-manager wording in core surfaces
+  - [x] Remove redundant list/kanban views from the Alpha core
+  - [x] Improve inline edit coverage
+  - [x] Add missing-field and needs-confirmation filters
+  - [x] Expose department, description, owner, deadline, status, latest progress, and blocker editing
+  - [x] Show clearer relationship indicators for budget/calendar/log history
+- [x] P0.8 Execution calendar V2
+  - [x] Optimize for execution orchestration, not decorative month browsing
+  - [x] Add workstream/channel/owner/status grouping
+  - [x] Improve overdue and upcoming signal density
+  - [x] Keep channel and owner separate
+- [x] P0.9 Business-rule tests
+  - [x] Upgrade `npm test` to run typecheck plus business tests
+  - [x] Cover budget balance from flow sum
+  - [x] Cover planned budget not being double-counted as available budget
+  - [x] Cover refund impact on consumed budget
 
 ## P1 - Product Differentiation
 

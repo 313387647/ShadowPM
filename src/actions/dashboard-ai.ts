@@ -63,7 +63,7 @@ export async function generateDashboardSummary(): Promise<string | null> {
 要点：
 - 语气亲切专业，像团队助理
 - 突出最关键的信息（风险、进度、超支）
-- 如果有逾期任务，必须提到
+- 如果有逾期事项，必须提到
 - 如果用"万"单位更易读，可以这样表达
 - 控制在 150 字以内
 
@@ -72,7 +72,7 @@ export async function generateDashboardSummary(): Promise<string | null> {
 • 计划预算：¥${plannedBudget.toNumber().toLocaleString()}
 • 已确认预算池：¥${totalAllocated.toNumber().toLocaleString()}
 • 已使用：¥${consumed.toNumber().toLocaleString()}
-• 待启动任务：${pending} | 进行中：${inProgress} | 已完成：${completed}
+• 待启动事项：${pending} | 进行中：${inProgress} | 已完成：${completed}
 • 逾期未完成：${overdueCount} 个
 • 各项目进度：
 ${projectLines}

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "test": "npm run typecheck",
+    "test": "npm run typecheck && npm run test:business",
+    "test:business": "node --import tsx --test tests/business-rules.test.ts",
     "typecheck": "tsc --noEmit",
     "start": "next start",
     "lint": "next lint",

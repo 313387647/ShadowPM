@@ -82,7 +82,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
                 ? new Date(project.endDate).toLocaleDateString("zh-CN")
                 : "未定"}
             </span>
-            <Badge variant="secondary">{project._count.tasks} 个子任务</Badge>
+            <Badge variant="secondary">{project._count.tasks} 个管控事项</Badge>
           </div>
         </div>
       </div>
@@ -94,7 +94,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
             value="tasks"
             className="rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm"
           >
-            📋 任务总控
+            📋 管控总表
           </TabsTrigger>
           <TabsTrigger
             value="timeline"

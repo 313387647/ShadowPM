@@ -95,14 +95,14 @@ export async function addProgressLog(formData: FormData): Promise<ActionResult> 
   const syncTaskNotes = formData.get("syncTaskNotes") === "on";
 
   if (!taskId || !content?.trim()) {
-    return { success: false, message: "所属任务和汇报内容为必填项" };
+    return { success: false, message: "所属管控事项和汇报内容为必填项" };
   }
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: { projectId: true },
   });
-  if (!task) return { success: false, message: "任务不存在" };
+  if (!task) return { success: false, message: "管控事项不存在" };
 
   await prisma.$transaction([
     prisma.progressLog.create({

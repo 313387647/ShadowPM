@@ -19,7 +19,7 @@ export default async function TeamPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">👥 团队工作负载</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {members.length} 名成员 · {totalTasks} 个进行中任务 · {totalOverdue} 个逾期
+            {members.length} 名成员 · {totalTasks} 个进行中事项 · {totalOverdue} 个逾期
           </p>
         </div>
       </div>

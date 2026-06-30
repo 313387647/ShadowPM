@@ -103,7 +103,7 @@ export async function createTask(formData: FormData): Promise<ActionResult> {
   const status = normalizeStatus((formData.get("status") as string) || null);
 
   if (!projectId || !name?.trim()) {
-    return { success: false, message: "所属项目和任务名称为必填项" };
+    return { success: false, message: "所属项目和管控事项名称为必填项" };
   }
 
   const deadlineRaw = formData.get("deadline") as string;
