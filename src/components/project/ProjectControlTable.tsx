@@ -23,6 +23,11 @@ type Task = {
   deadline: Date | string | null;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   priority: string;
+  aiConfidence?: string | null;
+  sourceRef?: string | null;
+  missingFields?: unknown;
+  conflicts?: unknown;
+  needsConfirmation?: boolean;
   logs: { id: string; content: string; createdBy: string; createdAt: Date | string }[];
   _count: { logs: number; budgets: number; calendarEntries: number };
 };
@@ -132,11 +137,32 @@ const EMPTY_CREATE_DRAFT: CreateDraft = {
 };
 
 function getMissingFields(task: Task) {
-  const missing: string[] = [];
-  if (!task.assignee?.trim()) missing.push("负责人");
-  if (!task.department?.trim()) missing.push("部门");
-  if (!task.deadline) missing.push("截止");
-  return missing;
+  const missing = new Set(normalizeStringList(task.missingFields).map(formatDiagnosticField));
+  if (!task.assignee?.trim()) missing.add("负责人");
+  if (!task.department?.trim()) missing.add("部门");
+  if (!task.deadline) missing.add("截止");
+  return Array.from(missing);
+}
+
+function normalizeStringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function formatDiagnosticField(field: string) {
+  const map: Record<string, string> = {
+    assignee: "负责人",
+    owner: "负责人",
+    department: "部门",
+    deadline: "截止",
+    date: "日期",
+    status: "状态",
+    amount: "金额",
+    type: "类型",
+    relatedItemName: "关联事项",
+  };
+  return map[field] ?? field;
 }
 
 function missingFieldToInput(field: string) {
@@ -221,6 +247,8 @@ function ControlTableRow({
   const [logContent, setLogContent] = useState("");
   const [syncLogToNotes, setSyncLogToNotes] = useState(true);
   const [logging, setLogging] = useState(false);
+  const conflicts = normalizeStringList(task.conflicts);
+  const hasImportDiagnostics = Boolean(task.aiConfidence || task.sourceRef || task.needsConfirmation || conflicts.length > 0);
 
   const missing = getMissingFields({
     ...task,
@@ -312,6 +340,32 @@ function ControlTableRow({
       >
       <td className="px-3 py-2">
         <div className="space-y-1">
+          {hasImportDiagnostics && (
+            <div className="flex flex-wrap gap-1">
+              {task.aiConfidence && (
+                <span className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  task.aiConfidence === "low"
+                    ? "bg-amber-50 text-amber-700"
+                    : task.aiConfidence === "medium"
+                      ? "bg-blue-50 text-blue-700"
+                      : "bg-emerald-50 text-emerald-700"
+                )}>
+                  AI {task.aiConfidence}
+                </span>
+              )}
+              {task.needsConfirmation && (
+                <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                  待确认
+                </span>
+              )}
+              {task.sourceRef && (
+                <span className="max-w-56 truncate rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground" title={task.sourceRef}>
+                  来源：{task.sourceRef}
+                </span>
+              )}
+            </div>
+          )}
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -456,6 +510,19 @@ function ControlTableRow({
               <CheckCircle2 className="size-3" />
               完整
             </span>
+          )}
+          {conflicts.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {conflicts.slice(0, 2).map((conflict) => (
+                <span
+                  key={conflict}
+                  className="max-w-28 truncate rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
+                  title={conflict}
+                >
+                  冲突：{conflict}
+                </span>
+              ))}
+            </div>
           )}
           {dirty && (
             <Button

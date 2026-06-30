@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { calculateBudgetSnapshot } from "@/lib/budget";
 import { assertCanReadProject, assertCanWriteProject, requireCurrentUser } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/types";
 
@@ -70,15 +71,88 @@ export async function getUserProjects() {
 
   const projects = await prisma.project.findMany({
     where: { ownerId: user.id },
-    include: { _count: { select: { tasks: true } } },
+    include: {
+      _count: { select: { tasks: true } },
+      tasks: {
+        select: {
+          budgets: {
+            select: {
+              flowType: true,
+              amount: true,
+            },
+          },
+        },
+      },
+      activityLogs: {
+        where: { changeType: "IMPORT" },
+        select: { afterState: true },
+        orderBy: { createdAt: "desc" },
+        take: 3,
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
   // 将 Decimal 转为 number 以便序列化
   return projects.map((p) => ({
     ...p,
+    tasks: undefined,
+    activityLogs: undefined,
     totalBudget: p.totalBudget.toNumber(),
+    confirmedBudget: calculateProjectConfirmedBudget(p).toNumber(),
+    pendingBudgetSignal: extractPendingBudgetSignal(p.activityLogs.map((log) => log.afterState)),
   }));
+}
+
+function calculateProjectConfirmedBudget(project: {
+  totalBudget: Prisma.Decimal;
+  tasks: { budgets: { flowType: string; amount: Prisma.Decimal }[] }[];
+}) {
+  const flows = project.tasks.flatMap((task) => task.budgets);
+  const allocated = flows
+    .filter((flow) => flow.flowType === "ALLOCATE")
+    .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
+  const expense = flows
+    .filter((flow) => flow.flowType === "EXPENSE")
+    .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
+  const refund = flows
+    .filter((flow) => flow.flowType === "REFUND")
+    .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
+
+  return calculateBudgetSnapshot({
+    plannedBudget: project.totalBudget,
+    allocated,
+    expense,
+    refund,
+  }).allocated;
+}
+
+function extractPendingBudgetSignal(states: unknown[]) {
+  let total = 0;
+  let count = 0;
+
+  for (const state of states) {
+    if (!state || typeof state !== "object") continue;
+    const diagnostics = "importDiagnostics" in state
+      ? (state as { importDiagnostics?: unknown }).importDiagnostics
+      : null;
+    if (!diagnostics || typeof diagnostics !== "object") continue;
+    const items = "lowConfidenceBudgetItems" in diagnostics
+      ? (diagnostics as { lowConfidenceBudgetItems?: unknown }).lowConfidenceBudgetItems
+      : null;
+    if (!Array.isArray(items)) continue;
+
+    for (const item of items) {
+      if (!item || typeof item !== "object") continue;
+      const amount = "amount" in item ? (item as { amount?: unknown }).amount : null;
+      if (typeof amount === "number" && Number.isFinite(amount) && amount > 0) {
+        total += amount;
+        count += 1;
+      }
+    }
+  }
+
+  return { total, count };
 }
 
 export async function deleteProject(projectId: string): Promise<ActionResult> {

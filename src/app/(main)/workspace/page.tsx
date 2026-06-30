@@ -155,6 +155,8 @@ export default async function WorkspacePage() {
                   id={project.id}
                   name={project.name}
                   totalBudget={project.totalBudget}
+                  confirmedBudget={project.confirmedBudget}
+                  pendingBudgetSignal={project.pendingBudgetSignal}
                   startDate={project.startDate}
                   endDate={project.endDate}
                   taskCount={project._count.tasks}

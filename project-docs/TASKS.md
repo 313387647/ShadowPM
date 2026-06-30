@@ -77,7 +77,8 @@ These items are required before ShadowPM should be considered ready for broader 
 - [x] P0.4 Direct editable AI import
   - [x] Remove the separate import draft/review queue from the Alpha core
   - [x] Stop defaulting ambiguous budget signals to `EXPENSE`
-  - [x] Write AI-generated budget rows into the official ledger
+  - [x] Write only high-confidence confirmed AI budget rows into the official ledger
+  - [x] Keep estimate/draft/low-confidence budget signals in import diagnostics instead of confirmed ledger flows
   - [x] Write AI-generated calendar rows into the official execution calendar
   - [x] Keep blockers/open questions in editable table notes and activity summaries
 - [x] P0.5 Product surface pruning
@@ -94,6 +95,8 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Add `missingFields` and `conflicts` to the import preview model
   - [x] Group preview rows with visible diagnostics instead of blocking creation
   - [x] Keep low-confidence items editable instead of blocking creation
+  - [x] Persist control-item AI diagnostics on `Task`
+  - [x] Surface AI confidence/source/missing/conflict signals in the control table
 - [x] P0.7 Control table V2
   - [x] Introduce a product-language adapter: database may stay `Task`, but UI/actions expose "Control Item / 管控事项"
   - [x] Replace task-manager wording in core surfaces
@@ -112,6 +115,14 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Cover budget balance from flow sum
   - [x] Cover planned budget not being double-counted as available budget
   - [x] Cover refund impact on consumed budget
+  - [x] Cover AI low-confidence and estimate budgets not becoming confirmed allocations
+
+- [x] P0.10 Alpha external testing polish
+  - [x] Update demo entry for direct upload-and-feedback testing
+  - [x] Add external tester quickstart
+  - [x] Hide advanced budget operations from Alpha UI
+  - [x] Mark Risk/Asset/ImportDraft schema models as legacy hidden from Alpha core
+  - [x] Prevent hard delete for control items with logs, budget flows, or calendar entries
 
 ## P1 - Product Differentiation
 
@@ -124,6 +135,7 @@ These items are required before ShadowPM should be considered ready for broader 
   - AI asks only high-value clarification questions
   - User can choose "create now, fill gaps later"
   - AI explains what it will mutate before applying low-confidence changes
+  - Copilot mutation preview before status/log writes
 - [ ] Dashboard V2
   - AI-generated weekly project health summary
   - Cross-project risk and budget signals
@@ -133,6 +145,7 @@ These items are required before ShadowPM should be considered ready for broader 
   - Budget warnings
   - Draft vs confirmed financial signals
   - Better task/workstream association
+  - Reintroduce advanced split/merge/transfer UI only after Alpha users understand the basic ledger
 - [ ] Team model
   - Project members
   - Workload view

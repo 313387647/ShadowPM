@@ -14,6 +14,7 @@ async function parsePDFBuffer(buffer: Buffer): Promise<string> {
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/permissions";
+import { shouldCreateConfirmedBudgetFlow } from "@/lib/ai-import-rules";
 import type { ActionResult } from "@/actions/types";
 
 // ══ Enriched Types ══
@@ -416,6 +417,11 @@ export async function createProjectFromAI(
           department: t.department?.trim() || null,
           deadline: t.deadline ? new Date(t.deadline + "T00:00:00.000Z") : null,
           status,
+          aiConfidence: t.confidence ?? null,
+          sourceRef: t.sourceRef ?? null,
+          missingFields: t.missingFields ?? [],
+          conflicts: t.conflicts ?? [],
+          needsConfirmation: (t.missingFields?.length ?? 0) > 0 || (t.conflicts?.length ?? 0) > 0 || t.confidence === "low",
         },
       });
       if (i === 0) firstTaskId = task.id;
@@ -425,8 +431,10 @@ export async function createProjectFromAI(
     const validBudgetItems = budgetItems.filter(
       (item) => item.title?.trim() && typeof item.amount === "number" && item.amount > 0
     );
+    const confirmedBudgetItems = validBudgetItems.filter(shouldCreateConfirmedBudgetFlow);
+    const budgetCandidates = validBudgetItems.filter((item) => !shouldCreateConfirmedBudgetFlow(item));
 
-    if (dto.createBudgetFlow && confirmedTotalBudget.gt(0) && firstTaskId && validBudgetItems.length === 0) {
+    if (dto.createBudgetFlow && confirmedTotalBudget.gt(0) && firstTaskId && confirmedBudgetItems.length === 0) {
       await tx.budgetFlow.create({
         data: {
           taskId: firstTaskId,
@@ -440,7 +448,7 @@ export async function createProjectFromAI(
     }
 
     const createdBudgetFlows: { id: string; title: string; amount: number; taskId: string }[] = [];
-    for (const item of validBudgetItems) {
+    for (const item of confirmedBudgetItems) {
       const taskId = findRelatedTaskId(item, createdTasks, firstTaskId);
       if (!taskId || typeof item.amount !== "number") continue;
 
@@ -450,7 +458,7 @@ export async function createProjectFromAI(
           flowType: "ALLOCATE",
           operation: "ALLOCATE",
           amount: new Prisma.Decimal(item.amount.toString()),
-          description: `AI 导入预算：${item.title.trim()}${item.description ? `｜${item.description.trim()}` : ""}`,
+          description: `AI 确认预算：${item.title.trim()}${item.description ? `｜${item.description.trim()}` : ""}`,
           createdBy: user.name,
         },
       });
@@ -480,7 +488,7 @@ export async function createProjectFromAI(
       createdCalendarEntries.push({ id: calendarEntry.id, content: entry.content.trim() });
     }
 
-    if (createdBudgetFlows.length > 0 || createdCalendarEntries.length > 0) {
+    if (createdBudgetFlows.length > 0 || createdCalendarEntries.length > 0 || budgetCandidates.length > 0 || tasksToCreate.some((task) => (task.missingFields?.length ?? 0) > 0 || (task.conflicts?.length ?? 0) > 0 || task.confidence === "low")) {
       await tx.activityLog.create({
         data: {
           projectId: createdProject.id,
@@ -492,6 +500,7 @@ export async function createProjectFromAI(
           summary: [
             "🤖 AI 导入已自动生成项目三件套",
             createdBudgetFlows.length > 0 ? `预算流水：${createdBudgetFlows.length} 条` : null,
+            budgetCandidates.length > 0 ? `预算待确认：${budgetCandidates.length} 条` : null,
             createdCalendarEntries.length > 0 ? `执行日历：${createdCalendarEntries.length} 条` : null,
           ].filter(Boolean).join("\n"),
           afterState: {
@@ -511,9 +520,12 @@ export async function createProjectFromAI(
                   conflicts: task.conflicts ?? [],
                 })),
               lowConfidenceBudgetItems: budgetItems
-                .filter((item) => item.confidence === "low")
+                .filter((item) => item.confidence === "low" || !shouldCreateConfirmedBudgetFlow(item))
                 .map((item) => ({
                   title: item.title,
+                  amount: item.amount ?? null,
+                  type: item.type ?? null,
+                  status: item.status ?? null,
                   sourceRef: item.sourceRef ?? null,
                   missingFields: item.missingFields ?? [],
                   conflicts: item.conflicts ?? [],

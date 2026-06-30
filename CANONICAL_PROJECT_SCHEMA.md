@@ -17,10 +17,11 @@ A project is a controlled operating system made of:
 3. Budget Ledger
 4. Execution Calendar
 5. Progress Change Log
-6. Risk and Open Issues
-7. Assets and References
+6. AI Import Diagnostics
 
-The first four are user-facing work surfaces. The progress and budget logs are trust layers that make the system auditable.
+The control table is the center. Budget, calendar, progress history, and AI diagnostics should orbit the control table instead of becoming separate management products.
+
+Risk, open issues, and assets are future extensions. In the Alpha core, risks, blockers, missing information, and references should be captured in control item notes, diagnostics, or activity summaries unless a dedicated future module is explicitly restored.
 
 ## 1. Project Profile
 
@@ -73,21 +74,21 @@ Canonical fields:
 - `status`: `PENDING | IN_PROGRESS | COMPLETED | BLOCKED | CANCELLED`
 - `priority`: `P0 | P1 | P2 | P3`
 - `latestProgress`: latest progress or conclusion
-- `riskLevel`: `LOW | MEDIUM | HIGH | CRITICAL`, nullable
 - `blocker`: current blocker, nullable
 - `relatedBudgetIds`: budget items or budget flows associated with this item
 - `relatedCalendarIds`: execution calendar entries associated with this item
-- `relatedAssetIds`: files, links, or documents associated with this item
 - `missingFields`: derived list of fields that need user completion
 - `sourceRowRef`: source file, sheet, row, or paragraph reference for audit
 - `aiConfidence`: confidence for this row after AI import
+- `conflicts`: source conflicts or unsafe AI assumptions
+- `needsConfirmation`: whether the row needs human confirmation
 
 Important modeling rules:
 
 - Budget details do not belong inside `item`.
 - Names and ownership should be separated. For example, `公关传播@汤庆爽` should become `workstream = 公关传播`, `owner = 汤庆爽`.
 - If a source row contains `内容-267万`, split it into `item = 内容` and a budget candidate.
-- A row such as `风险及待确定项` should not become a normal workstream without review. It should map to Risk and Open Issues unless the user confirms otherwise.
+- A row such as `风险及待确定项` should not become a separate Risk module in Alpha. If it requires follow-up, create or update a control item and keep the uncertainty in `notes`, `blocker`, `missingFields`, or `conflicts`.
 - Missing optional fields should not block draft creation.
 - Missing essential fields should trigger AI clarification.
 
@@ -239,44 +240,35 @@ Rules:
 - Budget Flow Log must never be replaced by a mutable remaining-budget field.
 - AI can propose flows from source data, but user confirmation is required for high-impact financial mutations.
 
-## 7. Risk and Open Issues
+## 7. AI Import Diagnostics
 
-Risk and Open Issues are not ordinary tasks by default.
+AI Import Diagnostics make generated data trustworthy and editable.
 
-Canonical fields:
-
-- `title`
-- `description`
-- `type`: `BUDGET | SCHEDULE | RESOURCE | SCOPE | APPROVAL | EXTERNAL | OTHER`
-- `level`: `LOW | MEDIUM | HIGH | CRITICAL`
-- `status`: `OPEN | ACKNOWLEDGED | MITIGATED | CLOSED`
-- `owner`
-- `relatedControlItemId`
-- `relatedBudgetItemId`
-- `relatedCalendarId`
-- `suggestion`
-- `sourceRowRef`
-
-Import rules:
-
-- Rows named `风险`, `待确定项`, `问题`, `阻塞`, `待确认`, or similar should be routed here first.
-- If the user wants the risk managed as a task, link it to a control item instead of flattening it.
-
-## 8. Assets and References
-
-Assets support the project but should not become the primary project structure.
+Diagnostics belong on the official records whenever possible, especially control table rows.
 
 Canonical fields:
 
-- `title`
-- `type`: `DOCUMENT | LINK | FILE | NOTE`
-- `folder`
-- `content`
-- `url`
-- `version`
-- `relatedControlItemId`
-- `relatedCalendarId`
-- `sourceRef`
+- `aiConfidence`: `high | medium | low`
+- `sourceRef`: file, sheet, row, cell, paragraph, or source section
+- `missingFields`: fields the user can complete directly in the table
+- `conflicts`: source contradictions or unsafe AI assumptions
+- `needsConfirmation`: derived from low confidence, missing fields, or conflicts
+
+Rules:
+
+- Diagnostics must be visible where the user edits the data.
+- Low-confidence records should be editable, not blocked by a separate review queue.
+- Ambiguous budget signals should not become confirmed ledger entries.
+- Missing fields should be completed in the control table, budget ledger, or execution calendar.
+
+## Future Extensions: Risk, Open Issues, Assets
+
+Risk, open issues, and assets are not part of the current Alpha core.
+
+Future versions may restore them when the control-table loop is stable. Until then:
+
+- Rows named `风险`, `待确定项`, `问题`, `阻塞`, `待确认`, or similar should become control item notes, blockers, missing fields, or conflicts.
+- Files, links, and source references should stay attached to control items or activity summaries unless a dedicated asset intelligence module is explicitly restored.
 
 ## AI Import Pipeline
 
@@ -284,12 +276,12 @@ AI import must follow this pipeline:
 
 1. Detect source document type and candidate sheets/sections.
 2. Identify source structure and quality.
-3. Map raw source into canonical modules.
+3. Map raw source into the current Alpha core modules.
 4. Separate mixed fields, especially:
    - budget embedded in task names
    - owner embedded after `@`
    - channel mixed with owner in calendar cells
-   - risks mixed into normal task rows
+   - risks, blockers, and open questions mixed into normal task rows
 5. Mark confidence and source references.
 6. Ask only for essential missing information.
 7. Create a draft with visible gaps.
@@ -310,7 +302,7 @@ For messy sources, AI should produce a clear mapping summary:
 - what became control table rows
 - what became budget candidates
 - what became calendar entries
-- what became risks
+- what became control-table notes, blockers, missing fields, or conflicts
 - what could not be confidently mapped
 
 ## Current Sample Workbook Assessment
@@ -330,7 +322,8 @@ How ShadowPM should handle it:
 
 - Use it as an AI extraction stress test.
 - Do not copy its hierarchy directly into the product model.
-- Normalize it into Project Profile, Control Table, Budget Ledger, Execution Calendar, Progress Log, Risk/Open Issues, and Assets.
+- Normalize it into Project Profile, Control Table, Budget Ledger, Execution Calendar, Progress Log, and AI Import Diagnostics.
+- Keep risk/open-issue rows inside the control table as notes, blockers, missing fields, or conflicts during Alpha.
 
 ## Implementation Implications
 
@@ -343,6 +336,10 @@ Near-term implementation should evolve toward:
 - `BudgetFlow`
 - `CalendarEntry`
 - `ProgressChangeLog`
+- `AIImportDiagnostics`
+
+Future extensions, not current Alpha core:
+
 - `Risk`
 - `Asset`
 

@@ -26,8 +26,17 @@ const steps = [
   {
     icon: MessageSquareText,
     title: "5. 记录反馈",
-    detail: "重点反馈 AI 是否误判预算、日历、负责人和缺失字段。",
+    detail: "创建项目后，项目数据和反馈都会沉淀下来，便于产品团队复盘。",
   },
+];
+
+const checklist = [
+  "AI 有没有把预算估算误当成支出？",
+  "AI 有没有混淆渠道、负责人和内容？",
+  "项目管控表是否比原 Excel 更容易理解？",
+  "缺失字段能不能直接在表里补齐，而不是进入额外队列？",
+  "手动创建项目后，能不能顺手新增和维护管控事项？",
+  "哪些操作让你犹豫、不放心或点击太多？",
 ];
 
 export default function DemoPage() {
@@ -41,11 +50,12 @@ export default function DemoPage() {
           </div>
           <div className="max-w-3xl space-y-4">
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              上传一份混乱项目表格，测试 AI 是否能生成可用的项目管控系统
+              上传一份项目表格，测试 AI 是否能生成可编辑的项目管控工作区
             </h1>
             <p className="text-base leading-7 text-muted-foreground">
-              这个测试站用于收集 ShadowPM Alpha 反馈。请重点看 AI 是否正确生成可编辑的项目管控表，并同步生成预算流水和执行日历，而不是只评价页面是否好看。
-              也请测试手动创建项目、修改管控事项、记录预算和维护日历是否足够顺手。
+              这个测试站用于收集 ShadowPM Alpha 反馈。请重点测试 AI 上传后是否直接生成三件套：
+              项目管控总表、资金账本、执行日历。缺失字段应该能在表里直接补齐，不应该变成额外流程。
+              也请测试手动创建项目、修改管控事项、记录预算流转和维护执行日历是否足够顺手。
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -64,6 +74,20 @@ export default function DemoPage() {
             <Button asChild variant="outline" className="gap-2">
               <Link href="/guide">查看小白教程</Link>
             </Button>
+          </div>
+          <div className="grid gap-3 rounded-lg border bg-background p-4 text-sm text-muted-foreground sm:grid-cols-3">
+            <div>
+              <p className="font-medium text-foreground">测试账号</p>
+              <p className="mt-1">选择「林小夏」上传和创建项目；选择「陈鹏」查看反馈后台。</p>
+            </div>
+            <div>
+              <p className="font-medium text-foreground">数据会保留</p>
+              <p className="mt-1">你创建的项目、表格解析结果和反馈会被产品团队用于复盘。</p>
+            </div>
+            <div>
+              <p className="font-medium text-foreground">建议用电脑</p>
+              <p className="mt-1">Excel 上传、表格检查和字段编辑在桌面浏览器里最稳定。</p>
+            </div>
           </div>
         </div>
       </section>
@@ -106,11 +130,9 @@ export default function DemoPage() {
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-amber-950">
             <h2 className="text-sm font-semibold">请重点反馈</h2>
             <ul className="mt-3 space-y-2 text-sm leading-6">
-              <li>AI 有没有把预算估算误当成支出？</li>
-              <li>AI 有没有混淆渠道、负责人和内容？</li>
-              <li>项目管控表是否比原 Excel 更容易理解？</li>
-              <li>哪些缺失信息应该直接进入表格补齐？</li>
-              <li>哪些操作让你犹豫、不放心或点击太多？</li>
+              {checklist.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
             </ul>
           </div>
         </div>

@@ -89,6 +89,11 @@ model Task {
   priority    String     @default("P2") // P0 | P1 | P2 | P3
   deadline    DateTime?
   status      TaskStatus @default(PENDING)
+  aiConfidence     String?  // AI 导入行置信度：high | medium | low
+  sourceRef        String?  // AI 导入来源：文件/工作表/行列/段落
+  missingFields    Json     @default("[]") // 可在管控表内补齐的字段
+  conflicts        Json     @default("[]") // 源数据冲突或 AI 无法安全判断的信息
+  needsConfirmation Boolean @default(false) // 是否需要人工确认
 
   project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   phase   Phase?        @relation(fields: [phaseId], references: [id], onDelete: SetNull)
@@ -155,6 +160,8 @@ model BudgetFlow {
 }
 
 model Risk {
+  /// LEGACY: hidden from Alpha core. Do not build new product flows on this model.
+  /// Open issues and risks should live in control item notes/activity unless this model is explicitly restored.
   id          String   @id @default(cuid())
   projectId   String
   title       String?  // 风险标题；历史自动检测风险可为空
@@ -202,6 +209,8 @@ model ExecutionCalendarEntry {
 }
 
 model AssetFolder {
+  /// LEGACY: hidden from Alpha core. Do not build new product flows on this model.
+  /// Project references should not become a separate Alpha surface before the control table loop is stable.
   id        String  @id @default(cuid())
   projectId String
   name      String
@@ -227,6 +236,7 @@ model HealthSnapshot {
 }
 
 model AssetItem {
+  /// LEGACY: hidden from Alpha core. Do not build new product flows on this model.
   id       String    @id @default(cuid())
   folderId String
   title    String
@@ -239,6 +249,8 @@ model AssetItem {
 }
 
 model ImportDraft {
+  /// LEGACY: hidden from Alpha core. AI imports now create editable official records directly.
+  /// Do not rebuild a separate review queue unless Product Constitution is updated.
   id              String   @id @default(cuid())
   projectId       String
   sourceType      String   @default("AI_IMPORT") // AI_IMPORT | MANUAL_IMPORT

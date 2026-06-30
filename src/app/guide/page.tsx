@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 const sections = [
   {
     title: "0. 测试前准备",
-    items: ["打开测试网站链接", "准备一份项目 Excel", "没有自己的表格时，在 Demo 页面下载案例表格"],
+    items: ["打开测试网站链接", "准备一份项目 Excel", "没有自己的表格时，在 Demo 页面下载案例表格", "建议使用电脑浏览器"],
   },
   {
     title: "1. 打开测试入口",
@@ -14,7 +14,7 @@ const sections = [
   },
   {
     title: "2. 登录测试账号",
-    items: ["选择「林小夏」测试项目创建", "如果想看管理者视角，之后可以退出并选择「陈鹏」"],
+    items: ["选择「林小夏」测试项目创建", "点击后应进入 AI 工作台", "如果想看管理者视角，之后可以退出并选择「陈鹏」"],
   },
   {
     title: "3. 路线 A：新建 AI 项目",
@@ -46,7 +46,7 @@ const sections = [
   },
   {
     title: "10. 提交外测反馈",
-    items: ["回到项目页上方的「外测反馈」", "填写评分、AI 识别质量、上传结果和使用意愿", "勾选预算/日历/负责人/缺失信息问题", "手动测试可在文字里注明「这是手动创建测试」"],
+    items: ["回到项目页上方的「外测反馈」并点击展开", "填写评分、AI 识别质量、上传结果和使用意愿", "勾选预算/日历/负责人/缺失信息问题", "手动测试可在文字里注明「这是手动创建测试」"],
   },
 ];
 
@@ -68,7 +68,8 @@ export default function BeginnerGuidePage() {
               按这份教程走完一次上传、生成、检查和反馈
             </h1>
             <p className="text-base leading-7 text-muted-foreground">
-              你不需要懂项目管理系统，也不需要提前整理 Excel。测试目标是看 ShadowPM 能不能把混乱表格变成更清楚的项目管控工作区。
+              你不需要懂项目管理系统，也不需要提前整理 Excel。测试目标是看 ShadowPM 能不能把项目表格变成更清楚的项目管控工作区：
+              管控总表、资金账本、执行日历和项目活动记录。
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -89,6 +90,13 @@ export default function BeginnerGuidePage() {
       </section>
 
       <section className="mx-auto grid max-w-5xl gap-4 px-6 py-10 md:grid-cols-2">
+        <article className="rounded-lg border border-primary/20 bg-primary/5 p-5 md:col-span-2">
+          <h2 className="text-base font-semibold">测试时请记住</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            ShadowPM 不是任务管理工具。你要判断的是：AI 上传后，是否能直接形成一个可编辑、可追溯的项目管控工作区。
+            不确定的信息可以留空或写进备注，后续直接在表里补，不需要额外审核队列。
+          </p>
+        </article>
         {sections.map((section) => (
           <article key={section.title} className="rounded-lg border bg-card p-5">
             <h2 className="text-base font-semibold">{section.title}</h2>

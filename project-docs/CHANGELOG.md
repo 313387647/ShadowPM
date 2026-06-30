@@ -2,6 +2,36 @@
 
 *(Vibe Coding 规则：AI 在结束每一轮代码编写后，必须主动在此文件中追加记录)*
 
+## [2026-06-30] External Review Absorption & Alpha Test Polish
+
+### Critical review decisions
+- Accepted the review's core diagnosis: docs had narrowed, but canonical schema and Prisma still carried old Risk/Asset/ImportDraft gravity.
+- Kept Risk/Asset/ImportDraft tables for short-term compatibility, but marked them as legacy hidden Alpha models in `prisma/schema.prisma`.
+- Updated `CANONICAL_PROJECT_SCHEMA.md` so Alpha core is Project Profile, Control Table, Budget Ledger, Execution Calendar, Progress Change Log, and AI Import Diagnostics.
+
+### AI import safety
+- Added persistent AI diagnostics fields to `Task`: `aiConfidence`, `sourceRef`, `missingFields`, `conflicts`, `needsConfirmation`.
+- AI-created control items now save confidence/source/missing/conflict diagnostics directly on the official table row.
+- Extracted budget import safety rules to `src/lib/ai-import-rules.ts`.
+- AI budget rows now enter the official ledger only when the signal is non-low-confidence and looks like confirmed allocation.
+- Estimate/draft/low-confidence budget signals are kept in import diagnostics instead of becoming confirmed `ALLOCATE` flows.
+
+### Alpha UX simplification
+- Control table now surfaces AI confidence, source reference, missing fields, conflicts, and needs-confirmation hints inline.
+- Budget ledger Alpha UI now hides advanced split/merge/transfer/return/reduce operations while preserving the lower-level model.
+- Workspace project cards now distinguish confirmed budget, planned budget awaiting ledger confirmation, and AI-detected pending budget signals.
+- Login page now links back to the Demo entry and beginner guide so external testers can recover if they land on login first.
+- Control items with logs, budget flows, or calendar entries can no longer be hard-deleted; the app records a delete request instead.
+- Demo and guide pages now explain the external tester path and that created project data/feedback is retained for review.
+- Added `project-docs/EXTERNAL_TESTER_QUICKSTART.md` as the shareable tester tutorial.
+
+### Verification
+- `npx prisma generate`
+- `npx prisma db push`
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
 ## [2026-06-29] Review Docs & Repository Organization
 
 ### Documentation updated to current Alpha state

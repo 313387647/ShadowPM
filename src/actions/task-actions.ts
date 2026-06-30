@@ -384,15 +384,53 @@ export async function fillMissingTaskFields(formData: FormData): Promise<ActionR
 // ── 删除任务 ──
 
 export async function deleteTask(taskId: string): Promise<ActionResult> {
-  await assertCanWriteTask(taskId);
+  const { user } = await assertCanWriteTask(taskId);
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { projectId: true, name: true },
+    select: {
+      projectId: true,
+      name: true,
+      _count: { select: { logs: true, budgets: true, calendarEntries: true } },
+    },
   });
   if (!task) return { success: false, message: "任务不存在" };
 
-  await prisma.task.delete({ where: { id: taskId } });
+  const hasHistory = task._count.logs > 0 || task._count.budgets > 0 || task._count.calendarEntries > 0;
+  if (hasHistory) {
+    await prisma.activityLog.create({
+      data: {
+        projectId: task.projectId,
+        targetType: "CONTROL_ITEM",
+        targetId: taskId,
+        changeType: "DELETE_REQUEST",
+        summary: `🗂️ 管控事项「${task.name}」已有历史记录，已阻止硬删除。请改状态或在进度结论中说明取消原因。`,
+        beforeState: {
+          name: task.name,
+          counts: task._count,
+        },
+        source: "SYSTEM",
+        createdBy: user.name,
+      },
+    });
+    revalidatePath(`/projects/${task.projectId}`);
+    return { success: false, message: "该管控事项已有日志、预算或日历记录，不能硬删除。请改状态或在进度结论中说明取消原因。" };
+  }
+
+  await prisma.$transaction([
+    prisma.activityLog.create({
+      data: {
+        projectId: task.projectId,
+        targetType: "CONTROL_ITEM",
+        targetId: taskId,
+        changeType: "DELETE",
+        summary: `删除无历史管控事项：${task.name}`,
+        source: "HUMAN",
+        createdBy: user.name,
+      },
+    }),
+    prisma.task.delete({ where: { id: taskId } }),
+  ]);
   revalidatePath(`/projects/${task.projectId}`);
   return { success: true, message: `任务「${task.name}」已删除` };
 }

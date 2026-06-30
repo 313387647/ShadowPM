@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "ShadowPM - 轻量级智能项目管控系统",
-  description: "极简录入、账目清白、历史可溯、资产内聚、AI 赋能",
+  title: "ShadowPM - AI Native Project Management Platform",
+  description: "上传表格，生成可编辑项目管控表、资金账本、执行日历和可追溯项目活动。",
 };
 
 export default function RootLayout({

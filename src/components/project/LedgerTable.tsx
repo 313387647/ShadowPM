@@ -42,12 +42,7 @@ interface Props {
 const BUDGET_OPERATION_OPTIONS = [
   { value: "CONFIRM", label: "预算确定", hint: "确认项目预算池或总盘预算" },
   { value: "SUPPLEMENT", label: "预算增补", hint: "新增预算额度" },
-  { value: "REDUCE", label: "预算调减", hint: "减少已确认预算" },
   { value: "ALLOCATE", label: "分配到事项", hint: "从预算池分配给某个管控项" },
-  { value: "RETURN", label: "退回预算池", hint: "从事项退回未使用额度" },
-  { value: "TRANSFER", label: "事项间划拨", hint: "从一个事项转给另一个事项" },
-  { value: "SPLIT", label: "预算拆分", hint: "把一个预算项拆成多个执行项" },
-  { value: "MERGE", label: "预算合并", hint: "把预算项合并到目标事项" },
   { value: "EXPENSE", label: "实际支出", hint: "记录已发生费用" },
   { value: "REFUND", label: "支出退款", hint: "记录支出退款或冲销" },
 ] as const;
@@ -369,6 +364,9 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
           <DialogHeader>
             <DialogTitle>新增预算动作</DialogTitle>
           </DialogHeader>
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+            Alpha 阶段只开放高频预算动作。拆分、合并、事项间划拨等高级流转先保留在底层，避免外测用户误操作。
+          </div>
           <form ref={formRef} action={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1.5">

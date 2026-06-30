@@ -30,6 +30,9 @@ Required before sharing the URL:
 - [x] P0.3 project creation without confirmed budget
 - [x] P0.4 direct editable AI import without a separate review queue
 - [x] P0.5 remove independent risk/assets surfaces from the Alpha core
+- [x] AI diagnostics persist to control table rows
+- [x] AI budget estimates do not auto-create confirmed budget flows
+- [x] Alpha budget UI hides advanced operations
 - [ ] Shared deployment configured
 - [ ] Database initialized
 - [ ] Seed users available
@@ -91,7 +94,7 @@ project-docs/review-assets/one-million-project-control-sample.xlsx
 6. Create the project even if budget is missing.
 7. Confirm project detail page opens.
 8. Check:
-   - `任务总控`
+   - `管控总表`
    - `资金账本`
    - `执行日历`
    - `项目活动`
@@ -105,6 +108,7 @@ Send reviewers:
 
 - Test site URL
 - Recommended login user
+- `project-docs/EXTERNAL_TESTER_QUICKSTART.md`
 - `project-docs/BEGINNER_TUTORIAL.md`
 - `project-docs/USER_GUIDE.md`
 - The sample spreadsheet if they do not have repo access

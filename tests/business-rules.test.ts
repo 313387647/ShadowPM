@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Prisma } from "../src/generated/prisma/client";
 import { calculateBudgetSnapshot } from "../src/lib/budget";
+import { shouldCreateConfirmedBudgetFlow } from "../src/lib/ai-import-rules";
 
 describe("budget business rules", () => {
   it("treats BudgetFlow allocation as the financial source of truth", () => {
@@ -45,5 +46,39 @@ describe("budget business rules", () => {
 
     assert.equal(snapshot.consumed.toNumber(), 15000);
     assert.equal(snapshot.balance.toNumber(), 85000);
+  });
+});
+
+describe("AI import safety rules", () => {
+  it("does not turn estimates or low-confidence budget signals into confirmed allocations", () => {
+    assert.equal(shouldCreateConfirmedBudgetFlow({
+      amount: 200000,
+      type: "ESTIMATE",
+      status: "DRAFT",
+      confidence: "high",
+    }), false);
+
+    assert.equal(shouldCreateConfirmedBudgetFlow({
+      amount: 200000,
+      type: "ALLOCATE",
+      status: "APPROVED",
+      confidence: "low",
+    }), false);
+  });
+
+  it("allows only approved or explicit allocation budget signals into the ledger", () => {
+    assert.equal(shouldCreateConfirmedBudgetFlow({
+      amount: 200000,
+      type: "ALLOCATE",
+      status: "APPROVED",
+      confidence: "medium",
+    }), true);
+
+    assert.equal(shouldCreateConfirmedBudgetFlow({
+      amount: 200000,
+      type: "REFUND",
+      status: "SETTLED",
+      confidence: "high",
+    }), false);
   });
 });

@@ -8,9 +8,13 @@ import { Button } from "@/components/ui/button";
 import { deleteProject } from "@/actions/project-actions";
 
 export function ProjectCard({
-  id, name, totalBudget, startDate, endDate, taskCount,
+  id, name, totalBudget, confirmedBudget, pendingBudgetSignal, startDate, endDate, taskCount,
 }: {
-  id: string; name: string; totalBudget: number;
+  id: string;
+  name: string;
+  totalBudget: number;
+  confirmedBudget: number;
+  pendingBudgetSignal?: { total: number; count: number };
   startDate: Date | null; endDate: Date | null; taskCount: number;
 }) {
   const router = useRouter();
@@ -43,9 +47,38 @@ export function ProjectCard({
 
       <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
         <Coins className="size-4" />
-        <span className="font-mono font-medium text-foreground">
-          ¥{totalBudget.toLocaleString("zh-CN")}
-        </span>
+        <div className="min-w-0">
+          {confirmedBudget > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">已确认</span>
+              <span className="font-mono font-medium text-foreground">
+                ¥{confirmedBudget.toLocaleString("zh-CN")}
+              </span>
+              {totalBudget > 0 && totalBudget !== confirmedBudget && (
+                <span className="text-xs text-muted-foreground">
+                  / 计划 ¥{totalBudget.toLocaleString("zh-CN")}
+                </span>
+              )}
+            </div>
+          ) : totalBudget > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">计划预算</span>
+              <span className="font-mono font-medium text-foreground">
+                ¥{totalBudget.toLocaleString("zh-CN")}
+              </span>
+              <span className="text-xs text-amber-600">待确认入账</span>
+            </div>
+          ) : pendingBudgetSignal && pendingBudgetSignal.count > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-amber-600">待确认预算线索</span>
+              <span className="font-mono font-medium text-foreground">
+                ¥{pendingBudgetSignal.total.toLocaleString("zh-CN")}
+              </span>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">预算待确认</span>
+          )}
+        </div>
       </div>
 
       <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">

@@ -67,6 +67,15 @@ export default function LoginPage() {
           ))}
         </div>
 
+        <div className="flex items-center justify-center gap-4 text-xs text-gray-400">
+          <a href="/demo" className="hover:text-gray-600 underline underline-offset-2">
+            ← 返回 Demo 入口
+          </a>
+          <span>·</span>
+          <a href="/guide" className="hover:text-gray-600 underline underline-offset-2">
+            查看小白教程
+          </a>
+        </div>
         <p className="text-center text-xs text-gray-400">
           演示环境 · 点击任意用户直接登录
         </p>
