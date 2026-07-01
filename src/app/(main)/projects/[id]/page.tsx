@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Calendar, Coins, User } from "lucide-react";
+import { Calendar, Coins, Eye, User } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { getProjectDetail } from "@/actions/project-actions";
@@ -83,12 +83,24 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
                 : "未定"}
             </span>
             <Badge variant="secondary">{project._count.tasks} 个管控事项</Badge>
+            {!project.canEdit && (
+              <Badge variant="outline" className="gap-1">
+                <Eye className="size-3" />
+                只读巡视
+              </Badge>
+            )}
           </div>
         </div>
       </div>
 
+      {!project.canEdit && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-950">
+          当前以管理者视角查看该项目。你可以通盘查看管控表、活动、预算和日历，但只有项目主负责人 {project.owner.name} 可以编辑。
+        </div>
+      )}
+
       {/* 四 Tab 布局 */}
-      <Tabs defaultValue={activeTab} className="w-full">
+      <Tabs key={activeTab} defaultValue={activeTab} className="w-full">
         <TabsList className="w-full justify-start rounded-lg border bg-muted/40 p-1 h-auto gap-0">
           <TabsTrigger
             value="tasks"
@@ -121,11 +133,12 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
             projectId={params.id}
             tasks={tasks}
             phases={phases}
+            canEdit={project.canEdit}
           />
         </TabsContent>
 
         <TabsContent value="timeline" className="mt-4">
-          <TimelineView projectId={params.id} logs={timeline} tasks={taskOptions} />
+          <TimelineView projectId={params.id} logs={timeline} tasks={taskOptions} canEdit={project.canEdit} />
         </TabsContent>
 
         <TabsContent value="ledger" className="mt-4">
@@ -137,11 +150,12 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
             usagePercent={usagePercent}
             flows={flows}
             tasks={taskOptions}
+            canEdit={project.canEdit}
           />
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-4">
-          <ExecutionCalendarView projectId={params.id} entries={calendarEntries} tasks={taskOptions} />
+          <ExecutionCalendarView projectId={params.id} entries={calendarEntries} tasks={taskOptions} canEdit={project.canEdit} />
         </TabsContent>
       </Tabs>
 

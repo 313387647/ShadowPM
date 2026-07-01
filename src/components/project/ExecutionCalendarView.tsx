@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, CheckCircle2, CircleDashed, Search, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, CircleDashed, Loader2, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { updateCalendarEntry } from "@/actions/calendar-actions";
+import { deleteCalendarEntry, updateCalendarEntry } from "@/actions/calendar-actions";
 import { cn } from "@/lib/utils";
 
 type CalendarEntry = {
@@ -131,11 +132,13 @@ function ExecutionCalendarRow({
   entry,
   tasks,
   focused,
+  canEdit,
 }: {
   projectId: string;
   entry: CalendarEntry;
   tasks: TaskOption[];
   focused: boolean;
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const [date, setDate] = useState(toDateInputValue(entry.date));
@@ -150,6 +153,8 @@ function ExecutionCalendarRow({
   const [notes, setNotes] = useState(entry.notes ?? "");
   const [taskId, setTaskId] = useState(entry.taskId ?? "");
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const dirty =
     date !== toDateInputValue(entry.date) ||
@@ -165,7 +170,7 @@ function ExecutionCalendarRow({
     taskId !== (entry.taskId ?? "");
 
   async function save() {
-    if (!dirty || saving) return;
+    if (!canEdit || !dirty || saving) return;
     setSaving(true);
     try {
       const formData = new FormData();
@@ -196,6 +201,25 @@ function ExecutionCalendarRow({
     }
   }
 
+  async function confirmDelete() {
+    if (!canEdit || deleting) return;
+    setDeleting(true);
+    try {
+      const result = await deleteCalendarEntry(entry.id);
+      if (result.success) {
+        toast.success("执行日历已删除");
+        setDeleteOpen(false);
+        router.refresh();
+      } else {
+        toast.error(result.message ?? "删除失败");
+      }
+    } catch {
+      toast.error("删除失败");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   function saveOnEnter(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -218,6 +242,7 @@ function ExecutionCalendarRow({
             onChange={(event) => setDate(event.target.value)}
             onInput={(event) => setDate(event.currentTarget.value)}
             onKeyDown={saveOnEnter}
+            readOnly={!canEdit}
             title={date ? formatDate(date) : "日期待确认"}
             className={`w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background ${
               date ? "" : "font-medium text-amber-700"
@@ -232,6 +257,7 @@ function ExecutionCalendarRow({
             value={startTime}
             onChange={(event) => setStartTime(event.target.value)}
             onKeyDown={saveOnEnter}
+            readOnly={!canEdit}
             className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
           />
           <span className="text-muted-foreground/50">-</span>
@@ -240,6 +266,7 @@ function ExecutionCalendarRow({
             value={endTime}
             onChange={(event) => setEndTime(event.target.value)}
             onKeyDown={saveOnEnter}
+            readOnly={!canEdit}
             className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
           />
         </div>
@@ -249,6 +276,7 @@ function ExecutionCalendarRow({
           value={workstream}
           onChange={(event) => setWorkstream(event.target.value)}
           onKeyDown={saveOnEnter}
+          readOnly={!canEdit}
           placeholder="未分组"
           className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
         />
@@ -258,6 +286,7 @@ function ExecutionCalendarRow({
           value={channel}
           onChange={(event) => setChannel(event.target.value)}
           onKeyDown={saveOnEnter}
+          readOnly={!canEdit}
           placeholder="渠道待确认"
           className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
         />
@@ -267,6 +296,7 @@ function ExecutionCalendarRow({
           <select
             value={taskId}
             onChange={(event) => setTaskId(event.target.value)}
+            disabled={!canEdit}
             className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
           >
             <option value="">未关联</option>
@@ -292,6 +322,7 @@ function ExecutionCalendarRow({
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
+            readOnly={!canEdit}
             onKeyDown={(event) => {
               if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault();
@@ -305,6 +336,7 @@ function ExecutionCalendarRow({
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             onKeyDown={saveOnEnter}
+            readOnly={!canEdit}
             placeholder="备注"
             className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
           />
@@ -316,6 +348,7 @@ function ExecutionCalendarRow({
             value={owner}
             onChange={(event) => setOwner(event.target.value)}
             onKeyDown={saveOnEnter}
+            readOnly={!canEdit}
             placeholder="负责人"
             className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
           />
@@ -323,6 +356,7 @@ function ExecutionCalendarRow({
             value={department}
             onChange={(event) => setDepartment(event.target.value)}
             onKeyDown={saveOnEnter}
+            readOnly={!canEdit}
             placeholder="部门"
             className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
           />
@@ -332,6 +366,7 @@ function ExecutionCalendarRow({
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value)}
+          disabled={!canEdit}
           className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
         >
           <option value="PLANNED">计划中</option>
@@ -343,7 +378,7 @@ function ExecutionCalendarRow({
       <td className="px-3 py-2 text-muted-foreground">
         <div className="flex items-center justify-between gap-2">
           <span>{entry.source === "AI_IMPORT" ? "AI 导入" : "手动"}</span>
-          {dirty && (
+          {canEdit && dirty && (
             <Button
               size="sm"
               variant="outline"
@@ -356,6 +391,47 @@ function ExecutionCalendarRow({
           )}
         </div>
       </td>
+      {canEdit && (
+        <td className="px-3 py-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+            title="删除误排期"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>删除执行日历</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  <p className="font-medium">{entry.content}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatDate(entry.date)} {formatTime(entry) || ""} · {entry.channel ?? entry.workstream ?? "未分组"}
+                  </p>
+                </div>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  删除只移除这个执行排期，不会删除关联的管控事项。系统会在项目活动里保留删除记录，方便回溯误排期或测试数据。
+                </p>
+                <DialogFooter>
+                  <Button type="button" variant="ghost" onClick={() => setDeleteOpen(false)}>
+                    取消
+                  </Button>
+                  <Button type="button" variant="destructive" disabled={deleting} onClick={confirmDelete} className="gap-1.5">
+                    {deleting && <Loader2 className="size-3.5 animate-spin" />}
+                    确认删除
+                  </Button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </td>
+      )}
     </tr>
   );
 }
@@ -364,10 +440,12 @@ export function ExecutionCalendarView({
   projectId,
   entries,
   tasks,
+  canEdit,
 }: {
   projectId: string;
   entries: CalendarEntry[];
   tasks: TaskOption[];
+  canEdit: boolean;
 }) {
   const [mode, setMode] = useState<CalendarMode>("WEEK");
   const [filter, setFilter] = useState<CalendarFilter>("ALL");
@@ -613,7 +691,7 @@ export function ExecutionCalendarView({
       {entries.length > 0 && (
         <div className="grid gap-2 rounded-lg border bg-muted/10 p-3 lg:grid-cols-3">
           {[
-            { title: "按工作流", items: workstreamGroups },
+            { title: "按模块/执行线", items: workstreamGroups },
             { title: "按渠道", items: channelGroups },
             { title: "按负责人", items: ownerGroups },
           ].map((group) => (
@@ -674,7 +752,7 @@ export function ExecutionCalendarView({
               >
                 <p className="line-clamp-1 font-medium">{entry.content}</p>
                 <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">
-                  {[entry.workstream, entry.channel, entry.owner ?? entry.department].filter(Boolean).join(" · ") || "缺工作流/渠道/负责人"}
+                  {[entry.workstream, entry.channel, entry.owner ?? entry.department].filter(Boolean).join(" · ") || "缺模块/渠道/负责人"}
                 </p>
               </button>
             ))}
@@ -709,7 +787,7 @@ export function ExecutionCalendarView({
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索内容、渠道、工作流、负责人、备注"
+            placeholder="搜索内容、渠道、模块、负责人、备注"
             className="h-9 rounded-full pl-8 pr-9 text-xs"
             data-calendar-search="true"
           />
@@ -734,7 +812,7 @@ export function ExecutionCalendarView({
           <CalendarDays className="mb-3 size-6 text-muted-foreground/60" />
           <p className="text-sm text-muted-foreground">暂无正式执行日历</p>
           <p className="mt-1 text-xs text-muted-foreground/60">
-            AI 生成或手动排期的执行节点会出现在这里
+            本次上传未识别到可落日历的日期节点；管控事项会先进入总表，后续可从事项补日期并生成排期。
           </p>
         </div>
       ) : visibleEntries.length === 0 ? (
@@ -750,13 +828,14 @@ export function ExecutionCalendarView({
               <tr>
                 <th className="w-[110px] px-3 py-2 font-medium">日期</th>
                 <th className="w-[180px] px-3 py-2 font-medium">时间</th>
-                <th className="w-[140px] px-3 py-2 font-medium">工作流</th>
+                <th className="w-[140px] px-3 py-2 font-medium">模块/执行线</th>
                 <th className="w-[140px] px-3 py-2 font-medium">渠道</th>
                 <th className="w-[180px] px-3 py-2 font-medium">关联事项</th>
                 <th className="px-3 py-2 font-medium">内容</th>
                 <th className="w-[130px] px-3 py-2 font-medium">负责人/部门</th>
                 <th className="w-[96px] px-3 py-2 font-medium">状态</th>
                 <th className="w-[82px] px-3 py-2 font-medium">来源</th>
+                {canEdit && <th className="w-[64px] px-3 py-2 font-medium">操作</th>}
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -767,6 +846,7 @@ export function ExecutionCalendarView({
                   entry={entry}
                   tasks={tasks}
                   focused={focusedTaskId === entry.taskId}
+                  canEdit={canEdit}
                 />
               ))}
             </tbody>
@@ -788,7 +868,7 @@ function matchesCalendarQuery(entry: CalendarEntry, query: string) {
   const haystack = [
     entry.content,
     entry.channel ?? "渠道待确认",
-    entry.workstream ?? "工作流待确认",
+    entry.workstream ?? "模块待确认",
     entry.owner ?? "负责人待确认",
     entry.department ?? "部门待确认",
     entry.task?.name,

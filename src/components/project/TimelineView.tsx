@@ -61,7 +61,7 @@ type PendingBudget = {
   signal: string;
 } | null;
 
-interface Props { projectId: string; logs: Log[]; tasks: TaskOption[] }
+interface Props { projectId: string; logs: Log[]; tasks: TaskOption[]; canEdit: boolean }
 
 const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "ALL", label: "全部" },
@@ -105,7 +105,7 @@ const ACTIVITY_BLUEPRINTS = [
   },
 ];
 
-export function TimelineView({ projectId, logs, tasks }: Props) {
+export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -165,6 +165,7 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
   }, [open, query]);
 
   async function handleSubmit(formData: FormData) {
+    if (!canEdit) return;
     setSubmitting(true);
     try {
       const result = await addProgressLog(formData);
@@ -184,6 +185,7 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
   }
 
   async function handleGenerateSummary() {
+    if (!canEdit) return;
     setGeneratingSummary(true);
     try {
       const result = await generateProjectActivitySummary(projectId);
@@ -202,7 +204,7 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
   }
 
   async function handleAdoptAIAction(formData: FormData) {
-    if (!pendingAdoption) return;
+    if (!canEdit || !pendingAdoption) return;
     const key = `${pendingAdoption.activityLogId}-${pendingAdoption.actionIndex}`;
     setAdoptingAction(key);
     try {
@@ -225,7 +227,7 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
   }
 
   async function handleScheduleAIAction(formData: FormData) {
-    if (!pendingSchedule) return;
+    if (!canEdit || !pendingSchedule) return;
     const key = `${pendingSchedule.activityLogId}-${pendingSchedule.actionIndex}`;
     setSchedulingAction(key);
     try {
@@ -248,7 +250,7 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
   }
 
   async function handleAdoptAIBudget(formData: FormData) {
-    if (!pendingBudget) return;
+    if (!canEdit || !pendingBudget) return;
     const key = `${pendingBudget.activityLogId}-${pendingBudget.budgetIndex}`;
     setAdoptingBudget(key);
     try {
@@ -279,9 +281,13 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
             共 {logs.length} 条记录，包含人工进度、预算流转、执行日历与 AI 导入确认
           </p>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
-          <Plus className="size-3.5" />追加进度
-        </Button>
+        {canEdit ? (
+          <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+            <Plus className="size-3.5" />追加进度
+          </Button>
+        ) : (
+          <Badge variant="outline">只读活动流</Badge>
+        )}
       </div>
 
       {insight && (
@@ -293,17 +299,19 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
                   <Sparkles className="size-3.5 text-primary" />
                   <p className="text-sm font-medium">项目状态摘要</p>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleGenerateSummary}
-                  disabled={generatingSummary}
-                  className="h-7 gap-1.5 px-2 text-xs"
-                >
-                  {generatingSummary ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
-                  AI 提炼
-                </Button>
+                {canEdit && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleGenerateSummary}
+                    disabled={generatingSummary}
+                    className="h-7 gap-1.5 px-2 text-xs"
+                  >
+                    {generatingSummary ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
+                    AI 提炼
+                  </Button>
+                )}
               </div>
               {aiInsight && (
                 <AIInsightPanel insight={aiInsight} />
@@ -455,9 +463,9 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
                         schedulingKey={schedulingAction}
                         adoptingBudgetKey={adoptingBudget}
                         activityLogId={log.id}
-                        onAdopt={(activityLogId, actionIndex, action) => setPendingAdoption({ activityLogId, actionIndex, action })}
-                        onSchedule={(activityLogId, actionIndex, action) => setPendingSchedule({ activityLogId, actionIndex, action })}
-                        onAdoptBudget={(activityLogId, budgetIndex, signal) => setPendingBudget({ activityLogId, budgetIndex, signal })}
+                        onAdopt={canEdit ? (activityLogId, actionIndex, action) => setPendingAdoption({ activityLogId, actionIndex, action }) : undefined}
+                        onSchedule={canEdit ? (activityLogId, actionIndex, action) => setPendingSchedule({ activityLogId, actionIndex, action }) : undefined}
+                        onAdoptBudget={canEdit ? (activityLogId, budgetIndex, signal) => setPendingBudget({ activityLogId, budgetIndex, signal }) : undefined}
                       />
                     )}
                     {affectedTasks.length > 1 && (
@@ -611,7 +619,7 @@ export function TimelineView({ projectId, logs, tasks }: Props) {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium">工作流</label>
+                <label className="mb-1.5 block text-sm font-medium">模块/执行线</label>
                 <Input name="workstream" placeholder="如传播/执行/发布" className="h-9" />
               </div>
               <div>

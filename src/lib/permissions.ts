@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, type SessionUser } from "@/lib/auth";
+import { canReadProject, canWriteProject } from "@/lib/permission-rules";
 
 export async function requireCurrentUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
@@ -20,26 +21,28 @@ export async function requireCurrentUser(): Promise<SessionUser> {
 
 export async function assertCanReadProject(projectId: string): Promise<SessionUser> {
   const user = await requireCurrentUser();
-  if (user.role === "LEADER") return user;
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ownerId: user.id },
-    select: { id: true },
+    where: { id: projectId },
+    select: { id: true, ownerId: true },
   });
-  if (!project) throw new Error("无权访问此项目");
+  if (!project || !canReadProject({ userId: user.id, role: user.role, ownerId: project.ownerId })) {
+    throw new Error("无权访问此项目");
+  }
 
   return user;
 }
 
 export async function assertCanWriteProject(projectId: string): Promise<SessionUser> {
   const user = await requireCurrentUser();
-  if (user.role === "LEADER") return user;
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ownerId: user.id },
-    select: { id: true },
+    where: { id: projectId },
+    select: { id: true, ownerId: true },
   });
-  if (!project) throw new Error("无权修改此项目");
+  if (!project || !canWriteProject({ userId: user.id, role: user.role, ownerId: project.ownerId })) {
+    throw new Error("无权修改此项目");
+  }
 
   return user;
 }

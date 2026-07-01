@@ -37,6 +37,7 @@ interface Props {
   usagePercent: number;
   flows: Flow[];
   tasks: TaskOption[];
+  canEdit: boolean;
 }
 
 const BUDGET_OPERATION_OPTIONS = [
@@ -49,7 +50,7 @@ const BUDGET_OPERATION_OPTIONS = [
 
 const MOVEMENT_OPERATIONS = new Set(["TRANSFER", "SPLIT", "MERGE"]);
 
-export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usagePercent, flows, tasks }: Props) {
+export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usagePercent, flows, tasks, canEdit }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const formRef = useRef<HTMLFormElement>(null);
@@ -65,6 +66,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
   const [reversalReason, setReversalReason] = useState("");
 
   const normalizedQuery = query.trim().toLowerCase();
+  const selectedTask = taskFilter === "ALL" ? null : tasks.find((task) => task.id === taskFilter) ?? null;
   const visibleFlows = useMemo(() => {
     return flows.filter((flow) => {
       const matchesTask = taskFilter === "ALL" || flow.taskId === taskFilter;
@@ -93,7 +95,16 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
     window.setTimeout(() => setFocusedTaskId(null), 1800);
   }, [searchParams, tasks]);
 
+  function clearLedgerFilter() {
+    setQuery("");
+    setTaskFilter("ALL");
+    if (searchParams.get("ledgerTask")) {
+      router.replace(`${window.location.pathname}?tab=ledger`, { scroll: false });
+    }
+  }
+
   async function handleSubmit(formData: FormData) {
+    if (!canEdit) return;
     setSubmitting(true);
     try {
       const result = await recordBudget(formData);
@@ -113,7 +124,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
   }
 
   async function handleUpdateDescription() {
-    if (!editingFlow || submitting) return;
+    if (!canEdit || !editingFlow || submitting) return;
     setSubmitting(true);
     try {
       const formData = new FormData();
@@ -136,7 +147,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
   }
 
   async function handleReverseFlow() {
-    if (!reversingFlow || submitting) return;
+    if (!canEdit || !reversingFlow || submitting) return;
     setSubmitting(true);
     try {
       const formData = new FormData();
@@ -212,16 +223,25 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
         <p className="text-sm text-muted-foreground">
           显示 {visibleFlows.length} / {flows.length} 条流水记录
         </p>
-        <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
-          <Plus className="size-3.5" />
-          新增预算动作
-        </Button>
+        {canEdit ? (
+          <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+            <Plus className="size-3.5" />
+            新增预算动作
+          </Button>
+        ) : (
+          <Badge variant="outline">只读账本</Badge>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <select
           value={taskFilter}
-          onChange={(event) => setTaskFilter(event.target.value)}
+          onChange={(event) => {
+            setTaskFilter(event.target.value);
+            if (searchParams.get("ledgerTask")) {
+              router.replace(`${window.location.pathname}?tab=ledger`, { scroll: false });
+            }
+          }}
           className="h-9 min-w-48 rounded-md border bg-background px-3 text-xs outline-none"
         >
           <option value="ALL">全部事项</option>
@@ -242,10 +262,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
             <button
               type="button"
               aria-label="清空预算筛选"
-              onClick={() => {
-                setQuery("");
-                setTaskFilter("ALL");
-              }}
+              onClick={clearLedgerFilter}
               className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <X className="size-3.5" />
@@ -253,6 +270,18 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
           )}
         </div>
       </div>
+
+      {selectedTask && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">
+            当前只查看 <span className="font-medium text-foreground">{selectedTask.name}</span> 的预算流水。
+            这是从管控总表预算入口带来的聚焦筛选，不是数据丢失。
+          </span>
+          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={clearLedgerFilter}>
+            查看全部流水
+          </Button>
+        </div>
+      )}
 
       {/* Shadcn 风格表格 */}
       {flows.length === 0 ? (
@@ -280,7 +309,9 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
                   <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">金额</th>
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">事由</th>
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">操作人</th>
-                  <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">操作</th>
+                  {canEdit && (
+                    <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">操作</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -319,37 +350,39 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{flow.createdBy}</td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => {
-                            setEditingFlow(flow);
-                            setEditingDescription(flow.description);
-                          }}
-                        >
-                          <Pencil className="mr-1 size-3" />
-                          说明
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-[11px]"
-                          disabled={flow.operation === "REVERSAL"}
-                          onClick={() => {
-                            setReversingFlow(flow);
-                            setReversalReason("");
-                          }}
-                        >
-                          <RotateCcw className="mr-1 size-3" />
-                          冲正
-                        </Button>
-                      </div>
-                    </td>
+                    {canEdit && (
+                      <td className="px-4 py-2.5">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => {
+                              setEditingFlow(flow);
+                              setEditingDescription(flow.description);
+                            }}
+                          >
+                            <Pencil className="mr-1 size-3" />
+                            说明
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[11px]"
+                            disabled={flow.operation === "REVERSAL"}
+                            onClick={() => {
+                              setReversingFlow(flow);
+                              setReversalReason("");
+                            }}
+                          >
+                            <RotateCcw className="mr-1 size-3" />
+                            冲正
+                          </Button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

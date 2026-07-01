@@ -48,6 +48,7 @@ ShadowPM is not trying to become another task manager. Every item below must imp
 
 These items are required before ShadowPM should be considered ready for broader internal testing.
 
+- [x] P0 code scope completed and verified locally
 - [x] Update product documentation to match the current AI-native platform direction
 - [x] Move review sample assets into `project-docs/review-assets/`
 - [x] Publish latest Alpha review build to GitHub
@@ -57,7 +58,7 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Apply project access checks to project-scoped Server Actions
   - [x] Fix Copilot project context so it cannot read unrelated projects
   - [x] Replace forgeable plain session cookie with a signed and server-verifiable session strategy
-  - [ ] Add regression tests for cross-project read/write protection
+  - [x] Add regression tests for cross-project read/write protection
 - [x] P0.2 Budget ledger truth
   - [x] Unify budget formulas across Dashboard, Ledger, Copilot, and AI summaries
   - [x] Treat `Project.totalBudget` as planned/approved budget metadata
@@ -66,7 +67,7 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Compute consumed budget from `ABS(SUM(EXPENSE)) - SUM(REFUND)`
   - [x] Remove formulas that double-count `Project.totalBudget + initial ALLOCATE`
   - [x] Ensure manual budget entries reject invalid flow types and store `EXPENSE` as negative
-  - [ ] Add business tests for budget snapshots
+  - [x] Add business tests for budget snapshots
 - [x] P0.3 AI creation should not block on missing budget
   - [x] Require project name only
   - [x] Allow unknown or zero total budget when source does not contain a reliable budget pool
@@ -110,12 +111,15 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Add workstream/channel/owner/status grouping
   - [x] Improve overdue and upcoming signal density
   - [x] Keep channel and owner separate
+  - [x] Add control-table-to-calendar creation flow
+  - [x] Add calendar deletion for mistaken schedules while preserving activity logs
 - [x] P0.9 Business-rule tests
   - [x] Upgrade `npm test` to run typecheck plus business tests
   - [x] Cover budget balance from flow sum
   - [x] Cover planned budget not being double-counted as available budget
   - [x] Cover refund impact on consumed budget
   - [x] Cover AI low-confidence and estimate budgets not becoming confirmed allocations
+  - [x] Cover leader read-only and owner-only write permission rules
 
 - [x] P0.10 Alpha external testing polish
   - [x] Update demo entry for direct upload-and-feedback testing

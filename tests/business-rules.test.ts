@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "../src/generated/prisma/client";
 import { calculateBudgetSnapshot } from "../src/lib/budget";
 import { shouldCreateConfirmedBudgetFlow } from "../src/lib/ai-import-rules";
+import { canReadProject, canWriteProject } from "../src/lib/permission-rules";
 
 describe("budget business rules", () => {
   it("treats BudgetFlow allocation as the financial source of truth", () => {
@@ -41,11 +42,27 @@ describe("budget business rules", () => {
       plannedBudget: 100000,
       allocated: 100000,
       expense: -20000,
-      refund: 5000,
+      refund: 50000,
     });
 
-    assert.equal(snapshot.consumed.toNumber(), 15000);
-    assert.equal(snapshot.balance.toNumber(), 85000);
+    assert.equal(snapshot.consumed.toNumber(), 0);
+    assert.equal(snapshot.balance.toNumber(), 100000);
+  });
+
+  it("keeps budget reductions and expenses from double-counting planned budget", () => {
+    const snapshot = calculateBudgetSnapshot({
+      plannedBudget: 500000,
+      allocated: 300000,
+      expense: -120000,
+      refund: 20000,
+    });
+
+    assert.equal(snapshot.plannedBudget.toNumber(), 500000);
+    assert.equal(snapshot.allocated.toNumber(), 300000);
+    assert.equal(snapshot.consumed.toNumber(), 100000);
+    assert.equal(snapshot.balance.toNumber(), 200000);
+    assert.equal(snapshot.plannedVariance.toNumber(), -200000);
+    assert.equal(snapshot.usagePercent, 33);
   });
 });
 
@@ -80,5 +97,43 @@ describe("AI import safety rules", () => {
       status: "SETTLED",
       confidence: "high",
     }), false);
+  });
+});
+
+describe("project permission rules", () => {
+  it("allows leaders to read every project but not edit projects they do not own", () => {
+    assert.equal(canReadProject({
+      userId: "leader-1",
+      role: "LEADER",
+      ownerId: "member-1",
+    }), true);
+
+    assert.equal(canWriteProject({
+      userId: "leader-1",
+      role: "LEADER",
+      ownerId: "member-1",
+    }), false);
+  });
+
+  it("allows project owners to read and edit their own projects", () => {
+    const params = {
+      userId: "member-1",
+      role: "MEMBER",
+      ownerId: "member-1",
+    };
+
+    assert.equal(canReadProject(params), true);
+    assert.equal(canWriteProject(params), true);
+  });
+
+  it("blocks regular members from reading or editing other people's projects", () => {
+    const params = {
+      userId: "member-1",
+      role: "MEMBER",
+      ownerId: "member-2",
+    };
+
+    assert.equal(canReadProject(params), false);
+    assert.equal(canWriteProject(params), false);
   });
 });

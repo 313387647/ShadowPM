@@ -91,7 +91,7 @@ export async function getProjectTasks(projectId: string) {
 
 export async function createTask(formData: FormData): Promise<ActionResult> {
   const projectId = formData.get("projectId") as string;
-  await assertCanWriteProject(projectId);
+  const user = await assertCanWriteProject(projectId);
   const name = formData.get("name") as string;
   const assignee = (formData.get("assignee") as string) || null;
   const phaseId = (formData.get("phaseId") as string) || null;
@@ -122,23 +122,45 @@ export async function createTask(formData: FormData): Promise<ActionResult> {
       })
     : null;
 
-  await prisma.task.create({
-    data: {
-      projectId,
-      name: name.trim(),
-      assignee,
-      phaseId: phaseId || phase?.id || null,
-      description: description?.trim() || null,
-      notes: notes?.trim() || null,
-      department: department?.trim() || null,
-      priority,
-      status,
-      deadline: parseDateSafe(deadlineRaw),
-    },
+  const taskData = {
+    projectId,
+    name: name.trim(),
+    assignee,
+    phaseId: phaseId || phase?.id || null,
+    description: description?.trim() || null,
+    notes: notes?.trim() || null,
+    department: department?.trim() || null,
+    priority,
+    status,
+    deadline: parseDateSafe(deadlineRaw),
+  };
+
+  await prisma.$transaction(async (tx) => {
+    const task = await tx.task.create({ data: taskData });
+
+    await tx.activityLog.create({
+      data: {
+        projectId,
+        targetType: "CONTROL_ITEM",
+        targetId: task.id,
+        changeType: "CREATE",
+        summary: `新增管控事项：${task.name}`,
+        afterState: {
+          name: task.name,
+          assignee: task.assignee,
+          department: task.department,
+          priority: task.priority,
+          status: task.status,
+          deadline: formatDateValue(task.deadline),
+        },
+        source: "HUMAN",
+        createdBy: user.name,
+      },
+    });
   });
 
   revalidatePath(`/projects/${projectId}`);
-  return { success: true, message: "任务创建成功" };
+  return { success: true, message: "管控事项已创建，并写入项目活动" };
 }
 
 // ── 状态变更（按 API.md 约定：自动追加 ProgressLog） ──

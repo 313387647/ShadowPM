@@ -127,7 +127,7 @@ export async function addProgressLog(formData: FormData): Promise<ActionResult> 
 }
 
 export async function generateProjectActivitySummary(projectId: string): Promise<ActionResult<ProjectAIInsight>> {
-  const user = await assertCanReadProject(projectId);
+  const user = await assertCanWriteProject(projectId);
   if (!process.env.DEEPSEEK_API_KEY) return { success: false, message: "缺少 DEEPSEEK_API_KEY，暂时无法生成 AI 摘要" };
 
   const project = await prisma.project.findUnique({

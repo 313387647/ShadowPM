@@ -18,7 +18,8 @@ export function calculateBudgetSnapshot(input: BudgetInput) {
   const allocated = decimal(input.allocated);
   const expense = decimal(input.expense).abs();
   const refund = decimal(input.refund);
-  const consumed = expense.sub(refund);
+  const rawConsumed = expense.sub(refund);
+  const consumed = rawConsumed.lt(0) ? new Prisma.Decimal(0) : rawConsumed;
   const balance = allocated.sub(consumed);
   const usagePercent = allocated.gt(0)
     ? Math.round(consumed.div(allocated).times(100).toNumber())

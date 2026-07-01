@@ -170,7 +170,7 @@ export async function deleteProject(projectId: string): Promise<ActionResult> {
 }
 
 export async function getProjectDetail(projectId: string) {
-  await assertCanReadProject(projectId);
+  const user = await assertCanReadProject(projectId);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -186,5 +186,6 @@ export async function getProjectDetail(projectId: string) {
   return {
     ...project,
     totalBudget: project.totalBudget.toNumber(),
+    canEdit: project.ownerId === user.id,
   };
 }

@@ -2,14 +2,16 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Loader2, MessageSquarePlus, Plus } from "lucide-react";
+import { AlertTriangle, CalendarPlus, CheckCircle2, Loader2, MessageSquarePlus, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { TASK_STATUS_MAP } from "@/lib/constants";
-import { createTask, updateTask } from "@/actions/task-actions";
+import { createTask, deleteTask, updateTask } from "@/actions/task-actions";
 import { addProgressLog } from "@/actions/timeline-actions";
+import { createCalendarEntryFromTask } from "@/actions/calendar-actions";
 import { cn } from "@/lib/utils";
 
 type Task = {
@@ -22,6 +24,7 @@ type Task = {
   department: string | null;
   deadline: Date | string | null;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  phaseId: string | null;
   priority: string;
   aiConfidence?: string | null;
   sourceRef?: string | null;
@@ -229,9 +232,13 @@ function isEditingTarget(target: EventTarget | null) {
 function ControlTableRow({
   task,
   focused,
+  canEdit,
+  phases,
 }: {
   task: Task;
   focused: boolean;
+  canEdit: boolean;
+  phases?: PhaseOption[];
 }) {
   const router = useRouter();
   const [name, setName] = useState(task.name);
@@ -247,8 +254,14 @@ function ControlTableRow({
   const [logContent, setLogContent] = useState("");
   const [syncLogToNotes, setSyncLogToNotes] = useState(true);
   const [logging, setLogging] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const conflicts = normalizeStringList(task.conflicts);
   const hasImportDiagnostics = Boolean(task.aiConfidence || task.sourceRef || task.needsConfirmation || conflicts.length > 0);
+  const phaseName = phases?.find((phase) => phase.id === task.phaseId)?.name ?? "";
+  const hasHistory = task._count.logs > 0 || task._count.budgets > 0 || task._count.calendarEntries > 0;
 
   const missing = getMissingFields({
     ...task,
@@ -268,7 +281,7 @@ function ControlTableRow({
     status !== task.status;
 
   async function save() {
-    if (!dirty || saving) return;
+    if (!canEdit || !dirty || saving) return;
     setSaving(true);
     try {
       const formData = new FormData();
@@ -297,7 +310,7 @@ function ControlTableRow({
   }
 
   async function submitProgressLog() {
-    if (!logContent.trim() || logging) return;
+    if (!canEdit || !logContent.trim() || logging) return;
     setLogging(true);
     try {
       const formData = new FormData();
@@ -318,6 +331,46 @@ function ControlTableRow({
       toast.error("记录失败");
     } finally {
       setLogging(false);
+    }
+  }
+
+  async function submitSchedule(formData: FormData) {
+    if (!canEdit || scheduling) return;
+    setScheduling(true);
+    try {
+      formData.set("taskId", task.id);
+      const result = await createCalendarEntryFromTask(formData);
+      if (result.success) {
+        toast.success(result.message ?? "已创建执行日历");
+        setScheduleOpen(false);
+        router.push(`/projects/${task.projectId}?tab=calendar&calendarTask=${task.id}`);
+        router.refresh();
+      } else {
+        toast.error(result.message ?? "排期失败");
+      }
+    } catch {
+      toast.error("排期失败");
+    } finally {
+      setScheduling(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!canEdit || deleting) return;
+    setDeleting(true);
+    try {
+      const result = await deleteTask(task.id);
+      if (result.success) {
+        toast.success(result.message ?? "管控事项已删除");
+        setDeleteOpen(false);
+        router.refresh();
+      } else {
+        toast.error(result.message ?? "删除失败");
+      }
+    } catch {
+      toast.error("删除失败");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -370,6 +423,7 @@ function ControlTableRow({
             value={name}
             onChange={(event) => setName(event.target.value)}
             onKeyDown={saveOnEnter}
+            readOnly={!canEdit}
             placeholder="管控事项"
             className="w-full rounded border border-transparent bg-transparent px-1 py-1 font-medium leading-5 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
           />
@@ -377,6 +431,7 @@ function ControlTableRow({
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             onKeyDown={saveOnEnter}
+            readOnly={!canEdit}
             placeholder="详细描述"
             rows={2}
             className="w-full resize-none rounded border border-transparent bg-transparent px-1 py-1 text-[11px] leading-5 text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
@@ -389,6 +444,7 @@ function ControlTableRow({
           value={assignee}
           onChange={(event) => setAssignee(event.target.value)}
           onKeyDown={saveOnEnter}
+          readOnly={!canEdit}
           placeholder="待补"
           className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
         />
@@ -399,6 +455,7 @@ function ControlTableRow({
           value={department}
           onChange={(event) => setDepartment(event.target.value)}
           onKeyDown={saveOnEnter}
+          readOnly={!canEdit}
           placeholder="待补"
           className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
         />
@@ -412,6 +469,7 @@ function ControlTableRow({
             value={deadline}
             onChange={(event) => setDeadline(event.target.value)}
             onKeyDown={saveOnEnter}
+            readOnly={!canEdit}
             className={`w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background ${
               overdue ? "font-medium text-destructive" : ""
             }`}
@@ -422,6 +480,7 @@ function ControlTableRow({
         <Select
           value={status}
           onChange={(event) => setStatus(event.target.value as Task["status"])}
+          disabled={!canEdit}
           className="h-8 text-xs"
         >
           <option value="PENDING">待启动</option>
@@ -433,6 +492,7 @@ function ControlTableRow({
         <Select
           value={priority}
           onChange={(event) => setPriority(event.target.value)}
+          disabled={!canEdit}
           className="h-8 text-xs font-semibold"
         >
           <option value="P0">P0</option>
@@ -479,6 +539,17 @@ function ControlTableRow({
           >
             {task._count.calendarEntries}
           </Button>
+        ) : canEdit ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 gap-1 px-2 text-[11px]"
+            onClick={() => setScheduleOpen(true)}
+          >
+            <CalendarPlus className="size-3" />
+            排期
+          </Button>
         ) : (
           <span className="text-muted-foreground">0</span>
         )}
@@ -488,6 +559,7 @@ function ControlTableRow({
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
           onKeyDown={saveOnEnter}
+          readOnly={!canEdit}
           placeholder="暂无"
           className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-blue-600 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
         />
@@ -524,7 +596,7 @@ function ControlTableRow({
               ))}
             </div>
           )}
-          {dirty && (
+          {canEdit && dirty && (
             <Button
               size="sm"
               variant="outline"
@@ -537,43 +609,65 @@ function ControlTableRow({
           )}
         </div>
       </td>
+      {canEdit && (
+        <td className="px-3 py-2 text-right">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="mr-1 size-3" />
+            删除
+          </Button>
+        </td>
+      )}
       </tr>
       {historyOpen && (
         <tr className="border-t bg-primary/[0.03]">
-          <td colSpan={11} className="px-3 py-3">
+          <td colSpan={canEdit ? 12 : 11} className="px-3 py-3">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium">追加管控进展</p>
-                  <span className="text-[11px] text-muted-foreground">直接沉淀到该事项历史，不改变其他字段</span>
-                </div>
-                <textarea
-                  value={logContent}
-                  onChange={(event) => setLogContent(event.target.value)}
-                  placeholder="例如：供应商已反馈报价，待明天 12:00 前确认最终版本。"
-                  rows={3}
-                  className="w-full resize-none rounded-md border bg-background px-3 py-2 text-xs leading-5 outline-none placeholder:text-muted-foreground/50 focus:border-primary"
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={syncLogToNotes}
-                      onChange={(event) => setSyncLogToNotes(event.target.checked)}
-                      className="size-3.5 rounded border"
+                {canEdit ? (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium">追加管控进展</p>
+                      <span className="text-[11px] text-muted-foreground">直接沉淀到该事项历史，不改变其他字段</span>
+                    </div>
+                    <textarea
+                      value={logContent}
+                      onChange={(event) => setLogContent(event.target.value)}
+                      placeholder="例如：供应商已反馈报价，待明天 12:00 前确认最终版本。"
+                      rows={3}
+                      className="w-full resize-none rounded-md border bg-background px-3 py-2 text-xs leading-5 outline-none placeholder:text-muted-foreground/50 focus:border-primary"
                     />
-                    同时更新进度/结论
-                  </label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={submitProgressLog}
-                    disabled={logging || !logContent.trim()}
-                  >
-                    {logging ? "记录中" : "记录更新"}
-                  </Button>
-                </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={syncLogToNotes}
+                          onChange={(event) => setSyncLogToNotes(event.target.checked)}
+                          className="size-3.5 rounded border"
+                        />
+                        同时更新进度/结论
+                      </label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={submitProgressLog}
+                        disabled={logging || !logContent.trim()}
+                      >
+                        {logging ? "记录中" : "记录更新"}
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-md border border-dashed bg-background/60 px-3 py-4 text-xs leading-5 text-muted-foreground">
+                    当前为只读巡视模式。可查看该事项历史，但不能追加进度或改写当前结论。
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <p className="text-xs font-medium">最近更新</p>
@@ -604,6 +698,161 @@ function ControlTableRow({
           </td>
         </tr>
       )}
+      {(scheduleOpen || deleteOpen) && (
+        <tr>
+          <td colSpan={canEdit ? 12 : 11} className="p-0">
+            <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>从管控事项创建执行日历</DialogTitle>
+                </DialogHeader>
+                <form action={submitSchedule} className="space-y-3">
+            <div className="rounded-md bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              排期是明确执行节点，不会因为事项“进行中”自动生成。这里确认后才会写入执行日历。
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">日历内容</label>
+              <input
+                name="content"
+                required
+                defaultValue={task.name}
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">日期</label>
+                <input
+                  name="date"
+                  type="date"
+                  defaultValue={toDateInputValue(task.deadline)}
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">开始</label>
+                <input
+                  name="startTime"
+                  type="time"
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">结束</label>
+                <input
+                  name="endTime"
+                  type="time"
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">模块/执行线</label>
+                <input
+                  name="workstream"
+                  defaultValue={phaseName}
+                  placeholder="例如：公关传播"
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">渠道</label>
+                <input
+                  name="channel"
+                  placeholder="例如：视频号/新闻稿/线下活动"
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">负责人</label>
+                <input
+                  name="owner"
+                  defaultValue={task.assignee ?? ""}
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">部门</label>
+                <input
+                  name="department"
+                  defaultValue={task.department ?? ""}
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">备注</label>
+              <input
+                name="notes"
+                placeholder="可留空，例如：排期待最终确认"
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+              />
+            </div>
+            <input type="hidden" name="status" value="PLANNED" />
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setScheduleOpen(false)}>
+                取消
+              </Button>
+              <Button type="submit" disabled={scheduling} className="gap-1.5">
+                {scheduling && <Loader2 className="size-3.5 animate-spin" />}
+                写入执行日历
+              </Button>
+            </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{hasHistory ? "不能直接删除该事项" : "删除管控事项"}</DialogTitle>
+                </DialogHeader>
+                {hasHistory ? (
+                  <div className="space-y-3">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+                「{task.name}」已有日志、预算或日历记录。为了保证项目历史和资金账本可追溯，不能硬删除。
+              </div>
+              <p className="text-sm text-muted-foreground">
+                建议打开日志，在“追加管控进展”里记录取消原因，或把进度/结论改为不再执行。
+              </p>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setDeleteOpen(false)}>
+                  关闭
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setDeleteOpen(false);
+                    setHistoryOpen(true);
+                  }}
+                >
+                  去记录取消原因
+                </Button>
+              </DialogFooter>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                这会删除误建的管控事项「{task.name}」。删除后不可恢复。
+              </p>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setDeleteOpen(false)}>
+                  取消
+                </Button>
+                <Button type="button" variant="destructive" disabled={deleting} onClick={confirmDelete}>
+                  {deleting ? "删除中" : "确认删除"}
+                </Button>
+              </DialogFooter>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
+          </td>
+        </tr>
+      )}
     </Fragment>
   );
 }
@@ -612,10 +861,12 @@ export function ProjectControlTable({
   projectId,
   tasks,
   phases,
+  canEdit,
 }: {
   projectId: string;
   tasks: Task[];
   phases: PhaseOption[];
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const createFormRef = useRef<HTMLFormElement>(null);
@@ -691,7 +942,7 @@ export function ProjectControlTable({
   }, [searchParams, tasks]);
 
   async function handleCreate(formData: FormData) {
-    if (creating) return;
+    if (!canEdit || creating) return;
     setCreating(true);
     try {
       formData.set("projectId", projectId);
@@ -736,26 +987,30 @@ export function ProjectControlTable({
         <div>
           <p className="text-sm font-medium">项目管控表</p>
           <p className="text-xs text-muted-foreground">
-            直接编辑事项、负责人、部门、截止、状态、优先级和进度结论
+            {canEdit
+              ? "直接编辑事项、负责人、部门、截止、状态、优先级和进度结论"
+              : "只读查看事项、负责人、部门、截止、状态、优先级和进度结论"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 gap-1.5"
-            onClick={() => setShowCreate((value) => !value)}
-          >
-            <Plus className="size-3.5" />
-            新增管控事项
-          </Button>
+          {canEdit && (
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => setShowCreate((value) => !value)}
+            >
+              <Plus className="size-3.5" />
+              新增管控事项
+            </Button>
+          )}
           <Badge variant={overdueCount > 0 ? "destructive" : "outline"}>
             {overdueCount} 个逾期事项
           </Badge>
         </div>
       </div>
 
-      {showCreate && (
+      {canEdit && showCreate && (
         <form
           ref={createFormRef}
           action={handleCreate}
@@ -788,7 +1043,7 @@ export function ProjectControlTable({
               list="control-phase-options"
               value={createDraft.phaseName}
               onChange={(event) => updateCreateDraft({ phaseName: event.target.value, template: "custom" })}
-              placeholder="模块/工作流，例如：公关传播"
+              placeholder="模块/执行线，例如：公关传播"
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary"
             />
             <datalist id="control-phase-options">
@@ -930,7 +1185,7 @@ export function ProjectControlTable({
                 </p>
               </div>
             ) : (
-              <table className="w-full min-w-[1040px] text-left text-xs">
+              <table className={cn("w-full text-left text-xs", canEdit ? "min-w-[1120px]" : "min-w-[1040px]")}>
                 <thead className="border-b bg-muted/40 text-muted-foreground">
                   <tr>
                     <th className="min-w-56 px-3 py-2 font-medium">管控事项</th>
@@ -944,16 +1199,19 @@ export function ProjectControlTable({
                     <th className="w-20 px-3 py-2 text-right font-medium">日历</th>
                     <th className="min-w-48 px-3 py-2 font-medium">进度/结论</th>
                     <th className="w-36 px-3 py-2 font-medium">待补</th>
+                    {canEdit && <th className="w-20 px-3 py-2 text-right font-medium">操作</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {visibleTasks.map((task) => {
                     return (
-                      <ControlTableRow
-                        key={task.id}
-                        task={task}
-                        focused={focusedTaskId === task.id}
-                      />
+                    <ControlTableRow
+                      key={task.id}
+                      task={task}
+                      focused={focusedTaskId === task.id}
+                      canEdit={canEdit}
+                      phases={phases}
+                    />
                     );
                   })}
                 </tbody>

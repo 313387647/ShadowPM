@@ -2,6 +2,28 @@
 
 *(Vibe Coding 规则：AI 在结束每一轮代码编写后，必须主动在此文件中追加记录)*
 
+## [2026-07-01] P0 Code Scope Closure
+
+### Permission rules
+- Extracted pure project access rules into `src/lib/permission-rules.ts`.
+- Kept LEADER users able to read all projects while restricting writes to project owners only.
+- Updated `src/lib/permissions.ts` to use the shared read/write rules after fetching the project owner.
+- Added regression coverage for leader read-only access, owner write access, and member cross-project denial.
+
+### Budget rules
+- Hardened `calculateBudgetSnapshot` so refunds cannot make consumed budget negative.
+- Added budget snapshot coverage for planned budget separation, confirmed allocation, consumed budget, balance, planned variance, and usage percent.
+- Updated the ledger action comment to reflect that `Project.totalBudget` is planned metadata and `BudgetFlow` aggregates are the financial truth.
+
+### Calendar and control-table closure
+- Added execution-calendar deletion for mistaken schedules while preserving project activity logs.
+- Clarified in the roadmap that calendar entries are formal execution nodes, not an automatic mirror of all active control items.
+
+### Verification
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
 ## [2026-06-30] External Review Absorption & Alpha Test Polish
 
 ### Critical review decisions

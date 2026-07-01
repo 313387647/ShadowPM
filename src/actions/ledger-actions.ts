@@ -57,7 +57,7 @@ export async function getProjectLedger(projectId: string) {
 }
 
 // ── Event-Sourcing 动态结余 ──
-// 结余 = 项目总预算 + SUM(BudgetFlow.amount)
+// Project.totalBudget is planned metadata; BudgetFlow aggregates are the financial truth.
 // 使用 Prisma.Decimal 完成所有运算，前端收到纯 number
 
 export async function getProjectBudgetBalance(projectId: string) {
