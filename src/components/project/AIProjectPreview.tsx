@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CalendarDays, Loader2, Plus, Sparkles, Table2, Upload, WalletCards, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, Loader2, Plus, Sparkles, Table2, Upload, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { AIParsedProject, CreateProjectFromAIDTO } from "@/actions/ai-actions";
 import { parseDocumentForProject, createProjectFromAI } from "@/actions/ai-actions";
+import { buildAIImportPlan } from "@/lib/ai-import-plan";
 
 type Step = "upload" | "loading" | "clarify" | "preview" | "creating";
 
@@ -36,6 +37,7 @@ export function AIProjectCreator({ onClose }: Props) {
       missingFields: project.missingFields,
       conflicts: project.conflicts,
       createBudgetFlow: Boolean(project.totalBudget && project.totalBudget > 0),
+      sourceEvidence: project.sourceEvidence,
     };
   }
 
@@ -101,32 +103,16 @@ export function AIProjectCreator({ onClose }: Props) {
   }
 
   function getRequiredGaps(draft: CreateProjectFromAIDTO | null) {
-    if (!draft) return [];
-    const gaps: string[] = [];
-    if (!draft.projectName.trim()) gaps.push("项目名称");
-    if (!draft.tasks.some((task) => task.name.trim())) gaps.push("至少一条管控事项");
-    return gaps;
+    return draft ? buildAIImportPlan(draft).requiredGaps : [];
   }
 
   function getOptionalGapSummary(draft: CreateProjectFromAIDTO | null) {
-    if (!draft) return [];
-    const gaps: string[] = [];
-    if (!draft.totalBudget || draft.totalBudget <= 0) gaps.push("预算池待确认");
-    if (!draft.startDate || !draft.endDate) gaps.push("项目周期不完整");
-
-    const namedTasks = draft.tasks.filter((task) => task.name.trim());
-    const missingAssignee = namedTasks.filter((task) => !task.assignee?.trim()).length;
-    const missingDeadline = namedTasks.filter((task) => !task.deadline).length;
-    const missingDepartment = namedTasks.filter((task) => !task.department?.trim()).length;
-
-    if (missingAssignee > 0) gaps.push(`${missingAssignee} 条事项缺负责人`);
-    if (missingDeadline > 0) gaps.push(`${missingDeadline} 条事项缺截止日期`);
-    if (missingDepartment > 0) gaps.push(`${missingDepartment} 条事项缺负责部门`);
-    return gaps;
+    return draft ? buildAIImportPlan(draft).optionalGaps : [];
   }
 
   function shouldClarify(draft: CreateProjectFromAIDTO) {
-    return getRequiredGaps(draft).length > 0 || getOptionalGapSummary(draft).length > 0;
+    const plan = buildAIImportPlan(draft);
+    return plan.requiredGaps.length > 0 || plan.clarificationQuestions.length > 0;
   }
 
   // ── Upload phase ──
@@ -248,7 +234,7 @@ export function AIProjectCreator({ onClose }: Props) {
             <textarea
               name="text"
               rows={6}
-              placeholder="粘贴项目 Brief 或方案文本...&#10;&#10;例如：&#10;项目名称：仰望一万台整合营销&#10;预算：500万元&#10;时间：2026年6月-12月&#10;&#10;主要模块：&#10;1. 公关传播线，林小夏负责，8月15日前&#10;2. 社交媒体线，赵雨桐负责，9月30日前"
+              placeholder="粘贴项目 Brief 或方案文本...&#10;&#10;例如：&#10;项目名称：Aster X9 国内上市整合传播&#10;预算：520万元&#10;时间：2026年7月-9月&#10;&#10;主要模块：&#10;1. 媒体公关，周予安负责，7月25日前&#10;2. 社交内容，许闻澜负责，7月20日前"
               className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
             />
             <div className="flex justify-end">
@@ -291,6 +277,35 @@ export function AIProjectCreator({ onClose }: Props) {
       {/* ── Step: Clarify ── */}
       {step === "clarify" && edited && (
         <div className="space-y-4">
+          {(() => {
+            const importPlan = buildAIImportPlan(edited);
+            return (
+              <div className="rounded-xl border bg-background p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">AI 只保留必要确认</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      不确定的信息不会阻塞创建，会进入管控表、预算账本或日历后人工补齐。
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                    {importPlan.canCreateNow ? "可直接创建" : "需先补必填"}
+                  </span>
+                </div>
+                {importPlan.clarificationQuestions.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    {importPlan.clarificationQuestions.map((question) => (
+                      <div key={question} className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                        <span>{question}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="rounded-xl border bg-muted/30 p-4">
             <div className="flex items-start gap-3">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -370,6 +385,51 @@ export function AIProjectCreator({ onClose }: Props) {
       {/* ── Step: Preview ── */}
       {step === "preview" && edited && (
         <div className="space-y-4 max-h-[60vh] overflow-y-auto -mx-2 px-2">
+          {(() => {
+            const importPlan = buildAIImportPlan(edited);
+            return (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold">AI 写入计划</p>
+                      <span className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                        {importPlan.canCreateNow ? "可以创建，缺口进表补" : "仍缺必填项"}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                      <div className="rounded-md bg-background px-2 py-1.5">
+                        <p className="text-[11px] text-muted-foreground">管控事项</p>
+                        <p className="text-sm font-semibold">{importPlan.controlItemCount} 条</p>
+                      </div>
+                      <div className="rounded-md bg-background px-2 py-1.5">
+                        <p className="text-[11px] text-muted-foreground">确认入账</p>
+                        <p className="text-sm font-semibold">{importPlan.confirmedBudgetFlowCount} 条</p>
+                      </div>
+                      <div className="rounded-md bg-background px-2 py-1.5">
+                        <p className="text-[11px] text-muted-foreground">执行日历</p>
+                        <p className="text-sm font-semibold">{importPlan.calendarEntryCount} 条</p>
+                      </div>
+                      <div className="rounded-md bg-background px-2 py-1.5">
+                        <p className="text-[11px] text-muted-foreground">需补齐</p>
+                        <p className="text-sm font-semibold">{importPlan.rowsWithDiagnostics} 行</p>
+                      </div>
+                    </div>
+                    {(importPlan.deferredBudgetCandidateCount > 0 || importPlan.calendarNeedsConfirmationCount > 0 || importPlan.lowConfidenceTasks > 0) && (
+                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                        {importPlan.deferredBudgetCandidateCount > 0 ? `${importPlan.deferredBudgetCandidateCount} 条预算候选不会自动入账，` : ""}
+                        {importPlan.calendarNeedsConfirmationCount > 0 ? `${importPlan.calendarNeedsConfirmationCount} 条日历需要补日期/负责人，` : ""}
+                        {importPlan.lowConfidenceTasks > 0 ? `${importPlan.lowConfidenceTasks} 条低置信事项会标记待确认，` : ""}
+                        创建后可直接在对应表格内修改。
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Confidence warning */}
           {parsed?.confidence === "low" && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">

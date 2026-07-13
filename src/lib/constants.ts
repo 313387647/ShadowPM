@@ -50,8 +50,8 @@ export const PROJECT_DEFAULT_FOLDERS = [
 
 // 侧边栏导航菜单
 export const NAV_ITEMS = [
-  { label: "AI 工作台", href: "/workspace", roles: [ROLES.LEADER, ROLES.MEMBER] },
+  { label: "工作台", href: "/workspace", roles: [ROLES.LEADER, ROLES.MEMBER] },
   { label: "全局大盘", href: "/dashboard", roles: [ROLES.LEADER] },
   { label: "外测反馈", href: "/feedback", roles: [ROLES.LEADER] },
-  { label: "团队负载", href: "/team", roles: [ROLES.LEADER] },
+  { label: "团队权限", href: "/team", roles: [ROLES.LEADER] },
 ] as const

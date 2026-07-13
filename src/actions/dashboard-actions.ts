@@ -106,7 +106,7 @@ export async function getProjectsHealth() {
   const projects = await prisma.project.findMany({
     include: {
       owner: { select: { name: true } },
-      tasks: { select: { id: true, status: true, deadline: true } },
+      tasks: { select: { id: true, status: true, deadline: true, assignee: true } },
       _count: { select: { tasks: true } },
     },
     orderBy: { createdAt: "asc" },
@@ -168,6 +168,12 @@ export async function getProjectsHealth() {
     const hasOverdueTasks = p.tasks.some(
       (t) => t.deadline && new Date(t.deadline) < now && t.status !== "COMPLETED"
     );
+    const overdueCount = p.tasks.filter(
+      (t) => t.deadline && new Date(t.deadline) < now && t.status !== "COMPLETED"
+    ).length;
+    const missingOwnerCount = p.tasks.filter((t) => !t.assignee?.trim()).length;
+    const pendingCount = p.tasks.filter((t) => t.status === "PENDING").length;
+    const inProgressCount = p.tasks.filter((t) => t.status === "IN_PROGRESS").length;
 
     const isAtRisk = budget.usagePercent > 90 || hasOverdueTasks;
 
@@ -184,7 +190,146 @@ export async function getProjectsHealth() {
       completedTasks,
       taskProgress,
       hasOverdueTasks,
+      overdueCount,
+      missingOwnerCount,
+      pendingCount,
+      inProgressCount,
       isAtRisk,
     };
   });
+}
+
+export async function getLeaderDashboardAttention() {
+  const user = await requireCurrentUser();
+  if (user.role !== "LEADER") throw new Error("仅 Leader 可访问");
+
+  const now = new Date();
+  const nextSevenDays = new Date(now.getTime() + 7 * 86400000);
+
+  const [attentionTasks, upcomingCalendarEntries, projectCount, projectsWithTasks] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        status: { not: "COMPLETED" },
+        OR: [
+          { assignee: null },
+          { assignee: "" },
+          { deadline: null },
+          { deadline: { lt: now } },
+          { deadline: { lte: nextSevenDays }, status: "PENDING" },
+        ],
+      },
+      select: {
+        id: true,
+        projectId: true,
+        name: true,
+        status: true,
+        priority: true,
+        assignee: true,
+        department: true,
+        deadline: true,
+      },
+      orderBy: [{ deadline: "asc" }, { priority: "asc" }],
+      take: 12,
+    }),
+    prisma.executionCalendarEntry.findMany({
+      where: {
+        status: { notIn: ["DONE", "CANCELED"] },
+        OR: [
+          { date: null },
+          { date: { gte: now, lte: nextSevenDays } },
+        ],
+      },
+      select: {
+        id: true,
+        projectId: true,
+        taskId: true,
+        date: true,
+        startTime: true,
+        channel: true,
+        workstream: true,
+        content: true,
+        owner: true,
+        status: true,
+        project: { select: { id: true, name: true } },
+      },
+      orderBy: [{ date: "asc" }, { createdAt: "desc" }],
+      take: 10,
+    }),
+    prisma.project.count(),
+    prisma.project.findMany({
+      select: {
+        id: true,
+        name: true,
+        owner: { select: { name: true } },
+        tasks: { select: { status: true, deadline: true, assignee: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    }),
+  ]);
+
+  const projectBriefs = projectsWithTasks.map((project) => {
+    const total = project.tasks.length;
+    const completed = project.tasks.filter((task) => task.status === "COMPLETED").length;
+    const overdue = project.tasks.filter((task) => task.deadline && task.deadline < now && task.status !== "COMPLETED").length;
+    const missingOwner = project.tasks.filter((task) => !task.assignee?.trim()).length;
+    const active = project.tasks.filter((task) => task.status !== "COMPLETED").length;
+
+    return {
+      id: project.id,
+      name: project.name,
+      ownerName: project.owner.name,
+      total,
+      active,
+      completed,
+      overdue,
+      missingOwner,
+      progress: total > 0 ? Math.round((completed / total) * 100) : 0,
+    };
+  });
+  const attentionProjectIds = Array.from(new Set(attentionTasks.map((task) => task.projectId)));
+  const attentionProjects = attentionProjectIds.length > 0
+    ? await prisma.project.findMany({
+        where: { id: { in: attentionProjectIds } },
+        select: { id: true, name: true, owner: { select: { name: true } } },
+      })
+    : [];
+  const attentionProjectById = new Map(attentionProjects.map((project) => [project.id, project]));
+
+  return {
+    projectCount,
+    attentionTasks: attentionTasks.map((task) => ({
+      id: task.id,
+      name: task.name,
+      status: task.status,
+      priority: task.priority,
+      assignee: task.assignee,
+      department: task.department,
+      deadline: task.deadline,
+      projectId: task.projectId,
+      projectName: attentionProjectById.get(task.projectId)?.name ?? "未知项目",
+      ownerName: attentionProjectById.get(task.projectId)?.owner.name ?? "未知负责人",
+      signals: [
+        !task.assignee?.trim() ? "缺负责人" : null,
+        !task.deadline ? "缺截止日期" : null,
+        task.deadline && task.deadline < now ? "已逾期" : null,
+        task.deadline && task.deadline <= nextSevenDays && task.status === "PENDING" ? "临近未启动" : null,
+      ].filter((item): item is string => Boolean(item)),
+    })),
+    upcomingCalendarEntries: upcomingCalendarEntries.map((entry) => ({
+      id: entry.id,
+      projectId: entry.projectId,
+      projectName: entry.project.name,
+      taskId: entry.taskId,
+      date: entry.date,
+      startTime: entry.startTime,
+      channel: entry.channel,
+      workstream: entry.workstream,
+      content: entry.content,
+      owner: entry.owner,
+      status: entry.status,
+      isUnscheduled: !entry.date,
+    })),
+    projectBriefs,
+  };
 }

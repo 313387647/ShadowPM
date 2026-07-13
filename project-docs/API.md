@@ -1,113 +1,52 @@
-# Server Actions API
+# ShadowPM Server API Map
 
-ShadowPM uses Next.js Server Actions instead of traditional API routes.
+ShadowPM uses Next.js Server Actions for authenticated application mutations and Route Handlers for downloadable or public protocol endpoints.
 
-All backend mutations and reads live in `src/actions/` and should remain typed, permission-aware, and aligned with `PRODUCT_PRINCIPLES.md`.
+## Authentication And Permissions
 
-## AI Import And Copilot
+- `auth-actions.ts`: demo login, signed session cookie, logout.
+- `permissions.ts`: current-user validation plus project/task read and write assertions.
+- `permission-rules.ts`: pure owner, leader, editor, and viewer rules used by tests.
 
-### `src/actions/ai-actions.ts`
+Every project mutation resolves authorization from project ownership or explicit `ProjectMember` role. A control-item assignee is business ownership, not edit authorization.
 
-- Parses pasted briefs and uploaded spreadsheet content into structured project drafts.
-- Creates the project profile, editable control table, direct budget ledger flows, and execution calendar entries.
-- Should continue moving toward confidence scoring, conflict detection, and missing-field classification without reintroducing a second import review queue.
+## Project Creation And Control
 
-### `src/actions/copilot-actions.ts`
+- `project-actions.ts`: manual creation, workspace project list, project detail, project deletion.
+- `ai-actions.ts`: document extraction, canonical AI draft validation, transactional project creation, source-evidence retention.
+- `task-actions.ts`: control-item read/create/update/delete and traceable changes.
+- `timeline-actions.ts`: append-only progress records and project activity reads.
+- `member-actions.ts`: owner-managed editor/viewer collaborators.
 
-- Handles natural-language project queries and AI action suggestions.
-- Converts AI suggestions into controlled mutations only after user confirmation.
-- Supports task, calendar, budget, and project-control attention queries.
+## Budget And Calendar
 
-## Project And Workspace
+- `ledger-actions.ts`: append-only budget flows and project budget snapshots.
+- `calendar-actions.ts`: execution-calendar CRUD and control-item linkage.
+- `GET /api/projects/[id]/export`: authenticated canonical Excel workbook export.
+- `GET /api/share/[token]/calendar.ics`: public, token-protected, read-only ICS feed.
 
-### `src/actions/project-actions.ts`
+Budget formulas live in `src/lib/budget.ts`; warning semantics live in `src/lib/budget-signals.ts`. `Project.totalBudget` is planned metadata and `BudgetFlow` is financial truth.
 
-- Creates projects.
-- Fetches workspace project lists.
-- Fetches full project detail for project pages.
-- Should remain the owner of project-level permission checks.
+## Reports, Sources, And Sharing
 
-### `src/actions/dashboard-actions.ts`
+- `project-output-actions.ts`: loads project outputs, generates persisted reports, creates expiring share capabilities, and revokes them.
+- `project-share.ts`: validates a token and returns a bounded read-only project projection.
+- `GET /share/[token]`: public read-only project page.
 
-- Fetches dashboard aggregates for project count, budget status, and project overview.
+Reports may call DeepSeek, but fall back to a deterministic summary from official data. Both paths persist the source fact snapshot and project activity record.
 
-### `src/actions/dashboard-ai.ts`
+## Dashboard And Query
 
-- Produces AI-oriented dashboard summaries and project judgment signals.
+- `dashboard-actions.ts`: global statistics, portfolio project state, attention items, upcoming execution.
+- `dashboard-ai.ts`: deterministic weekly health summary from official records.
+- `copilot-actions.ts`: query-only project, budget, calendar, and attention lookup.
 
-## Control Table And Tasks
+Command Center does not perform routine table writes. Users edit the project control table, ledger, and execution calendar directly.
 
-### `src/actions/task-actions.ts`
+## Operational Endpoints
 
-- Fetches project control tasks.
-- Creates control tasks.
-- Updates task status.
-- Batch-fills missing task fields.
-- Maintains related progress/activity records for important changes.
+- `GET /api/health`: database connectivity and service health; returns no secrets.
 
-Rules:
+## Action Contract
 
-- Status changes must create traceable progress records.
-- Missing optional fields should be visible and fixable, not blockers.
-- Budget and calendar links should remain navigable from the control table.
-
-## Progress Timeline
-
-### `src/actions/timeline-actions.ts`
-
-- Reads project progress timeline.
-- Appends progress logs.
-
-Rules:
-
-- Timeline records are append-only.
-- Important AI or human changes should be explainable from the timeline/activity trail.
-
-## Budget Ledger
-
-### `src/actions/ledger-actions.ts`
-
-- Reads project budget flows and task-linked budget flows.
-- Calculates budget balance from append-only flow records.
-- Records allocation, expense, and refund flows.
-
-Rules:
-
-- Do not store mutable remaining budget as the source of truth.
-- Expense amounts are negative.
-- Allocation and refund amounts are positive.
-- High-impact AI budget mutations require user confirmation.
-
-## Execution Calendar
-
-### `src/actions/calendar-actions.ts`
-
-- Reads project execution calendar entries.
-- Creates and updates calendar entries.
-- Links calendar entries to control tasks when possible.
-
-Rules:
-
-- Channel, owner, workstream, and content must remain separate fields.
-- Calendar import should not copy messy spreadsheet matrices as-is.
-- Calendar changes should be traceable when they affect execution accountability.
-
-## Auth And Health
-
-### `src/actions/auth-actions.ts`
-
-- Handles local role-based login/logout.
-- Current auth is lightweight and suitable for Alpha testing only.
-
-### `src/actions/health-actions.ts`
-
-- Provides health/status checks used during development.
-
-## API Design Gaps
-
-P0/P1 gaps to address:
-
-- Centralized permission helpers for project reads and writes
-- Business-rule tests for budget balance, status logs, import confirmation, and calendar linkage
-- More explicit result types for AI confidence, missing fields, and conflicts
-- Stronger transaction boundaries around multi-record AI confirmations
+Mutations return `ActionResult<T>` with `success`, a user-facing `message`, and optional `data`. Multi-record mutations use Prisma transactions when partial writes would be unsafe.

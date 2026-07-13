@@ -5,6 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calculateBudgetSnapshot } from "@/lib/budget";
 import { assertCanReadProject, assertCanWriteProject, requireCurrentUser } from "@/lib/permissions";
+import { canWriteProject } from "@/lib/permission-rules";
 import type { ActionResult } from "@/actions/types";
 
 /** 安全解析 HTML date input（"YYYY-MM-DD"），强制 UTC 午夜，杜绝时区偏移 */
@@ -70,7 +71,12 @@ export async function getUserProjects() {
   const user = await requireCurrentUser();
 
   const projects = await prisma.project.findMany({
-    where: { ownerId: user.id },
+    where: {
+      OR: [
+        { ownerId: user.id },
+        { members: { some: { userId: user.id, role: "EDITOR" } } },
+      ],
+    },
     include: {
       _count: { select: { tasks: true } },
       tasks: {
@@ -176,6 +182,7 @@ export async function getProjectDetail(projectId: string) {
     where: { id: projectId },
     include: {
       owner: { select: { id: true, name: true, role: true } },
+      members: { where: { userId: user.id }, select: { role: true }, take: 1 },
       _count: { select: { tasks: true } },
     },
   });
@@ -185,7 +192,13 @@ export async function getProjectDetail(projectId: string) {
   // 将 Decimal 转为 number 以便序列化
   return {
     ...project,
+    members: undefined,
     totalBudget: project.totalBudget.toNumber(),
-    canEdit: project.ownerId === user.id,
+    canEdit: canWriteProject({
+      userId: user.id,
+      role: user.role,
+      ownerId: project.ownerId,
+      memberRole: project.members[0]?.role ?? null,
+    }),
   };
 }

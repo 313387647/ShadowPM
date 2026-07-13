@@ -1,136 +1,67 @@
-# 数据库设计 (Prisma Schema Blueprint)
-// 提示 AI：请以此为基础生成 prisma schema，切勿擅自修改核心逻辑。
+# ShadowPM Database Design
 
-generator client {
-  provider = "prisma-client-js"
-}
+PostgreSQL is the source of truth. Prisma schema: `prisma/schema.prisma`.
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+## Core Project Records
 
-enum Role {
-  LEADER
-  MEMBER
-}
+- `User`: login identity and `LEADER | MEMBER` role.
+- `Project`: project profile, owner, planned budget, dates.
+- `ProjectMember`: explicit `EDITOR | VIEWER` authorization.
+- `Phase`: workstream/grouping for control items.
+- `Task`: current implementation name for a project control item.
 
-enum TaskStatus {
-  PENDING    // 待启动
-  IN_PROGRESS// 进行中
-  COMPLETED  // 已完成
-}
+`Task` stores description, owner, department, deadline, status, priority, latest conclusion, AI confidence, source reference, missing fields, conflicts, and confirmation state. Product UI calls it a control item or 管控事项.
 
-enum FlowType {
-  ALLOCATE   // 初始/追加预算 (正数)
-  EXPENSE    // 支出走账 (负数)
-  REFUND     // 费用退回 (正数)
-}
+## Trust And History
 
-enum AssetType {
-  DOCUMENT   // 富文本
-  LINK       // 外部链接
-  FILE       // 附件
-}
+- `ProgressLog`: append-only per-control-item progress history.
+- `ActivityLog`: project-wide audit trail for human, AI, import, and system changes.
+- `BudgetFlow`: append-only financial flow linked to a control item.
+- `ExecutionCalendarEntry`: formal execution schedule, optionally linked to a control item.
 
-model User {
-  id        String   @id @default(cuid())
-  name      String
-  role      Role     @default(MEMBER)
-  createdAt DateTime @default(now())
-  projects  Project[]
-  feedbacks ProjectFeedback[]
-}
+Financial truth:
 
-model Project {
-  id          String   @id @default(cuid())
-  name        String
-  ownerId     String
-  totalBudget Float    // 规划的总预算池
-  startDate   DateTime?
-  endDate     DateTime?
-  createdAt   DateTime @default(now())
-  
-  owner       User     @relation(fields: [ownerId], references: [id])
-  tasks       Task[]
-  folders     AssetFolder[]
-  feedbacks   ProjectFeedback[]
-}
+```text
+confirmed budget = SUM(ALLOCATE)
+consumed = max(0, ABS(SUM(EXPENSE)) - SUM(REFUND))
+available balance = confirmed budget - consumed
+```
 
-model Task {
-  id          String     @id @default(cuid())
-  projectId   String
-  name        String
-  assignee    String?    // 执行人姓名
-  deadline    DateTime?
-  status      TaskStatus @default(PENDING)
-  
-  project     Project    @relation(fields: [projectId], references: [id])
-  logs        ProgressLog[]
-  budgets     BudgetFlow[]
-}
+`Project.totalBudget` is the plan and must not be added to confirmed budget.
 
-model ProgressLog {
-  id        String   @id @default(cuid())
-  taskId    String
-  content   String   // 支持 Markdown
-  createdBy String   // 操作人
-  createdAt DateTime @default(now())
-  
-  task      Task     @relation(fields: [taskId], references: [id])
-}
+## P2 Records
 
-model BudgetFlow {
-  id          String   @id @default(cuid())
-  taskId      String
-  flowType    FlowType
-  amount      Float    // 支出为负数，分配为正数
-  description String   // 事由
-  createdBy   String
-  createdAt   DateTime @default(now())
-  
-  task        Task     @relation(fields: [taskId], references: [id])
-}
+- `ProjectSource`: bounded extracted source text, filename, media type, hash, uploader, timestamp.
+- `ProjectReport`: persisted weekly/monthly report plus structured source snapshot.
+- `ProjectShareLink`: expiring/revocable read-only capability with token hash only.
 
-model AssetFolder {
-  id        String   @id @default(cuid())
-  projectId String
-  name      String
-  parentId  String?  // 支持树状层级
-  
-  project   Project  @relation(fields: [projectId], references: [id])
-  assets    AssetItem[]
-}
+These records support AI grounding, reporting, sharing, and calendar subscription without adding a standalone asset center.
 
-model AssetItem {
-  id        String    @id @default(cuid())
-  folderId  String
-  title     String
-  type      AssetType
-  content   String?   // 富文本或外部链接
-  fileUrl   String?
-  version   Int       @default(1)
-  
-  folder    AssetFolder @relation(fields: [folderId], references: [id])
-}
+## Alpha Support Records
 
-model ProjectFeedback {
-  id             String   @id @default(cuid())
-  projectId      String
-  createdById    String
-  testerName     String
-  rating         Int
-  aiAccuracy     String   // GOOD | PARTIAL | POOR | NOT_TESTED
-  uploadOutcome  String   // CREATED | CREATED_WITH_EDITS | FAILED | BLOCKED
-  wouldUse       String   // YES | MAYBE | NO
-  budgetIssue    Boolean  @default(false)
-  calendarIssue  Boolean  @default(false)
-  ownerIssue     Boolean  @default(false)
-  missingInfo    Boolean  @default(false)
-  friction       String?
-  notes          String?
-  createdAt      DateTime @default(now())
-  
-  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy      User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
-}
+- `ProjectFeedback`: structured reviewer feedback.
+
+## Legacy Hidden Records
+
+- `Risk`
+- `AssetFolder`
+- `AssetItem`
+- `ImportDraft`
+- `HealthSnapshot`
+
+They remain for compatibility but are not current product surfaces.
+
+## Index Strategy
+
+Indexes cover project owner/creation, project member roles, control-item project/status/deadline/assignee, activity project/time, budget operation/time, calendar project/date/status/channel, source project/hash, report project/type/time, and share expiry/revocation.
+
+## Deployment
+
+For the current pre-migration-history repository:
+
+```bash
+npx prisma generate
+npx prisma db push
+```
+
+Production hardening after P2 should establish a reviewed migration baseline before multi-tenant rollout. Never use destructive reset commands on shared data.

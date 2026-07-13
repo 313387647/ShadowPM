@@ -20,12 +20,13 @@ ShadowPM is not a task board. Please evaluate whether it makes project control f
 
 ## 2. Test Account
 
-Use the test login cards on the `/login` page.
+Use the login cards on the `/login` page.
 
 Recommended reviewer account:
 
 - `陈鹏` for leader/global dashboard review
-- `林小夏` for project creation and project control testing
+- `周予安` for project creation and project control testing
+- `许闻澜` for collaborator and read-only permission testing
 
 If the site redirects you back to login, log in again. Session cookies are signed and may reset after deployment updates.
 
@@ -58,7 +59,7 @@ Expected ShadowPM behavior:
 ### Step 1: Log In
 
 1. Open the test site.
-2. Choose `林小夏`.
+2. Choose `周予安`.
 3. You should land on the AI workspace.
 
 ### Step 2: Start AI Project Creation
@@ -108,7 +109,7 @@ Expected result:
 
 ### Step 5: Review The Project Control Table
 
-Open the `任务总控` tab.
+Open the `管控总表` tab.
 
 Check:
 
@@ -188,6 +189,25 @@ Please submit:
 
 Leader users can review all submitted feedback in `/feedback`.
 
+### Step 11: Export, Report, And Share
+
+On the project page, click `输出与分享`.
+
+You can:
+
+- Download a canonical Excel workbook containing project profile, control table, progress changes, budget flows, execution calendar, activity, and source metadata.
+- Generate a weekly or monthly report. Reports use official project data and retained upload evidence, then become traceable project activity.
+- Create a 30-day read-only external project link.
+- Copy an ICS subscription URL for Apple Calendar, Google Calendar, Outlook, or other compatible calendar clients.
+- Revoke an active external link immediately.
+
+Important:
+
+- Read-only project links do not allow editing.
+- The calendar feed projects formal execution-calendar entries only. It does not create events from every active control item.
+- The same share capability protects the read-only page and calendar feed, so revoking it disables both.
+- Import evidence is used for grounding and source traceability; ShadowPM does not restore a separate asset center.
+
 ## 5. What Feedback To Provide
 
 Please submit feedback inside the app first. Use `project-docs/FEEDBACK_TEMPLATE.md` only when you need a longer written review.
@@ -203,15 +223,14 @@ Useful feedback examples:
 - The next action was unclear
 - The UI used task-manager language instead of project-control language
 
-## 6. Known Alpha Limitations
+## 6. Current Boundaries
 
-Current known gaps:
+Current boundaries:
 
-- Field-level confidence is not fully implemented yet
-- Control table inline editing is still limited
-- Execution calendar V2 is not complete
-- Feedback collection is structured but still lightweight
-- Business-rule tests need expansion
-- Team/member permission model is still lightweight
+- Calendar sync is a read-only ICS subscription; two-way Google/Microsoft write-back is not included.
+- Share links are project-level read-only capabilities, not guest accounts with comments.
+- Import evidence stores bounded extracted text, not the original binary file.
+- Reports can fall back to deterministic official-data summaries if the model is unavailable.
+- Enterprise SSO, tenant isolation, managed object storage, queues, and backup automation remain later deployment work.
 
 Please do not judge the product as a finished SaaS product. Judge whether the core workflow is promising and where it breaks.

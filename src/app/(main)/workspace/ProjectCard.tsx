@@ -39,19 +39,19 @@ export function ProjectCard({
   return (
     <Link
       href={`/projects/${id}`}
-      className="group relative rounded-xl border bg-card p-5 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+      className="group relative block border-b px-4 py-3 last:border-b-0 transition-colors hover:bg-muted/45"
     >
-      <h3 className="font-semibold text-lg truncate group-hover:text-primary transition-colors pr-6">
+      <h3 className="truncate pr-7 text-sm font-medium transition-colors group-hover:text-primary">
         {name}
       </h3>
 
-      <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-        <Coins className="size-4" />
+      <div className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+        <Coins className="mt-0.5 size-3.5 shrink-0" />
         <div className="min-w-0">
           {confirmedBudget > 0 ? (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">已确认</span>
-              <span className="font-mono font-medium text-foreground">
+              <span>已确认</span>
+              <span className="font-mono font-medium text-foreground tabular-nums">
                 ¥{confirmedBudget.toLocaleString("zh-CN")}
               </span>
               {totalBudget > 0 && totalBudget !== confirmedBudget && (
@@ -62,16 +62,16 @@ export function ProjectCard({
             </div>
           ) : totalBudget > 0 ? (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">计划预算</span>
-              <span className="font-mono font-medium text-foreground">
+              <span>计划预算</span>
+              <span className="font-mono font-medium text-foreground tabular-nums">
                 ¥{totalBudget.toLocaleString("zh-CN")}
               </span>
-              <span className="text-xs text-amber-600">待确认入账</span>
+              <span className="text-amber-700">待确认</span>
             </div>
           ) : pendingBudgetSignal && pendingBudgetSignal.count > 0 ? (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-amber-600">待确认预算线索</span>
-              <span className="font-mono font-medium text-foreground">
+              <span className="text-amber-700">待确认线索</span>
+              <span className="font-mono font-medium text-foreground tabular-nums">
                 ¥{pendingBudgetSignal.total.toLocaleString("zh-CN")}
               </span>
             </div>
@@ -81,24 +81,23 @@ export function ProjectCard({
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1">
           <Calendar className="size-3" />
           {startDate ? new Date(startDate).toLocaleDateString("zh-CN") : "未定"}
           {" — "}
           {endDate ? new Date(endDate).toLocaleDateString("zh-CN") : "未定"}
         </span>
-        <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
+        <span className="flex shrink-0 items-center gap-1">
           <CheckCircle2 className="size-3" />
           {taskCount} 个事项
         </span>
       </div>
 
-      {/* Delete button */}
       <Button
         variant="ghost"
         size="icon"
-        className="absolute right-2 top-2 size-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+        className="absolute right-2 top-2 size-7 opacity-0 transition-opacity text-muted-foreground hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
         onClick={handleDelete}
         title="删除项目"
       >

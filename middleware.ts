@@ -10,6 +10,7 @@ export function middleware(request: NextRequest) {
     pathname === "/demo" ||
     pathname === "/guide" ||
     pathname === "/login" ||
+    pathname.startsWith("/share/") ||
     pathname.startsWith("/demo-assets") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon")

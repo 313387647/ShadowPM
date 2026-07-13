@@ -2,6 +2,201 @@
 
 *(Vibe Coding 规则：AI 在结束每一轮代码编写后，必须主动在此文件中追加记录)*
 
+## [2026-07-10] P2 Scale, Outputs, Sharing, And Portfolio
+
+### Project outputs
+- Added canonical project workbook export with profile, control table, progress history, budget flow, execution calendar, activity, and source-evidence sheets.
+- Added persisted weekly/monthly project reports grounded in official project facts and bounded import-source excerpts.
+- Added deterministic report fallback when the model is unavailable.
+
+### External collaboration and calendar
+- Added expiring and revocable read-only project links; only SHA-256 token hashes are stored.
+- Added a public read-only project view for the control table, financial flow, and execution calendar.
+- Added standards-based ICS calendar subscription from official execution-calendar entries.
+
+### AI grounding
+- AI imports now retain bounded extracted text, filename, media type, and source hash in `ProjectSource`.
+- Source evidence is shown inside the existing project output panel and used for report grounding; no standalone asset center was restored.
+
+### Portfolio and UI
+- Replaced duplicate dashboard charts and risk panels with a searchable, filterable project portfolio table.
+- Added responsive mobile navigation, mobile-safe dialogs, compact Command Center behavior, system fonts, and improved focus states.
+- Consolidated export, reports, source evidence, sharing, and calendar subscription into one `输出与分享` entry.
+
+### Deployment baseline
+- Added `/api/health`, security headers, no-index metadata, standalone Next.js output, Dockerfile, `.dockerignore`, and public URL configuration.
+- Added P2 business tests for share expiry, token format, and ICS generation.
+
+### Intentional boundaries
+- Calendar sync is read-only ICS; provider OAuth write-back remains later work.
+- Enterprise SSO, tenant isolation, managed object storage, queues, observability, and automated backups remain post-P2.
+
+### Verification
+- `npm test`: 22 tests across 7 suites passed.
+- `npm run lint`: passed with no warnings or errors.
+- `npm run build`: passed; export, health, public share, and ICS routes are present in the production manifest.
+- `npx prisma validate`: passed.
+- `npx prisma db push`: P2 schema successfully synchronized to the local PostgreSQL database.
+- Browser automation remained blocked by the browser tool's local URL policy, so the product owner completed manual acceptance steps 1 through 9 on 2026-07-13.
+- `/api/health` manual acceptance passed on 2026-07-13 with database connected and 13 ms reported latency.
+
+## [2026-07-10] Five-Identity Demo Dataset
+
+### Demo data
+- Expanded the resettable local demo dataset from three to five login identities: one leader and four project members.
+- Added 22 simulated projects, 110 control items, 54 budget flows, 44 execution-calendar entries, and 44 project activity records.
+- Gave each identity four or five owned projects, plus explicit editor/viewer collaborations to make permission and workload behavior observable.
+- Added external suppliers, customers, trainers, product managers, community operators, and media editors as control-item owners without making them system users.
+
+### Demo access
+- Replaced hard-coded demo login names with live database-backed login cards.
+- Login now accepts only an existing user ID; it no longer recreates deleted historical demo accounts.
+- Marked the login page as dynamic so user cards are read at request time rather than during production build.
+
+### Verification
+- `npm test` (17 tests)
+- `npm run lint`
+- `npm run build`
+- `npx prisma db seed`: 5 users, 22 projects, 110 control items, 54 budget flows, 44 calendar entries, 44 activity records.
+
+## [2026-07-10] P1 Product Differentiation Closure
+
+### Explainable weekly health summary
+- Replaced the fragile dashboard-only model call with a weekly health briefing built from official project, control-item, budget, and calendar records.
+- The dashboard now remains useful when no external model key is configured or a model service is unavailable.
+- The summary makes its signals explicit: completion, overdue items, missing owners, confirmed budget, spending, and the highest-attention projects.
+
+### Command Center query reliability
+- Added deterministic routing for project lists, project progress, and requests that attempt formal writes.
+- Formal writes are intentionally directed back to the source table: control table, budget ledger, or execution calendar.
+- Open-ended model queries remain a convenience path, not a dependency for core project lookup.
+
+### Budget association
+- Budget selectors and ledger rows now show the existing execution line/workstream together with the linked control item.
+- Reused the existing `Task -> Phase` relationship instead of adding a duplicate workstream field to financial records.
+
+### Verification
+- `npm test` (17 tests)
+- `npm run lint`
+- `npm run build`
+
+## [2026-07-01] P1.1 Command Center Preview Flow
+
+### Direction correction
+- Removed Command Center status/progress mutation previews after product review.
+- Decision: members should update progress and status directly in the project control table; using AI chat for routine table edits adds friction.
+- Repositioned Command Center as a keyboard-first query, navigation, and summary surface.
+- Further narrowed Command Center to query-only scope; non-query operations are intentionally excluded.
+
+### Command Center
+- Repositioned the global Copilot entry as `ShadowPM Command Center`.
+- Added keyboard-first opening with `Cmd/Ctrl + K`.
+- Updated the floating entry to communicate command usage instead of generic chat.
+
+### Query-first scope
+- Kept natural language answers for project budgets, execution calendar, project list, and attention items.
+- Removed the server-side Command Center write action path for status updates and progress logs.
+- Removed the front-end confirmation card UI for routine progress/status edits.
+
+### Scope
+- This is the first P1 Command Center slice: query, summarize, and navigate.
+- Exact-row navigation, leader health answers, and current-page context remain next P1 Command Center work.
+
+### Verification
+- `npm test`
+
+## [2026-07-01] P1.2 Dashboard V2 Cockpit Slice
+
+### Leader cockpit
+- Added `getLeaderDashboardAttention` for cross-project attention data.
+- Dashboard now prioritizes urgent control items and upcoming/unscheduled execution-calendar entries above decorative charts.
+- Added project brief cards with progress, active items, overdue count, and missing-owner count.
+- Added Budget Watch ranking for overrun, high usage, planned-but-unconfirmed budget, and missing confirmed budget cases.
+- Budget Watch links directly to the affected project's ledger tab.
+
+### Product direction
+- Dashboard V2 is oriented around "what should the leader look at today" rather than generic charting.
+- Risk language is kept as operational watch signals from the control table, not a restored standalone risk module.
+
+### Verification
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
+## [2026-07-07] P1.3 Budget V2 Warning And Category Slice
+
+### Budget ledger
+- Added an in-project budget status panel to the ledger tab.
+- The panel explains overrun, high usage, planned-but-unconfirmed budget, spending without confirmed budget, and no-flow states.
+- Added a usage bar tied to confirmed budget usage, matching Dashboard Budget Watch semantics.
+- Added ledger category filters for budget pool, spending, refund, correction, and movement records.
+- Added category labels to each budget flow so users can scan the ledger without decoding flow types or operations.
+
+### Scope
+- No database changes.
+- Budget V2 remains warning/readability focused; advanced split/merge/transfer UI stays deferred until Alpha users understand the basic ledger.
+- Category filters are a presentation layer over existing `BudgetFlow.flowType` and `BudgetFlow.operation`, not a new financial source of truth.
+
+### Verification
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
+## [2026-07-07] P1.5 AI Import Confirmation Plan
+
+### AI import
+- Added a shared AI import plan rule for previewing what AI will actually write before project creation.
+- The plan separates blocking gaps from optional gaps so users can create now and fill missing details later in the editable tables.
+- The preview now shows confirmed budget writes, deferred budget candidates, execution-calendar rows, and rows that will need human confirmation.
+- The clarify step now limits itself to the highest-value questions instead of turning every missing field into a blocker.
+
+### Product direction
+- This keeps ShadowPM AI-first without making AI chat the operating surface.
+- Low-confidence information becomes visible table diagnostics, not a second review queue.
+
+### Verification
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
+## [2026-07-07] P1.6 Project Member Authorization
+
+### Team model
+- Added a `ProjectMember` model with `EDITOR` and `VIEWER` roles.
+- Kept project owner as the only user who can manage project collaborators.
+- Updated permission rules so explicit `EDITOR` collaborators can edit project control tables, budget ledgers, execution calendars, and activity logs.
+- Kept leaders read-only on projects they do not own unless explicitly added as editors.
+- Kept assignee fields as business ownership only; being assigned to a control item does not grant edit rights.
+
+### Product surface
+- Added a lightweight project collaborators panel on the project detail page.
+- Workspace and Command Center now include explicitly shared projects in the readable project scope.
+- Team permissions view now distinguishes owned projects, editable collaborator projects, and read-only collaborator projects.
+
+### Verification
+- `npx prisma generate`
+- `npx prisma db push`
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
+## [2026-07-01] P1.4 Team Permission Visibility Slice
+
+### Team model
+- Reframed the team page from pure workload to team permissions and workload.
+- Added permission explanation cards for leader read-only inspection, owner-only edit rights, and the difference between business assignee and edit authorization.
+- Team cards now show editable project count, read/write scope, owner projects, active owned items, overdue items, missing-owner counts, and business assignments outside the editable project scope.
+- Renamed sidebar navigation from `团队负载` to `团队权限`.
+
+### Scope
+- No database model changes.
+- Explicit collaborator authorization remains deferred; Alpha permissions still use project owner as the write boundary.
+
+### Verification
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
 ## [2026-07-01] P0 Code Scope Closure
 
 ### Permission rules

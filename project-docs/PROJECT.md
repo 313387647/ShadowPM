@@ -34,6 +34,9 @@ The trust layers are:
 - Progress Change Log
 - Budget Flow Log
 - AI import/action traceability
+- Retained import-source evidence
+- Persisted report source snapshots
+- Revocable external share capabilities
 
 The canonical model is maintained in `CANONICAL_PROJECT_SCHEMA.md`.
 
@@ -48,8 +51,12 @@ The product currently supports:
 - Budget ledger
 - Execution calendar
 - Progress timeline
-- AI copilot suggestions and confirmation flows
-- Dashboard overview
+- Query-only Command Center
+- Portfolio dashboard
+- Canonical workbook export
+- Weekly/monthly grounded reports
+- Expiring read-only project sharing
+- ICS execution-calendar subscription
 
 The current Alpha is suitable for review and internal testing with the sample spreadsheet in `project-docs/review-assets/`.
 
@@ -62,7 +69,7 @@ The current Alpha is suitable for review and internal testing with the sample sp
 - UI: Shadcn-style local primitives + Lucide icons
 - ORM: Prisma
 - Database: PostgreSQL
-- Charts: Recharts
+- Workbook export: SheetJS
 - File parsing: spreadsheet parser in `src/lib/xlsx-parser.js`
 
 ## Engineering Rules

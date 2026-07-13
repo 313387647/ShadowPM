@@ -5,27 +5,9 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createSessionCookieValue } from "@/lib/auth";
 
-const DEMO_USERS = {
-  "陈鹏": "LEADER",
-  "林小夏": "MEMBER",
-  "赵雨桐": "MEMBER",
-} as const;
-
-export async function login(userName: string) {
-  // 按名称查找用户（seed 脚本保证这三个用户始终存在）
-  const existingUser = await prisma.user.findFirst({
-    where: { name: userName },
-  });
-  const demoRole = DEMO_USERS[userName as keyof typeof DEMO_USERS];
-  if (!existingUser && !demoRole) {
-    throw new Error(`用户 ${userName} 不存在`);
-  }
-  const user = existingUser ?? await prisma.user.create({
-    data: {
-      name: userName,
-      role: demoRole,
-    },
-  });
+export async function login(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error("测试账号不存在，请重置演示数据后重试");
 
   const cookieStore = await cookies();
   cookieStore.set("shadowpm-session", createSessionCookieValue({
@@ -44,9 +26,9 @@ export async function login(userName: string) {
 }
 
 export async function loginWithForm(formData: FormData) {
-  const userName = formData.get("userName");
-  if (typeof userName !== "string") throw new Error("缺少登录用户");
-  await login(userName);
+  const userId = formData.get("userId");
+  if (typeof userId !== "string") throw new Error("缺少登录用户");
+  await login(userId);
 }
 
 export async function logout() {

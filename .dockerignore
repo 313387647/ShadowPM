@@ -1,0 +1,9 @@
+.git
+.next
+.next-ui-preview
+node_modules
+npm-debug.log
+.env
+.env.*
+!.env.example
+project-docs/review-assets

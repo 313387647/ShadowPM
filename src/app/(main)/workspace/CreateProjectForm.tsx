@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Loader2, Sparkles } from "lucide-react";
+import { Plus, Loader2, PenLine, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -72,7 +72,8 @@ export function CreateProjectForm() {
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              ✏️ 手动创建
+              <PenLine className="size-3.5" />
+              手动创建
             </button>
           </div>
 

@@ -261,6 +261,21 @@ Rules:
 - Ambiguous budget signals should not become confirmed ledger entries.
 - Missing fields should be completed in the control table, budget ledger, or execution calendar.
 
+## P2 Trust Extensions: Sources, Reports, Sharing
+
+P2 adds three project-level trust records without creating new operating centers:
+
+- `ProjectSource`: bounded extracted text, filename, media type, source hash, uploader, and timestamp from an AI import.
+- `ProjectReport`: persisted weekly/monthly report plus the structured fact snapshot used to generate it.
+- `ProjectShareLink`: expiring and revocable read-only capability; only a token hash is stored.
+
+Rules:
+
+- Sources ground reports and future AI queries. They do not become a standalone file-management product.
+- Generated reports must distinguish official facts, plans, and missing information.
+- Share links never grant mutation rights and must be revocable.
+- Calendar sync is a read-only projection of `ExecutionCalendarEntry`, not another calendar database.
+
 ## Future Extensions: Risk, Open Issues, Assets
 
 Risk, open issues, and assets are not part of the current Alpha core.
@@ -268,7 +283,7 @@ Risk, open issues, and assets are not part of the current Alpha core.
 Future versions may restore them when the control-table loop is stable. Until then:
 
 - Rows named `风险`, `待确定项`, `问题`, `阻塞`, `待确认`, or similar should become control item notes, blockers, missing fields, or conflicts.
-- Files, links, and source references should stay attached to control items or activity summaries unless a dedicated asset intelligence module is explicitly restored.
+- Files, links, and source references should stay attached to control items, import evidence, or activity summaries unless a dedicated asset intelligence module is explicitly restored.
 
 ## AI Import Pipeline
 
@@ -337,6 +352,9 @@ Near-term implementation should evolve toward:
 - `CalendarEntry`
 - `ProgressChangeLog`
 - `AIImportDiagnostics`
+- `ProjectSource`
+- `ProjectReport`
+- `ProjectShareLink`
 
 Future extensions, not current Alpha core:
 

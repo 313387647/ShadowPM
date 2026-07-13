@@ -1,75 +1,151 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, ExternalLink } from "lucide-react";
+import { ArrowRight, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const sections = [
-  {
-    title: "0. 测试前准备",
-    items: ["打开测试网站链接", "准备一份项目 Excel", "没有自己的表格时，在 Demo 页面下载案例表格", "建议使用电脑浏览器"],
-  },
-  {
-    title: "1. 打开测试入口",
-    items: ["进入 Demo 页面", "点击「下载案例表格」", "点击「开始测试」进入登录页"],
-  },
-  {
-    title: "2. 登录测试账号",
-    items: ["选择「林小夏」测试项目创建", "点击后应进入 AI 工作台", "如果想看管理者视角，之后可以退出并选择「陈鹏」"],
-  },
-  {
-    title: "3. 路线 A：新建 AI 项目",
-    items: ["在 AI 工作台点击「新建项目」", "保持在「AI 生成」", "上传 Excel", "点击「开始解析」并等待 AI 完成"],
-  },
-  {
-    title: "4. 路线 A：看懂 AI 预览",
-    items: ["检查项目名称和时间", "检查项目管控表", "检查将生成的预算流水", "检查将生成的执行日历", "不确定信息不要被 AI 编成确定事实"],
-  },
-  {
-    title: "5. 路线 A：创建项目",
-    items: ["预览基本可读时，点击「创建项目与管控表」", "预算为空或待确认也可以先创建", "明显错误也可以创建后在反馈里说明"],
-  },
-  {
-    title: "6. 路线 B：手动创建项目",
-    items: ["回到 AI 工作台并点击「新建项目」", "切换到「手动创建」", "填写项目名称、预算和日期", "点击「创建项目」后应直接进入项目详情页"],
-  },
-  {
-    title: "7. 路线 B：手动修改管控表",
-    items: ["新增一个管控事项", "修改负责人、部门、截止日期、描述和进度", "改变事项状态", "检查项目活动里是否记录了变更"],
-  },
-  {
-    title: "8. 检查核心表和记录",
-    items: ["项目管控表：是否能直接编辑所有关键字段", "项目活动：管控项变更有没有历史记录", "资金账本：预算估算有没有被误当真实支出", "执行日历：日期、渠道、负责人、内容有没有拆清楚"],
-  },
-  {
-    title: "9. 试一下 AI 助手",
-    items: ["问：这个项目预算还有多少？", "问：有哪些事项缺负责人？", "问：接下来有哪些执行日历？", "看 AI 是否基于真实数据回答"],
-  },
-  {
-    title: "10. 提交外测反馈",
-    items: ["回到项目页上方的「外测反馈」并点击展开", "填写评分、AI 识别质量、上传结果和使用意愿", "勾选预算/日历/负责人/缺失信息问题", "手动测试可在文字里注明「这是手动创建测试」"],
-  },
-];
+type Block =
+  | { type: "h1"; text: string }
+  | { type: "h2"; text: string }
+  | { type: "h3"; text: string }
+  | { type: "p"; text: string }
+  | { type: "quote"; text: string }
+  | { type: "ul"; items: string[] }
+  | { type: "code"; text: string };
 
-const examples = [
-  "AI 把「预计预算 20 万」当成了已经支出的费用。",
-  "传播日历里把负责人姓名和渠道混在一起了，我不知道该怎么确认。",
-  "项目管控表比原 Excel 清楚，但缺失字段没有足够醒目。",
-  "手动创建项目后能进入详情页，但新增管控事项的入口不够明显。",
-];
+function getGuideMarkdown() {
+  return readFileSync(path.join(process.cwd(), "project-docs/BEGINNER_TUTORIAL.md"), "utf-8");
+}
+
+function parseGuide(markdown: string) {
+  const blocks: Block[] = [];
+  const lines = markdown.split(/\r?\n/);
+  let paragraph: string[] = [];
+  let list: string[] = [];
+  let code: string[] | null = null;
+
+  function flushParagraph() {
+    if (paragraph.length === 0) return;
+    blocks.push({ type: "p", text: paragraph.join(" ").trim() });
+    paragraph = [];
+  }
+
+  function flushList() {
+    if (list.length === 0) return;
+    blocks.push({ type: "ul", items: list });
+    list = [];
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      if (code) {
+        blocks.push({ type: "code", text: code.join("\n") });
+        code = null;
+      } else {
+        code = [];
+      }
+      continue;
+    }
+
+    if (code) {
+      code.push(line);
+      continue;
+    }
+
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    if (trimmed.startsWith("# ")) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "h1", text: trimmed.replace(/^#\s+/, "") });
+      continue;
+    }
+
+    if (trimmed.startsWith("## ")) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "h2", text: trimmed.replace(/^##\s+/, "") });
+      continue;
+    }
+
+    if (trimmed.startsWith("### ")) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "h3", text: trimmed.replace(/^###\s+/, "") });
+      continue;
+    }
+
+    if (trimmed.startsWith("> ")) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "quote", text: trimmed.replace(/^>\s+/, "") });
+      continue;
+    }
+
+    if (trimmed.startsWith("- ")) {
+      flushParagraph();
+      list.push(trimmed.replace(/^-\s+/, ""));
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+  return blocks;
+}
+
+function slugify(text: string) {
+  const cleaned = text
+    .replace(/^\d+\.\s*/, "")
+    .replace(/[^\u4e00-\u9fa5A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  return cleaned || encodeURIComponent(text);
+}
+
+function InlineText({ text }: { text: string }) {
+  const parts = text.split(/(`[^`]+`)/g);
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.startsWith("`") && part.endsWith("`")) {
+          return (
+            <code key={index} className="rounded bg-muted px-1.5 py-0.5 text-[0.92em] text-foreground">
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        return <span key={index}>{part}</span>;
+      })}
+    </>
+  );
+}
 
 export default function BeginnerGuidePage() {
+  const blocks = parseGuide(getGuideMarkdown());
+  const title = blocks.find((block) => block.type === "h1")?.text ?? "ShadowPM 完整小白说明书";
+  const sections = blocks.filter((block): block is Extract<Block, { type: "h2" }> => block.type === "h2");
+
   return (
     <main className="min-h-screen bg-background">
       <section className="border-b bg-muted/30">
-        <div className="mx-auto flex max-w-5xl flex-col gap-5 px-6 py-12">
-          <Badge className="w-fit" variant="secondary">ShadowPM 小白测试教程</Badge>
+        <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-12">
+          <Badge className="w-fit" variant="secondary">ShadowPM 测试说明书</Badge>
           <div className="max-w-3xl space-y-3">
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              按这份教程走完一次上传、生成、检查和反馈
-            </h1>
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
             <p className="text-base leading-7 text-muted-foreground">
-              你不需要懂项目管理系统，也不需要提前整理 Excel。测试目标是看 ShadowPM 能不能把项目表格变成更清楚的项目管控工作区：
-              管控总表、资金账本、执行日历和项目活动记录。
+              这不是简单操作清单，而是完整说明书：包含登录、导航、工作台、项目详情、每个卡片、每张表、每个状态和当前测试要点。
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -89,43 +165,80 @@ export default function BeginnerGuidePage() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-5xl gap-4 px-6 py-10 md:grid-cols-2">
-        <article className="rounded-lg border border-primary/20 bg-primary/5 p-5 md:col-span-2">
-          <h2 className="text-base font-semibold">测试时请记住</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            ShadowPM 不是任务管理工具。你要判断的是：AI 上传后，是否能直接形成一个可编辑、可追溯的项目管控工作区。
-            不确定的信息可以留空或写进备注，后续直接在表里补，不需要额外审核队列。
-          </p>
-        </article>
-        {sections.map((section) => (
-          <article key={section.title} className="rounded-lg border bg-card p-5">
-            <h2 className="text-base font-semibold">{section.title}</h2>
-            <ul className="mt-3 space-y-2">
-              {section.items.map((item) => (
-                <li key={item} className="flex gap-2 text-sm leading-6 text-muted-foreground">
-                  <CheckCircle2 className="mt-1 size-4 shrink-0 text-emerald-600" />
-                  <span>{item}</span>
-                </li>
+      <section className="mx-auto grid max-w-6xl gap-8 px-6 py-10 lg:grid-cols-[260px_1fr]">
+        <aside className="hidden lg:block">
+          <div className="sticky top-6 rounded-lg border bg-card p-4">
+            <p className="text-sm font-semibold">目录</p>
+            <nav className="mt-3 max-h-[72vh] space-y-1 overflow-y-auto pr-1">
+              {sections.map((section) => (
+                <a
+                  key={section.text}
+                  href={`#${slugify(section.text)}`}
+                  className="block rounded-md px-2 py-1.5 text-xs leading-5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {section.text}
+                </a>
               ))}
-            </ul>
-          </article>
-        ))}
-      </section>
-
-      <section className="mx-auto max-w-5xl px-6 pb-12">
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-amber-950">
-          <h2 className="text-sm font-semibold">什么算好反馈？</h2>
-          <div className="mt-3 grid gap-2">
-            {examples.map((example) => (
-              <p key={example} className="rounded-md bg-white/70 px-3 py-2 text-sm leading-6">
-                {example}
-              </p>
-            ))}
+            </nav>
           </div>
-          <p className="mt-4 text-sm leading-6">
-            如果你不知道下一步点哪里，或者某一步让你不放心，请直接写进「外测反馈」。这类反馈对产品改进非常重要。
-          </p>
-        </div>
+        </aside>
+
+        <article className="min-w-0 rounded-xl border bg-card px-5 py-6 shadow-sm sm:px-8">
+          <div className="space-y-4">
+            {blocks.map((block, index) => {
+              if (block.type === "h1") return null;
+              if (block.type === "h2") {
+                return (
+                  <h2
+                    key={index}
+                    id={slugify(block.text)}
+                    className="scroll-mt-8 border-t pt-8 text-2xl font-bold tracking-tight first:border-t-0 first:pt-0"
+                  >
+                    {block.text}
+                  </h2>
+                );
+              }
+              if (block.type === "h3") {
+                return (
+                  <h3 key={index} className="pt-3 text-lg font-semibold">
+                    {block.text}
+                  </h3>
+                );
+              }
+              if (block.type === "quote") {
+                return (
+                  <blockquote key={index} className="rounded-lg border-l-4 border-primary bg-primary/5 px-4 py-3 text-sm leading-7">
+                    <InlineText text={block.text} />
+                  </blockquote>
+                );
+              }
+              if (block.type === "ul") {
+                return (
+                  <ul key={index} className="space-y-2 pl-1">
+                    {block.items.map((item) => (
+                      <li key={item} className="flex gap-2 text-sm leading-7 text-muted-foreground">
+                        <span className="mt-3 size-1.5 shrink-0 rounded-full bg-primary" />
+                        <span><InlineText text={item} /></span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              }
+              if (block.type === "code") {
+                return (
+                  <pre key={index} className="overflow-x-auto rounded-lg border bg-gray-950 px-4 py-3 text-sm text-gray-50">
+                    <code>{block.text}</code>
+                  </pre>
+                );
+              }
+              return (
+                <p key={index} className="text-sm leading-7 text-muted-foreground">
+                  <InlineText text={block.text} />
+                </p>
+              );
+            })}
+          </div>
+        </article>
       </section>
     </main>
   );

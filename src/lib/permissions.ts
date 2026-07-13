@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, type SessionUser } from "@/lib/auth";
-import { canReadProject, canWriteProject } from "@/lib/permission-rules";
+import { canManageProjectMembers, canReadProject, canWriteProject } from "@/lib/permission-rules";
 
 export async function requireCurrentUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
@@ -24,9 +24,14 @@ export async function assertCanReadProject(projectId: string): Promise<SessionUs
 
   const project = await prisma.project.findFirst({
     where: { id: projectId },
-    select: { id: true, ownerId: true },
+    select: {
+      id: true,
+      ownerId: true,
+      members: { where: { userId: user.id }, select: { role: true }, take: 1 },
+    },
   });
-  if (!project || !canReadProject({ userId: user.id, role: user.role, ownerId: project.ownerId })) {
+  const memberRole = project?.members[0]?.role ?? null;
+  if (!project || !canReadProject({ userId: user.id, role: user.role, ownerId: project.ownerId, memberRole })) {
     throw new Error("无权访问此项目");
   }
 
@@ -38,10 +43,29 @@ export async function assertCanWriteProject(projectId: string): Promise<SessionU
 
   const project = await prisma.project.findFirst({
     where: { id: projectId },
+    select: {
+      id: true,
+      ownerId: true,
+      members: { where: { userId: user.id }, select: { role: true }, take: 1 },
+    },
+  });
+  const memberRole = project?.members[0]?.role ?? null;
+  if (!project || !canWriteProject({ userId: user.id, role: user.role, ownerId: project.ownerId, memberRole })) {
+    throw new Error("无权修改此项目");
+  }
+
+  return user;
+}
+
+export async function assertCanManageProjectMembers(projectId: string): Promise<SessionUser> {
+  const user = await requireCurrentUser();
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId },
     select: { id: true, ownerId: true },
   });
-  if (!project || !canWriteProject({ userId: user.id, role: user.role, ownerId: project.ownerId })) {
-    throw new Error("无权修改此项目");
+  if (!project || !canManageProjectMembers({ userId: user.id, ownerId: project.ownerId })) {
+    throw new Error("只有项目主负责人可以管理协作者");
   }
 
   return user;

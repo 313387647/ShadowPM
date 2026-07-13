@@ -4,25 +4,25 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    --background: 60 14% 97%;
+    --foreground: 140 6% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 140 6% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
+    --popover-foreground: 140 6% 10%;
+    --primary: 152 34% 28%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 60 9% 94%;
+    --secondary-foreground: 140 6% 10%;
+    --muted: 60 9% 94%;
+    --muted-foreground: 120 3% 42%;
+    --accent: 60 9% 94%;
+    --accent-foreground: 140 6% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --border: 60 6% 88%;
+    --input: 60 6% 88%;
+    --ring: 152 34% 28%;
     --radius: 0.5rem;
   }
 
@@ -55,5 +55,31 @@
   }
   body {
     @apply bg-background text-foreground;
+    min-width: 320px;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    @apply bg-primary/20 text-foreground;
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  .surface-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.35) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.35) 1px, transparent 1px);
+    background-size: 24px 24px;
   }
 }

@@ -128,42 +128,61 @@ These items are required before ShadowPM should be considered ready for broader 
   - [x] Mark Risk/Asset/ImportDraft schema models as legacy hidden from Alpha core
   - [x] Prevent hard delete for control items with logs, budget flows, or calendar entries
 
-## P1 - Product Differentiation
+## P1 - Product Differentiation (Completed)
 
-- [ ] Command Center
-  - Keyboard-first command interface
-  - Natural language updates
-  - Quick create/update/query flows
-  - Mutation preview before write operations
-- [ ] Multi-turn AI confirmation
-  - AI asks only high-value clarification questions
-  - User can choose "create now, fill gaps later"
-  - AI explains what it will mutate before applying low-confidence changes
-  - Copilot mutation preview before status/log writes
-- [ ] Dashboard V2
-  - AI-generated weekly project health summary
-  - Cross-project risk and budget signals
-  - Leader view that answers status questions without page drilling
-- [ ] Budget module V2
-  - Budget categories
-  - Budget warnings
-  - Draft vs confirmed financial signals
-  - Better task/workstream association
+- [x] Command Center
+  - [x] Keyboard-first global entry with `Cmd/Ctrl + K`
+  - [x] Natural language queries over official project, budget, and calendar data
+  - [x] Keep progress/status edits in the project control table instead of AI chat
+  - [x] Remove routine data mutation from the Command Center scope
+  - [x] Improve query accuracy and answer formatting only
+- [x] Multi-turn AI confirmation
+  - [x] AI asks only high-value clarification questions
+  - [x] User can choose "create now, fill gaps later"
+  - [x] AI explains what it will mutate before applying low-confidence changes
+  - [x] AI import and bulk-generation flows show clear previews before writes
+- [x] Dashboard V2
+  - [x] Leader cockpit first screen with attention items and upcoming execution calendar
+  - [x] Cross-project watch signals without page drilling
+  - [x] Project brief cards with progress, overdue, and missing-owner signals
+  - [x] Budget anomaly ranking and ledger drill-down
+  - [x] Explainable weekly project health summary from official data
+- [x] Budget module V2
+  - [x] Budget categories
+  - [x] Budget warnings
+  - [x] Draft/planned vs confirmed financial signals
+  - [x] Better task/workstream association
   - Reintroduce advanced split/merge/transfer UI only after Alpha users understand the basic ledger
-- [ ] Team model
-  - Project members
-  - Workload view
-  - Role-aware mutation boundaries
+- [x] Team model
+  - [x] Project members
+  - [x] Workload view
+  - [x] Role-aware mutation boundaries
+  - [x] Leader read-only vs owner-editable permission explanation
+  - [x] Explicit collaborator authorization beyond project owner
 
 ## P2 - Scale And Ecosystem
 
-- [ ] Export canonical project control workbook
-- [ ] AI-generated weekly/monthly reports
-- [ ] External collaborator share links
-- [ ] Calendar sync
-- [ ] Asset intelligence and AI grounding over project documents
-- [ ] Portfolio cockpit for many active projects
-- [ ] Enterprise deployment hardening
+- [x] Export canonical project control workbook
+  - Includes project profile, control table, progress changes, budget flows, execution calendar, activity, and source evidence
+- [x] AI-generated weekly/monthly reports
+  - Grounded in official project data and retained import evidence
+  - Falls back to a deterministic report when the model is unavailable
+  - Persists report content and source snapshot for auditability
+- [x] External collaborator share links
+  - Revocable, expiring, read-only project view
+  - Stores only the share-token hash
+- [x] Calendar sync
+  - Standards-based read-only ICS subscription from the same revocable share capability
+  - Two-way Google/Microsoft OAuth sync is intentionally outside this release
+- [x] Asset intelligence and AI grounding over project documents
+  - Import sources are retained as bounded text evidence with filename and hash
+  - No standalone asset center was restored
+- [x] Portfolio cockpit for many active projects
+  - Searchable, filterable portfolio table with progress, responsibility, schedule, and budget signals
+  - Removed duplicate decorative charts and risk panels
+- [x] Enterprise deployment hardening baseline
+  - Health endpoint, security headers, signed sessions, standalone build, Docker image, environment template, and no-index policy
+  - SSO, tenant isolation, object storage, queue workers, and provider-specific OAuth remain post-P2 enterprise work
 
 ## Development Protocol
 

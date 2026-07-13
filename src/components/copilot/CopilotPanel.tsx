@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bot, Send, Loader2, X, ChevronRight, Lightbulb, Zap,
+  Bot, Send, Loader2, X, ChevronRight, Lightbulb, Command,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { processCopilotMessage, type CopilotResponse } from "@/actions/copilot-actions";
@@ -15,11 +15,10 @@ type Message = {
 };
 
 const QUICK_COMMANDS = [
-  { label: "📊 仰望一万台预算", query: "仰望一万台预算还有多少" },
-  { label: "📆 执行日历", query: "仰望一万台接下来有哪些执行日历" },
-  { label: "✅ 汇报完成", query: "公关线的通稿已经发给客户了" },
-  { label: "⚠️ 待处理项", query: "有哪些事项逾期或待确认" },
-  { label: "📂 项目列表", query: "现在有哪些项目" },
+  { label: "Aster X9 预算", query: "Aster X9 国内上市整合传播预算还有多少" },
+  { label: "执行日历", query: "Aster X9 国内上市整合传播接下来有哪些执行日历" },
+  { label: "待处理项", query: "有哪些事项逾期或待确认" },
+  { label: "项目列表", query: "现在有哪些项目" },
 ];
 
 export function CopilotPanel() {
@@ -31,12 +30,11 @@ export function CopilotPanel() {
     {
       role: "copilot",
       content:
-        "👋 你好！我是 ShadowPM AI 助手。\n\n现在你可以用自然语言直接操作项目了：\n" +
-        "• 说「公关线搞定了」→ 自动更新状态\n" +
-        "• 说「通稿已经发给客户了」→ 自动追加进度\n" +
-        "• 说「仰望一万台花了多少钱」→ 查询预算\n\n" +
-        "• 说「接下来有哪些执行日历」→ 查询正式传播/执行节点\n\n" +
-        "试试看 👇",
+        "👋 我是 ShadowPM Command Center。\n\n我先负责查询、定位和总结，不直接替你改项目数据：\n" +
+        "• 查预算：Aster X9 国内上市整合传播预算还有多少\n" +
+        "• 查日历：接下来有哪些执行日历\n" +
+        "• 查关注项：哪些事项逾期或待确认\n\n" +
+        "进度和状态建议直接在管控表里改，会更快、更清楚。",
     },
   ]);
   const [loading, setLoading] = useState(false);
@@ -51,6 +49,18 @@ export function CopilotPanel() {
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 100);
   }, [open]);
+
+  useEffect(() => {
+    function openFromKeyboard(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setOpen(true);
+      }
+    }
+
+    window.addEventListener("keydown", openFromKeyboard);
+    return () => window.removeEventListener("keydown", openFromKeyboard);
+  }, []);
 
   async function handleSend(query?: string) {
     const text = (query ?? input).trim();
@@ -80,22 +90,24 @@ export function CopilotPanel() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-30 flex size-12 items-center justify-center rounded-full bg-gray-900 text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl active:scale-95"
-        title="AI 助手"
+        className="fixed bottom-4 right-4 z-30 flex h-10 items-center gap-2 rounded-full bg-gray-950 px-3 text-xs font-medium text-white shadow-lg transition-all hover:shadow-xl active:scale-95 sm:bottom-6 sm:right-6 sm:h-11 sm:px-4"
+        title="Command Center"
       >
-        <Zap className="size-5" />
+        <Command className="size-4" />
+        Command
+        <span className="hidden rounded bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/70 sm:inline">⌘K</span>
       </button>
 
       {open && (
-        <div className="fixed bottom-20 right-6 z-50 flex w-[400px] max-h-[600px] flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl">
-          <div className="flex items-center justify-between border-b px-4 py-3 bg-gray-900 text-gray-50">
+        <div className="fixed inset-x-3 bottom-16 z-50 flex max-h-[78vh] flex-col overflow-hidden rounded-lg border bg-card shadow-2xl sm:inset-x-auto sm:bottom-20 sm:right-6 sm:max-h-[680px] sm:w-[460px]">
+          <div className="flex items-center justify-between border-b bg-gray-950 px-4 py-3 text-gray-50">
             <div className="flex items-center gap-2">
               <div className="flex size-7 items-center justify-center rounded-lg bg-gray-50/20">
-                <Bot className="size-4" />
+                <Command className="size-4" />
               </div>
               <div>
-                <p className="text-sm font-semibold">ShadowPM Copilot</p>
-                <p className="text-[10px] text-gray-400">AI 操作引擎</p>
+                <p className="text-sm font-semibold">ShadowPM Command Center</p>
+                <p className="text-[10px] text-gray-400">查询、定位、总结项目数据</p>
               </div>
             </div>
             <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-gray-800 size-7" onClick={() => setOpen(false)}>
@@ -147,7 +159,7 @@ export function CopilotPanel() {
           <div className="flex items-center gap-2 border-t p-3">
             <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              placeholder="说句话，比如：公关线稿子写完了..."
+              placeholder="问项目、预算、日历、待处理项..."
               disabled={loading}
               className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50" />
             <Button size="icon" className="size-8 shrink-0" disabled={loading || !input.trim()} onClick={() => handleSend()}>

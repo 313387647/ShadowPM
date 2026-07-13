@@ -6,16 +6,16 @@ const steps = [
   {
     icon: LogIn,
     title: "1. 登录测试账号",
-    detail: "推荐选择「林小夏」测试项目创建；选择「陈鹏」查看全局大盘。",
+    detail: "选择任意项目成员测试创建和编辑；选择管理者查看全局大盘。",
   },
   {
     icon: Download,
-    title: "2. 下载案例表格",
-    detail: "使用页面下方的案例文件，也可以上传你自己的项目管控表。",
+    title: "2. 先看完整说明书",
+    detail: "说明书覆盖每个页面、卡片、字段、状态和反馈重点，第一次测试建议先看。",
   },
   {
     icon: Upload,
-    title: "3. AI 生成项目",
+    title: "3. 下载案例并 AI 生成项目",
     detail: "进入工作台，点击「新建项目」→「AI 生成」→ 上传 Excel。",
   },
   {
@@ -72,13 +72,13 @@ export default function DemoPage() {
               </a>
             </Button>
             <Button asChild variant="outline" className="gap-2">
-              <Link href="/guide">查看小白教程</Link>
+              <Link href="/guide">查看完整说明书</Link>
             </Button>
           </div>
           <div className="grid gap-3 rounded-lg border bg-background p-4 text-sm text-muted-foreground sm:grid-cols-3">
             <div>
               <p className="font-medium text-foreground">测试账号</p>
-              <p className="mt-1">选择「林小夏」上传和创建项目；选择「陈鹏」查看反馈后台。</p>
+              <p className="mt-1">选择任意成员上传和创建项目；选择管理者查看全局大盘与反馈后台。</p>
             </div>
             <div>
               <p className="font-medium text-foreground">数据会保留</p>
@@ -124,6 +124,12 @@ export default function DemoPage() {
                 <Download className="size-4" />
                 下载 one-million-project-control-sample.xlsx
               </a>
+            </Button>
+            <Button asChild className="mt-2 w-full gap-2">
+              <Link href="/guide">
+                查看完整小白说明书
+                <ArrowRight className="size-4" />
+              </Link>
             </Button>
           </div>
 

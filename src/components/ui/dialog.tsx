@@ -94,10 +94,10 @@ function DialogContent({
   return (
     <>
       <DialogOverlay />
-      <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+      <div className="fixed inset-0 z-50 flex items-end justify-center p-0 pointer-events-none sm:items-center sm:p-4">
         <div
           className={cn(
-            "pointer-events-auto relative z-50 w-full max-w-lg rounded-xl border bg-card p-6 shadow-2xl",
+            "pointer-events-auto relative z-50 w-full max-w-lg rounded-t-lg border bg-card p-6 shadow-2xl sm:rounded-lg",
             className
           )}
         >

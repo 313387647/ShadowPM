@@ -1,23 +1,22 @@
 "use server";
 
-import OpenAI from "openai";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/permissions";
+import { buildWeeklyHealthSummary } from "@/lib/weekly-health-summary";
 
 export async function generateDashboardSummary(): Promise<string | null> {
   const user = await requireCurrentUser();
   if (user.role !== "LEADER") return null;
 
-  try {
-    const now = new Date();
+  const now = new Date();
 
-    const [projects, taskAgg, allocAgg, expenseAgg, refundAgg, overdueCount] = await Promise.all([
+  const [projects, taskAgg, allocAgg, expenseAgg, refundAgg, overdueCount, missingOwnerCount, calendarEntries] = await Promise.all([
       prisma.project.findMany({
         select: {
-          name: true, totalBudget: true,
+          id: true, name: true, totalBudget: true,
           _count: { select: { tasks: true } },
-          tasks: { select: { status: true, deadline: true } },
+          tasks: { select: { status: true, deadline: true, assignee: true } },
         },
         orderBy: { createdAt: "asc" },
       }),
@@ -37,64 +36,60 @@ export async function generateDashboardSummary(): Promise<string | null> {
       prisma.task.count({
         where: { deadline: { lt: now }, status: { not: "COMPLETED" } },
       }),
+      prisma.task.count({
+        where: { status: { not: "COMPLETED" }, OR: [{ assignee: null }, { assignee: "" }] },
+      }),
+      prisma.executionCalendarEntry.findMany({
+        select: { projectId: true, date: true, status: true },
+        where: { status: { notIn: ["DONE", "CANCELED"] } },
+      }),
     ]);
 
-    if (projects.length === 0) return null;
+  if (projects.length === 0) return buildWeeklyHealthSummary({
+    projectCount: 0, pending: 0, inProgress: 0, completed: 0, overdueCount: 0,
+    missingOwnerCount: 0, plannedBudget: 0, allocatedBudget: 0, consumedBudget: 0, projects: [],
+  });
 
-    const plannedBudget = projects.reduce((s, p) => s.add(p.totalBudget), new Prisma.Decimal(0));
-    const totalAllocated = allocAgg._sum.amount ?? new Prisma.Decimal(0);
-    const totalExpense = (expenseAgg._sum.amount ?? new Prisma.Decimal(0)).abs();
-    const totalRefund = refundAgg._sum.amount ?? new Prisma.Decimal(0);
-    const consumed = totalExpense.sub(totalRefund);
+  const plannedBudget = projects.reduce((s, p) => s.add(p.totalBudget), new Prisma.Decimal(0));
+  const totalAllocated = allocAgg._sum.amount ?? new Prisma.Decimal(0);
+  const totalExpense = (expenseAgg._sum.amount ?? new Prisma.Decimal(0)).abs();
+  const totalRefund = refundAgg._sum.amount ?? new Prisma.Decimal(0);
+  const consumed = totalExpense.sub(totalRefund);
 
-    const pending = taskAgg.find((g) => g.status === "PENDING")?._count.id ?? 0;
-    const inProgress = taskAgg.find((g) => g.status === "IN_PROGRESS")?._count.id ?? 0;
-    const completed = taskAgg.find((g) => g.status === "COMPLETED")?._count.id ?? 0;
-
-    const projectLines = projects.map((p) => {
-      const completedTasks = p.tasks.filter((t) => t.status === "COMPLETED").length;
-      const total = p._count.tasks;
-      const progress = total > 0 ? Math.round((completedTasks / total) * 100) : 0;
-      return `• ${p.name}：${progress}% 完成（${completedTasks}/${total}）`;
-    }).join("\n");
-
-    const prompt = `你是 ShadowPM 的 Dashboard AI 摘要助手。请根据以下团队数据，用 3-5 句简洁的中文生成今日项目状态摘要。
-
-要点：
-- 语气亲切专业，像团队助理
-- 突出最关键的信息（风险、进度、超支）
-- 如果有逾期事项，必须提到
-- 如果用"万"单位更易读，可以这样表达
-- 控制在 150 字以内
-
-数据：
-• 总项目数：${projects.length}
-• 计划预算：¥${plannedBudget.toNumber().toLocaleString()}
-• 已确认预算池：¥${totalAllocated.toNumber().toLocaleString()}
-• 已使用：¥${consumed.toNumber().toLocaleString()}
-• 待启动事项：${pending} | 进行中：${inProgress} | 已完成：${completed}
-• 逾期未完成：${overdueCount} 个
-• 各项目进度：
-${projectLines}
-
-请直接返回摘要文字，不要 JSON，不要 markdown。`;
-
-    const openai = new OpenAI({
-      apiKey: process.env.DEEPSEEK_API_KEY!,
-      baseURL: "https://api.deepseek.com/v1",
-    });
-
-    const response = await openai.chat.completions.create({
-      model: "deepseek-chat",
-      max_tokens: 300,
-      messages: [
-        { role: "system", content: "你是 ShadowPM 的 AI 摘要助手。请用简洁的中文生成项目状态摘要，控制在 3-5 句话、150 字以内。" },
-        { role: "user", content: prompt },
-      ],
-    });
-
-    return response.choices[0]?.message?.content?.trim() ?? null;
-  } catch {
-    return null;
+  const pending = taskAgg.find((g) => g.status === "PENDING")?._count.id ?? 0;
+  const inProgress = taskAgg.find((g) => g.status === "IN_PROGRESS")?._count.id ?? 0;
+  const completed = taskAgg.find((g) => g.status === "COMPLETED")?._count.id ?? 0;
+  const calendarByProject = new Map<string, { upcoming: number; unscheduled: number }>();
+  for (const entry of calendarEntries) {
+    const current = calendarByProject.get(entry.projectId) ?? { upcoming: 0, unscheduled: 0 };
+    if (!entry.date) current.unscheduled += 1;
+    calendarByProject.set(entry.projectId, current);
   }
+
+  return buildWeeklyHealthSummary({
+    projectCount: projects.length,
+    pending,
+    inProgress,
+    completed,
+    overdueCount,
+    missingOwnerCount,
+    plannedBudget: plannedBudget.toNumber(),
+    allocatedBudget: totalAllocated.toNumber(),
+    consumedBudget: consumed.toNumber(),
+    projects: projects.map((project) => {
+      const completedTasks = project.tasks.filter((task) => task.status === "COMPLETED").length;
+      const overdueTasks = project.tasks.filter((task) => task.deadline && task.deadline < now && task.status !== "COMPLETED").length;
+      const missingOwnerTasks = project.tasks.filter((task) => task.status !== "COMPLETED" && !task.assignee?.trim()).length;
+      const calendar = calendarByProject.get(project.id) ?? { upcoming: 0, unscheduled: 0 };
+      return {
+        name: project.name,
+        totalTasks: project._count.tasks,
+        completedTasks,
+        overdueTasks,
+        missingOwnerTasks,
+        upcomingCalendarEntries: calendar.upcoming,
+        unscheduledCalendarEntries: calendar.unscheduled,
+      };
+    }),
+  });
 }

@@ -16,58 +16,88 @@ enum Role {
 }
 
 enum TaskStatus {
-  PENDING     // 待启动
+  PENDING // 待启动
   IN_PROGRESS // 进行中
-  COMPLETED   // 已完成
+  COMPLETED // 已完成
 }
 
 enum FlowType {
   ALLOCATE // 初始/追加预算 (正数)
-  EXPENSE  // 支出走账 (负数)
-  REFUND   // 费用退回 (正数)
+  EXPENSE // 支出走账 (负数)
+  REFUND // 费用退回 (正数)
+}
+
+enum ProjectMemberRole {
+  EDITOR // 可编辑项目管控表、预算账本、执行日历
+  VIEWER // 可查看项目，但不能修改
 }
 
 enum AssetType {
   DOCUMENT // 富文本
-  LINK     // 外部链接
-  FILE     // 附件
+  LINK // 外部链接
+  FILE // 附件
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  role      Role     @default(MEMBER)
-  createdAt DateTime @default(now())
-  projects  Project[]
-  feedbacks ProjectFeedback[]
+  id                 String            @id @default(cuid())
+  name               String
+  role               Role              @default(MEMBER)
+  createdAt          DateTime          @default(now())
+  projects           Project[]
+  feedbacks          ProjectFeedback[]
+  projectMemberships ProjectMember[]
 }
 
 model Project {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
   ownerId     String
-  totalBudget Decimal  @db.Decimal(14, 2) // 规划的总预算池（14位总精度，2位小数）
+  totalBudget Decimal   @db.Decimal(14, 2) // 规划的总预算池（14位总精度，2位小数）
   startDate   DateTime?
   endDate     DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
-  owner   User         @relation(fields: [ownerId], references: [id])
-  tasks        Task[]
-  phases       Phase[]
-  folders      AssetFolder[]
-  risks        Risk[]
-  healthSnaps  HealthSnapshot[]
-  importDrafts ImportDraft[]
+  owner           User                     @relation(fields: [ownerId], references: [id])
+  tasks           Task[]
+  phases          Phase[]
+  folders         AssetFolder[]
+  risks           Risk[]
+  healthSnaps     HealthSnapshot[]
+  importDrafts    ImportDraft[]
   calendarEntries ExecutionCalendarEntry[]
-  activityLogs ActivityLog[]
-  feedbacks ProjectFeedback[]
+  activityLogs    ActivityLog[]
+  feedbacks       ProjectFeedback[]
+  members         ProjectMember[]
+  sources         ProjectSource[]
+  reports         ProjectReport[]
+  shareLinks      ProjectShareLink[]
+
+  @@index([ownerId])
+  @@index([createdAt])
+}
+
+model ProjectMember {
+  id        String            @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectMemberRole @default(EDITOR)
+  createdBy String
+  createdAt DateTime          @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+  @@index([role])
 }
 
 model Phase {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   projectId String
   name      String
-  sortOrder Int      @default(0)
+  sortOrder Int       @default(0)
   startDate DateTime?
   endDate   DateTime?
 
@@ -78,38 +108,41 @@ model Phase {
 }
 
 model Task {
-  id          String     @id @default(cuid())
-  projectId   String
-  phaseId     String?    // 所属阶段
-  name        String
-  description String?    // 详细描述（对标 Excel 管控表「详细描述」列）
-  notes       String?    // 进度备注/结论（对标 Excel「进度或结论」列）
-  assignee    String?    // 执行人姓名
-  department  String?    // 负责部门（对标 Excel「负责部门」列）
-  priority    String     @default("P2") // P0 | P1 | P2 | P3
-  deadline    DateTime?
-  status      TaskStatus @default(PENDING)
-  aiConfidence     String?  // AI 导入行置信度：high | medium | low
-  sourceRef        String?  // AI 导入来源：文件/工作表/行列/段落
-  missingFields    Json     @default("[]") // 可在管控表内补齐的字段
-  conflicts        Json     @default("[]") // 源数据冲突或 AI 无法安全判断的信息
-  needsConfirmation Boolean @default(false) // 是否需要人工确认
+  id                String     @id @default(cuid())
+  projectId         String
+  phaseId           String? // 所属阶段
+  name              String
+  description       String? // 详细描述（对标 Excel 管控表「详细描述」列）
+  notes             String? // 进度备注/结论（对标 Excel「进度或结论」列）
+  assignee          String? // 执行人姓名
+  department        String? // 负责部门（对标 Excel「负责部门」列）
+  priority          String     @default("P2") // P0 | P1 | P2 | P3
+  deadline          DateTime?
+  status            TaskStatus @default(PENDING)
+  aiConfidence      String? // AI 导入行置信度：high | medium | low
+  sourceRef         String? // AI 导入来源：文件/工作表/行列/段落
+  missingFields     Json       @default("[]") // 可在管控表内补齐的字段
+  conflicts         Json       @default("[]") // 源数据冲突或 AI 无法安全判断的信息
+  needsConfirmation Boolean    @default(false) // 是否需要人工确认
 
-  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  phase   Phase?        @relation(fields: [phaseId], references: [id], onDelete: SetNull)
-  logs    ProgressLog[]
-  budgets BudgetFlow[]
+  project         Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase           Phase?                   @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  logs            ProgressLog[]
+  budgets         BudgetFlow[]
   calendarEntries ExecutionCalendarEntry[]
 
   @@index([projectId])
   @@index([phaseId])
+  @@index([status])
+  @@index([deadline])
+  @@index([assignee])
 }
 
 model ProgressLog {
   id        String   @id @default(cuid())
   taskId    String
-  content   String   // 支持 Markdown
-  createdBy String   // 操作人
+  content   String // 支持 Markdown
+  createdBy String // 操作人
   createdAt DateTime @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -121,9 +154,9 @@ model ProgressLog {
 model ActivityLog {
   id          String   @id @default(cuid())
   projectId   String
-  targetType  String   // PROJECT | CONTROL_ITEM | BUDGET_ITEM | CALENDAR_ENTRY | RISK | ASSET | IMPORT
+  targetType  String // PROJECT | CONTROL_ITEM | BUDGET_ITEM | CALENDAR_ENTRY | RISK | ASSET | IMPORT
   targetId    String?
-  changeType  String   // CREATE | UPDATE | STATUS_CHANGE | COMMENT | AI_ACTION | IMPORT | DELETE_REQUEST
+  changeType  String // CREATE | UPDATE | STATUS_CHANGE | COMMENT | AI_ACTION | IMPORT | DELETE_REQUEST
   summary     String
   beforeState Json?
   afterState  Json?
@@ -136,6 +169,7 @@ model ActivityLog {
   @@index([projectId])
   @@index([targetType])
   @@index([createdAt])
+  @@index([projectId, createdAt])
 }
 
 model BudgetFlow {
@@ -146,7 +180,7 @@ model BudgetFlow {
   flowType           FlowType
   operation          String   @default("ALLOCATE") // CONFIRM | SUPPLEMENT | REDUCE | ALLOCATE | RETURN | TRANSFER | SPLIT | MERGE | EXPENSE | REFUND
   amount             Decimal  @db.Decimal(14, 2) // 正负号表达对当前 task 的预算影响
-  description        String   // 事由
+  description        String // 事由
   createdBy          String
   createdAt          DateTime @default(now())
 
@@ -164,11 +198,11 @@ model Risk {
   /// Open issues and risks should live in control item notes/activity unless this model is explicitly restored.
   id          String   @id @default(cuid())
   projectId   String
-  title       String?  // 风险标题；历史自动检测风险可为空
-  type        String   // BUDGET | SCHEDULE | RESOURCE | SCOPE | COMMUNICATION | OTHER
+  title       String? // 风险标题；历史自动检测风险可为空
+  type        String // BUDGET | SCHEDULE | RESOURCE | SCOPE | COMMUNICATION | OTHER
   level       String   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
-  description String   // AI 生成的风险描述
-  suggestion  String?  // AI 建议的应对措施
+  description String // AI 生成的风险描述
+  suggestion  String? // AI 建议的应对措施
   status      String   @default("OPEN") // OPEN | ACKNOWLEDGED | MITIGATED | CLOSED
   source      String   @default("MANUAL") // MANUAL | AI_IMPORT | AI_DETECTION
   createdAt   DateTime @default(now())
@@ -181,22 +215,22 @@ model Risk {
 }
 
 model ExecutionCalendarEntry {
-  id          String   @id @default(cuid())
-  projectId   String
-  taskId      String?
-  date        DateTime?
-  startTime   String?
-  endTime     String?
-  channel     String?
-  workstream  String?
-  content     String
-  owner       String?
-  department  String?
-  status      String   @default("PLANNED") // PLANNED | CONFIRMED | DONE | CANCELED
-  notes       String?
-  source      String   @default("MANUAL") // MANUAL | AI_IMPORT
-  createdBy   String
-  createdAt   DateTime @default(now())
+  id         String    @id @default(cuid())
+  projectId  String
+  taskId     String?
+  date       DateTime?
+  startTime  String?
+  endTime    String?
+  channel    String?
+  workstream String?
+  content    String
+  owner      String?
+  department String?
+  status     String    @default("PLANNED") // PLANNED | CONFIRMED | DONE | CANCELED
+  notes      String?
+  source     String    @default("MANUAL") // MANUAL | AI_IMPORT
+  createdBy  String
+  createdAt  DateTime  @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
@@ -223,11 +257,11 @@ model AssetFolder {
 model HealthSnapshot {
   id             String   @id @default(cuid())
   projectId      String
-  timestamp       DateTime @default(now())
-  budgetHealth   Float    // 0-100
-  scheduleHealth Float    // 0-100
+  timestamp      DateTime @default(now())
+  budgetHealth   Float // 0-100
+  scheduleHealth Float // 0-100
   riskCount      Int      @default(0)
-  overallScore   Float    // 加权综合 0-100
+  overallScore   Float // 加权综合 0-100
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -241,7 +275,7 @@ model AssetItem {
   folderId String
   title    String
   type     AssetType
-  content  String?   // 富文本或外部链接
+  content  String? // 富文本或外部链接
   fileUrl  String?
   version  Int       @default(1)
 
@@ -270,27 +304,83 @@ model ImportDraft {
 }
 
 model ProjectFeedback {
-  id             String   @id @default(cuid())
-  projectId      String
-  createdById    String
-  testerName     String
-  rating         Int
-  aiAccuracy     String   // GOOD | PARTIAL | POOR | NOT_TESTED
-  uploadOutcome  String   // CREATED | CREATED_WITH_EDITS | FAILED | BLOCKED
-  wouldUse       String   // YES | MAYBE | NO
-  budgetIssue    Boolean  @default(false)
-  calendarIssue  Boolean  @default(false)
-  ownerIssue     Boolean  @default(false)
-  missingInfo    Boolean  @default(false)
-  friction       String?
-  notes          String?
-  createdAt      DateTime @default(now())
+  id            String   @id @default(cuid())
+  projectId     String
+  createdById   String
+  testerName    String
+  rating        Int
+  aiAccuracy    String // GOOD | PARTIAL | POOR | NOT_TESTED
+  uploadOutcome String // CREATED | CREATED_WITH_EDITS | FAILED | BLOCKED
+  wouldUse      String // YES | MAYBE | NO
+  budgetIssue   Boolean  @default(false)
+  calendarIssue Boolean  @default(false)
+  ownerIssue    Boolean  @default(false)
+  missingInfo   Boolean  @default(false)
+  friction      String?
+  notes         String?
+  createdAt     DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User  @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([createdById])
   @@index([createdAt])
   @@index([rating])
+}
+
+/// Source evidence retained from AI project import. This is grounding context,
+/// not a standalone asset-management surface.
+model ProjectSource {
+  id            String   @id @default(cuid())
+  projectId     String
+  fileName      String
+  mediaType     String
+  sourceHash    String
+  extractedText String   @db.Text
+  uploadedBy    String
+  createdAt     DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([sourceHash])
+  @@index([createdAt])
+}
+
+/// Persisted source-grounded weekly/monthly report for auditability.
+model ProjectReport {
+  id             String   @id @default(cuid())
+  projectId      String
+  periodType     String // WEEKLY | MONTHLY
+  periodStart    DateTime
+  periodEnd      DateTime
+  content        String   @db.Text
+  sourceSnapshot Json
+  generatedBy    String
+  createdAt      DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([periodType])
+  @@index([createdAt])
+}
+
+/// Revocable read-only share capability. Only a token hash is stored.
+model ProjectShareLink {
+  id        String    @id @default(cuid())
+  projectId String
+  tokenHash String    @unique
+  label     String
+  expiresAt DateTime?
+  revokedAt DateTime?
+  createdBy String
+  createdAt DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([expiresAt])
+  @@index([revokedAt])
 }

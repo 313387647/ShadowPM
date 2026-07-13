@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Prisma } from "../src/generated/prisma/client";
 import { calculateBudgetSnapshot } from "../src/lib/budget";
+import { getBudgetSignal } from "../src/lib/budget-signals";
+import { buildAIImportPlan } from "../src/lib/ai-import-plan";
 import { shouldCreateConfirmedBudgetFlow } from "../src/lib/ai-import-rules";
 import { canReadProject, canWriteProject } from "../src/lib/permission-rules";
+import { buildWeeklyHealthSummary } from "../src/lib/weekly-health-summary";
+import { isCommandCenterWriteRequest, isProjectHealthQuery, isProjectListQuery } from "../src/lib/command-center-query";
+import { buildCalendarFeed, isValidShareToken, normalizeShareExpiryDays } from "../src/lib/p2-rules";
 
 describe("budget business rules", () => {
   it("treats BudgetFlow allocation as the financial source of truth", () => {
@@ -64,6 +69,34 @@ describe("budget business rules", () => {
     assert.equal(snapshot.plannedVariance.toNumber(), -200000);
     assert.equal(snapshot.usagePercent, 33);
   });
+
+  it("flags spending without a confirmed budget as high risk before a planned-budget reminder", () => {
+    const signal = getBudgetSignal({
+      plannedBudget: 500000,
+      allocatedBudget: 0,
+      balance: -120000,
+      used: 120000,
+      usagePercent: 0,
+      flowCount: 1,
+    });
+
+    assert.equal(signal.level, "HIGH");
+    assert.equal(signal.title, "存在支出但缺少确认预算");
+  });
+
+  it("keeps planned budget distinct from confirmed budget", () => {
+    const signal = getBudgetSignal({
+      plannedBudget: 500000,
+      allocatedBudget: 0,
+      balance: 0,
+      used: 0,
+      usagePercent: 0,
+      flowCount: 0,
+    });
+
+    assert.equal(signal.level, "MEDIUM");
+    assert.equal(signal.title, "计划预算尚未确认");
+  });
 });
 
 describe("AI import safety rules", () => {
@@ -97,6 +130,91 @@ describe("AI import safety rules", () => {
       status: "SETTLED",
       confidence: "high",
     }), false);
+  });
+});
+
+describe("AI import confirmation plan", () => {
+  it("allows create-now flow when only optional fields are missing", () => {
+    const plan = buildAIImportPlan({
+      projectName: "U7海外整合营销",
+      totalBudget: null,
+      startDate: null,
+      endDate: null,
+      tasks: [
+        {
+          name: "公关传播排期确认",
+          assignee: null,
+          department: null,
+          deadline: null,
+          confidence: "medium",
+        },
+      ],
+      budgetItems: [
+        {
+          title: "投放预算估算",
+          amount: 200000,
+          type: "ESTIMATE",
+          status: "DRAFT",
+          confidence: "high",
+        },
+      ],
+      calendarEntries: [
+        {
+          content: "海外发布预热",
+          date: null,
+          owner: null,
+          confidence: "medium",
+        },
+      ],
+    });
+
+    assert.equal(plan.canCreateNow, true);
+    assert.deepEqual(plan.requiredGaps, []);
+    assert.equal(plan.confirmedBudgetFlowCount, 0);
+    assert.equal(plan.deferredBudgetCandidateCount, 1);
+    assert.equal(plan.calendarNeedsConfirmationCount, 1);
+  });
+
+  it("blocks only missing project name or missing control table rows", () => {
+    const plan = buildAIImportPlan({
+      projectName: "",
+      totalBudget: 100000,
+      startDate: "2026-07-01",
+      endDate: "2026-08-01",
+      tasks: [],
+      budgetItems: [],
+      calendarEntries: [],
+      createBudgetFlow: true,
+    });
+
+    assert.equal(plan.canCreateNow, false);
+    assert.deepEqual(plan.requiredGaps, ["项目名称", "至少一条管控事项"]);
+  });
+
+  it("explains confirmed writes before AI-created projects are persisted", () => {
+    const plan = buildAIImportPlan({
+      projectName: "一万台整合营销",
+      totalBudget: 5000000,
+      startDate: "2026-07-01",
+      endDate: "2026-12-31",
+      tasks: [{ name: "整合营销总控", assignee: "林小夏", department: "市场部", deadline: "2026-08-01" }],
+      budgetItems: [
+        {
+          title: "媒体投放",
+          amount: 1500000,
+          type: "ALLOCATE",
+          status: "APPROVED",
+          confidence: "high",
+        },
+      ],
+      calendarEntries: [{ content: "首轮传播上线", date: "2026-07-20", owner: "林小夏", confidence: "high" }],
+      createBudgetFlow: true,
+    });
+
+    assert.equal(plan.canCreateNow, true);
+    assert.equal(plan.confirmedBudgetFlowCount, 1);
+    assert.equal(plan.calendarEntryCount, 1);
+    assert.equal(plan.rowsWithDiagnostics, 0);
   });
 });
 
@@ -135,5 +253,112 @@ describe("project permission rules", () => {
 
     assert.equal(canReadProject(params), false);
     assert.equal(canWriteProject(params), false);
+  });
+
+  it("allows explicit project editors to read and write without making assignee a permission source", () => {
+    assert.equal(canReadProject({
+      userId: "member-2",
+      role: "MEMBER",
+      ownerId: "member-1",
+      memberRole: "EDITOR",
+    }), true);
+
+    assert.equal(canWriteProject({
+      userId: "member-2",
+      role: "MEMBER",
+      ownerId: "member-1",
+      memberRole: "EDITOR",
+    }), true);
+  });
+
+  it("allows viewer collaborators to read but not write", () => {
+    assert.equal(canReadProject({
+      userId: "member-2",
+      role: "MEMBER",
+      ownerId: "member-1",
+      memberRole: "VIEWER",
+    }), true);
+
+    assert.equal(canWriteProject({
+      userId: "member-2",
+      role: "MEMBER",
+      ownerId: "member-1",
+      memberRole: "VIEWER",
+    }), false);
+  });
+});
+
+describe("weekly health summary", () => {
+  it("keeps dashboard health briefings available without a model call", () => {
+    const summary = buildWeeklyHealthSummary({
+      projectCount: 1,
+      pending: 2,
+      inProgress: 1,
+      completed: 3,
+      overdueCount: 1,
+      missingOwnerCount: 1,
+      plannedBudget: 100000,
+      allocatedBudget: 80000,
+      consumedBudget: 30000,
+      projects: [{
+        name: "U7海外整合营销",
+        totalTasks: 6,
+        completedTasks: 3,
+        overdueTasks: 1,
+        missingOwnerTasks: 1,
+        upcomingCalendarEntries: 2,
+        unscheduledCalendarEntries: 1,
+      }],
+    });
+
+    assert.match(summary, /1 项已逾期/);
+    assert.match(summary, /确认预算池 ¥80,000/);
+    assert.match(summary, /U7海外整合营销 50%/);
+  });
+});
+
+describe("Command Center query boundaries", () => {
+  it("routes formal write requests back to the source table", () => {
+    assert.equal(isCommandCenterWriteRequest("把发布会状态更新为完成"), true);
+    assert.equal(isCommandCenterWriteRequest("U7海外整合营销预算还有多少"), false);
+  });
+
+  it("recognizes deterministic project lookup questions", () => {
+    assert.equal(isProjectListQuery("现在有哪些项目"), true);
+    assert.equal(isProjectHealthQuery("U7海外整合营销进度怎么样"), true);
+  });
+});
+
+describe("P2 sharing and calendar rules", () => {
+  it("caps public share expiry to a safe range", () => {
+    assert.equal(normalizeShareExpiryDays(-2), 1);
+    assert.equal(normalizeShareExpiryDays(30), 30);
+    assert.equal(normalizeShareExpiryDays(365), 90);
+  });
+
+  it("accepts only generated base64url share tokens", () => {
+    assert.equal(isValidShareToken("a".repeat(43)), true);
+    assert.equal(isValidShareToken("short"), false);
+    assert.equal(isValidShareToken(`${"a".repeat(42)}!`), false);
+  });
+
+  it("exports dated execution entries as a standards-based calendar feed", () => {
+    const feed = buildCalendarFeed("上市项目", [{
+      id: "calendar-1",
+      date: new Date("2026-07-20T00:00:00.000Z"),
+      startTime: "09:30",
+      endTime: null,
+      content: "媒体沟通会",
+      workstream: "公关传播",
+      channel: "线下",
+      owner: "周予安",
+      notes: null,
+      status: "CONFIRMED",
+    }], new Date("2026-07-10T00:00:00.000Z"));
+
+    assert.match(feed, /BEGIN:VCALENDAR/);
+    assert.match(feed, /DTSTART:20260720T093000/);
+    assert.match(feed, /DTEND:20260720T103000/);
+    assert.match(feed, /SUMMARY:媒体沟通会/);
   });
 });

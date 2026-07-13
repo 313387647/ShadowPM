@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import { logout } from "@/actions/auth-actions";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
-  "AI 工作台": <FolderKanban className="size-4" />,
+  "工作台": <FolderKanban className="size-4" />,
   "全局大盘": <LayoutDashboard className="size-4" />,
   "外测反馈": <MessageSquareText className="size-4" />,
   "团队负载": <Users className="size-4" />,
+  "团队权限": <Users className="size-4" />,
 };
 
 interface SidebarProps {
@@ -28,7 +29,7 @@ export function Sidebar({ userRole, userName }: SidebarProps) {
   );
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-56 flex-col border-r bg-gray-950 text-gray-50">
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-56 flex-col border-r border-white/10 bg-[#0b0d0c] text-gray-50 md:flex">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2 border-b border-gray-800 px-4">
         <div className="flex size-7 items-center justify-center rounded-md bg-gray-50 text-xs font-bold text-gray-950">
@@ -74,6 +75,7 @@ export function Sidebar({ userRole, userName }: SidebarProps) {
             size="icon"
             className="text-gray-400 hover:text-white hover:bg-gray-800"
             onClick={() => logout()}
+            title="退出登录"
           >
             <LogOut className="size-4" />
           </Button>

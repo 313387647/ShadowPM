@@ -31,7 +31,7 @@ export async function getProjectLedger(projectId: string) {
   const flows = await prisma.budgetFlow.findMany({
     where: { task: { projectId } },
     include: {
-      task: { select: { id: true, name: true } },
+      task: { select: { id: true, name: true, phase: { select: { name: true } } } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -52,6 +52,11 @@ export async function getProjectLedger(projectId: string) {
   return flows.map((f) => ({
     ...f,
     amount: f.amount.toNumber(),
+    task: {
+      id: f.task.id,
+      name: f.task.name,
+      workstream: f.task.phase?.name ?? null,
+    },
     counterpartyTask: f.counterpartyTaskId ? counterpartyById.get(f.counterpartyTaskId) ?? null : null,
   }));
 }
@@ -105,11 +110,17 @@ export async function getProjectBudgetBalance(projectId: string) {
 export async function getProjectTasksForSelect(projectId: string) {
   await assertCanReadProject(projectId);
 
-  return prisma.task.findMany({
+  const tasks = await prisma.task.findMany({
     where: { projectId },
-    select: { id: true, name: true, status: true },
+    select: { id: true, name: true, status: true, phase: { select: { name: true } } },
     orderBy: { name: "asc" },
   });
+  return tasks.map((task) => ({
+    id: task.id,
+    name: task.name,
+    status: task.status,
+    workstream: task.phase?.name ?? null,
+  }));
 }
 
 // ── 记账操作（纯 Append，绝不修改任何余额字段） ──

@@ -2,6 +2,7 @@
 
 import mammoth from "mammoth";
 import OpenAI from "openai";
+import { createHash } from "node:crypto";
 import parseXLSXBuffer from "@/lib/xlsx-parser";
 
 // pdf-parse v1.x is CJS; dynamic import resolves module.exports = function
@@ -87,6 +88,14 @@ export type AIParsedProject = {
   confidence: AIConfidence;
   missingFields: string[];
   conflicts: string[];
+  sourceEvidence?: ProjectSourceEvidence | null;
+};
+
+export type ProjectSourceEvidence = {
+  fileName: string;
+  mediaType: string;
+  sourceHash: string;
+  extractedText: string;
 };
 
 export type CreateProjectFromAIDTO = {
@@ -103,6 +112,7 @@ export type CreateProjectFromAIDTO = {
   missingFields?: string[];
   conflicts?: string[];
   createBudgetFlow: boolean;
+  sourceEvidence?: ProjectSourceEvidence | null;
 };
 
 type CreatedTaskRef = {
@@ -211,12 +221,16 @@ export async function parseDocumentForProject(
 
   try {
     let text = "";
+    let sourceFileName = "粘贴文本";
+    let sourceMediaType = "text/plain";
     const file = formData.get("file") as File | null;
     const pastedText = formData.get("text") as string | null;
 
     if (file && file.size > 0) {
       const buffer = Buffer.from(await file.arrayBuffer());
       const fileName = file.name.toLowerCase();
+      sourceFileName = file.name;
+      sourceMediaType = file.type || "application/octet-stream";
 
       if (fileName.endsWith(".docx")) {
         const result = await mammoth.extractRawText({ buffer });
@@ -240,6 +254,13 @@ export async function parseDocumentForProject(
       return { success: false, message: "请上传文件或粘贴文本内容" };
     }
 
+    const sourceEvidence: ProjectSourceEvidence = {
+      fileName: sourceFileName,
+      mediaType: sourceMediaType,
+      sourceHash: createHash("sha256").update(text).digest("hex"),
+      extractedText: text.slice(0, 12000),
+    };
+
     if (text.length > 25000) {
       text = text.slice(0, 25000) + "\n\n[内容过长，已截断]";
     }
@@ -255,7 +276,7 @@ export async function parseDocumentForProject(
       return { success: false, message: "AI 无法从文档中识别项目名称。请尝试粘贴更清晰的文本。" };
     }
 
-    return { success: true, data: validated };
+    return { success: true, data: { ...validated, sourceEvidence } };
   } catch (error) {
     console.error("parse error:", error);
     return { success: false, message: "AI 解析失败。请重试，或切换到手动创建。" };
@@ -385,6 +406,19 @@ export async function createProjectFromAI(
       },
     });
 
+    const source = dto.sourceEvidence
+      ? await tx.projectSource.create({
+          data: {
+            projectId: createdProject.id,
+            fileName: dto.sourceEvidence.fileName,
+            mediaType: dto.sourceEvidence.mediaType,
+            sourceHash: dto.sourceEvidence.sourceHash,
+            extractedText: dto.sourceEvidence.extractedText,
+            uploadedBy: user.name,
+          },
+        })
+      : null;
+
     const phaseByWorkstream = new Map<string, string>();
     for (let i = 0; i < workstreams.length; i++) {
       const phase = await tx.phase.create({
@@ -488,61 +522,62 @@ export async function createProjectFromAI(
       createdCalendarEntries.push({ id: calendarEntry.id, content: entry.content.trim() });
     }
 
-    if (createdBudgetFlows.length > 0 || createdCalendarEntries.length > 0 || budgetCandidates.length > 0 || tasksToCreate.some((task) => (task.missingFields?.length ?? 0) > 0 || (task.conflicts?.length ?? 0) > 0 || task.confidence === "low")) {
-      await tx.activityLog.create({
-        data: {
-          projectId: createdProject.id,
-          targetType: "PROJECT",
-          targetId: createdProject.id,
-          changeType: "IMPORT",
-          source: "AI",
-          createdBy: user.name,
-          summary: [
-            "🤖 AI 导入已自动生成项目三件套",
-            createdBudgetFlows.length > 0 ? `预算流水：${createdBudgetFlows.length} 条` : null,
-            budgetCandidates.length > 0 ? `预算待确认：${budgetCandidates.length} 条` : null,
-            createdCalendarEntries.length > 0 ? `执行日历：${createdCalendarEntries.length} 条` : null,
-          ].filter(Boolean).join("\n"),
-          afterState: {
-            budgetFlowIds: createdBudgetFlows.map((flow) => flow.id),
-            calendarEntryIds: createdCalendarEntries.map((entry) => entry.id),
-            importDiagnostics: {
-              sourceQuality: dto.sourceQuality ?? null,
-              confidence: dto.confidence ?? null,
-              missingFields: dto.missingFields ?? [],
-              conflicts: dto.conflicts ?? [],
-              lowConfidenceTasks: tasksToCreate
-                .filter((task) => task.confidence === "low")
-                .map((task) => ({
-                  name: task.name,
-                  sourceRef: task.sourceRef ?? null,
-                  missingFields: task.missingFields ?? [],
-                  conflicts: task.conflicts ?? [],
-                })),
-              lowConfidenceBudgetItems: budgetItems
-                .filter((item) => item.confidence === "low" || !shouldCreateConfirmedBudgetFlow(item))
-                .map((item) => ({
-                  title: item.title,
-                  amount: item.amount ?? null,
-                  type: item.type ?? null,
-                  status: item.status ?? null,
-                  sourceRef: item.sourceRef ?? null,
-                  missingFields: item.missingFields ?? [],
-                  conflicts: item.conflicts ?? [],
-                })),
-              lowConfidenceCalendarEntries: calendarEntries
-                .filter((entry) => entry.confidence === "low")
-                .map((entry) => ({
-                  content: entry.content,
-                  sourceRef: entry.sourceRef ?? null,
-                  missingFields: entry.missingFields ?? [],
-                  conflicts: entry.conflicts ?? [],
-                })),
-            },
+    await tx.activityLog.create({
+      data: {
+        projectId: createdProject.id,
+        targetType: "PROJECT",
+        targetId: createdProject.id,
+        changeType: "IMPORT",
+        source: "AI",
+        createdBy: user.name,
+        summary: [
+          "AI 导入已生成项目管控工作区",
+          `管控事项：${createdTasks.length} 条`,
+          createdBudgetFlows.length > 0 ? `预算流水：${createdBudgetFlows.length} 条` : null,
+          budgetCandidates.length > 0 ? `预算待确认：${budgetCandidates.length} 条` : null,
+          createdCalendarEntries.length > 0 ? `执行日历：${createdCalendarEntries.length} 条` : null,
+          source ? `来源证据：${source.fileName}` : null,
+        ].filter(Boolean).join("\n"),
+        afterState: {
+          sourceId: source?.id ?? null,
+          budgetFlowIds: createdBudgetFlows.map((flow) => flow.id),
+          calendarEntryIds: createdCalendarEntries.map((entry) => entry.id),
+          importDiagnostics: {
+            sourceQuality: dto.sourceQuality ?? null,
+            confidence: dto.confidence ?? null,
+            missingFields: dto.missingFields ?? [],
+            conflicts: dto.conflicts ?? [],
+            lowConfidenceTasks: tasksToCreate
+              .filter((task) => task.confidence === "low")
+              .map((task) => ({
+                name: task.name,
+                sourceRef: task.sourceRef ?? null,
+                missingFields: task.missingFields ?? [],
+                conflicts: task.conflicts ?? [],
+              })),
+            lowConfidenceBudgetItems: budgetItems
+              .filter((item) => item.confidence === "low" || !shouldCreateConfirmedBudgetFlow(item))
+              .map((item) => ({
+                title: item.title,
+                amount: item.amount ?? null,
+                type: item.type ?? null,
+                status: item.status ?? null,
+                sourceRef: item.sourceRef ?? null,
+                missingFields: item.missingFields ?? [],
+                conflicts: item.conflicts ?? [],
+              })),
+            lowConfidenceCalendarEntries: calendarEntries
+              .filter((entry) => entry.confidence === "low")
+              .map((entry) => ({
+                content: entry.content,
+                sourceRef: entry.sourceRef ?? null,
+                missingFields: entry.missingFields ?? [],
+                conflicts: entry.conflicts ?? [],
+              })),
           },
         },
-      });
-    }
+      },
+    });
 
     return createdProject;
   });

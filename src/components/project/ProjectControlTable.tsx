@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CalendarPlus, CheckCircle2, Loader2, MessageSquarePlus, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarDays, CalendarPlus, CheckCircle2, Loader2, MessageSquarePlus, Pencil, Plus, Save, Trash2, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -200,6 +200,18 @@ function formatLogDate(value: Date | string) {
   }).format(new Date(value));
 }
 
+function formatDeadline(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(
+    new Date(`${value}T00:00:00.000Z`)
+  );
+}
+
+const STATUS_STYLE: Record<Task["status"], string> = {
+  PENDING: "border-amber-200 bg-amber-50 text-amber-800",
+  IN_PROGRESS: "border-sky-200 bg-sky-50 text-sky-800",
+  COMPLETED: "border-emerald-200 bg-emerald-50 text-emerald-800",
+};
+
 function matchesControlFilter(task: Task, filter: ControlFilter) {
   if (filter === "ALL") return true;
   if (filter === "MISSING") return getMissingFields(task).length > 0;
@@ -258,8 +270,8 @@ function ControlTableRow({
   const [scheduling, setScheduling] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const conflicts = normalizeStringList(task.conflicts);
-  const hasImportDiagnostics = Boolean(task.aiConfidence || task.sourceRef || task.needsConfirmation || conflicts.length > 0);
   const phaseName = phases?.find((phase) => phase.id === task.phaseId)?.name ?? "";
   const hasHistory = task._count.logs > 0 || task._count.budgets > 0 || task._count.calendarEntries > 0;
 
@@ -298,6 +310,7 @@ function ControlTableRow({
       const result = await updateTask(formData);
       if (result.success) {
         toast.success("管控表已更新");
+        setEditMode(false);
         router.refresh();
       } else {
         toast.error(result.message ?? "保存失败");
@@ -307,6 +320,21 @@ function ControlTableRow({
     } finally {
       setSaving(false);
     }
+  }
+
+  function discardEdits() {
+    const hadUnsavedChanges = dirty;
+    setName(task.name);
+    setDescription(task.description ?? "");
+    setAssignee(task.assignee ?? "");
+    setDepartment(task.department ?? "");
+    setDeadline(toDateInputValue(task.deadline));
+    setNotes(task.notes ?? "");
+    setPriority(task.priority);
+    setStatus(task.status);
+    setEditMode(false);
+
+    if (hadUnsavedChanges) toast("未保存修改已放弃");
   }
 
   async function submitProgressLog() {
@@ -381,190 +409,91 @@ function ControlTableRow({
     }
   }
 
+  function handleEditShortcut(event: React.KeyboardEvent<HTMLTableRowElement>) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    discardEdits();
+  }
+
+  useEffect(() => {
+    if (focused && canEdit) setEditMode(true);
+  }, [canEdit, focused]);
+
   return (
     <Fragment>
       <tr
         id={`control-task-${task.id}`}
+        onKeyDown={handleEditShortcut}
         className={cn(
           "bg-card transition-colors hover:bg-muted/30",
           focused && "bg-primary/5 ring-1 ring-inset ring-primary/30",
           historyOpen && "bg-primary/5"
         )}
       >
-      <td className="px-3 py-2">
-        <div className="space-y-1">
-          {hasImportDiagnostics && (
-            <div className="flex flex-wrap gap-1">
-              {task.aiConfidence && (
-                <span className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                  task.aiConfidence === "low"
-                    ? "bg-amber-50 text-amber-700"
-                    : task.aiConfidence === "medium"
-                      ? "bg-blue-50 text-blue-700"
-                      : "bg-emerald-50 text-emerald-700"
-                )}>
-                  AI {task.aiConfidence}
-                </span>
-              )}
-              {task.needsConfirmation && (
-                <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                  待确认
-                </span>
-              )}
-              {task.sourceRef && (
-                <span className="max-w-56 truncate rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground" title={task.sourceRef}>
-                  来源：{task.sourceRef}
-                </span>
-              )}
-            </div>
+      <td className="min-w-[300px] px-4 py-3">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {phaseName && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{phaseName}</span>}
+            {task.needsConfirmation && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">待确认</span>}
+            {task.sourceRef && task.sourceRef !== "DEMO_DATASET" && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">AI 导入</span>}
+          </div>
+          {editMode ? (
+            <>
+              <input value={name} onChange={(event) => setName(event.target.value)} onKeyDown={saveOnEnter} placeholder="管控事项" className="h-8 w-full rounded-md border bg-background px-2 text-sm font-medium outline-none focus:border-primary" />
+              <textarea value={description} onChange={(event) => setDescription(event.target.value)} onKeyDown={saveOnEnter} placeholder="详细描述" rows={2} className="w-full resize-none rounded-md border bg-background px-2 py-1.5 text-xs leading-5 text-muted-foreground outline-none focus:border-primary" />
+            </>
+          ) : (
+            <button type="button" onClick={() => canEdit && setEditMode(true)} className="block w-full text-left">
+              <p className="font-medium leading-5 text-foreground">{name}</p>
+              <p className="mt-0.5 line-clamp-1 text-[11px] leading-5 text-muted-foreground">{description || "未补充描述"}</p>
+            </button>
           )}
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={saveOnEnter}
-            readOnly={!canEdit}
-            placeholder="管控事项"
-            className="w-full rounded border border-transparent bg-transparent px-1 py-1 font-medium leading-5 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-          />
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            onKeyDown={saveOnEnter}
-            readOnly={!canEdit}
-            placeholder="详细描述"
-            rows={2}
-            className="w-full resize-none rounded border border-transparent bg-transparent px-1 py-1 text-[11px] leading-5 text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-          />
         </div>
       </td>
-      <td className="px-3 py-2">
-        <input
-          data-task-field={`${task.id}:assignee`}
-          value={assignee}
-          onChange={(event) => setAssignee(event.target.value)}
-          onKeyDown={saveOnEnter}
-          readOnly={!canEdit}
-          placeholder="待补"
-          className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-        />
+      <td className="min-w-[136px] px-3 py-3">
+        {editMode ? (
+          <div className="space-y-1.5">
+            <input data-task-field={`${task.id}:assignee`} value={assignee} onChange={(event) => setAssignee(event.target.value)} onKeyDown={saveOnEnter} placeholder="负责人" className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:border-primary" />
+            <input data-task-field={`${task.id}:department`} value={department} onChange={(event) => setDepartment(event.target.value)} onKeyDown={saveOnEnter} placeholder="部门" className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:border-primary" />
+          </div>
+        ) : (
+          <div>
+            <p className={assignee ? "font-medium" : "font-medium text-amber-700"}>{assignee || "负责人待补"}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{department || "部门待补"}</p>
+          </div>
+        )}
       </td>
-      <td className="px-3 py-2">
-        <input
-          data-task-field={`${task.id}:department`}
-          value={department}
-          onChange={(event) => setDepartment(event.target.value)}
-          onKeyDown={saveOnEnter}
-          readOnly={!canEdit}
-          placeholder="待补"
-          className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-        />
+      <td className="w-[108px] px-3 py-3">
+        {editMode ? (
+          <input data-task-field={`${task.id}:deadline`} type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} onKeyDown={saveOnEnter} className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:border-primary" />
+        ) : (
+          <div className={cn("flex items-center gap-1.5 text-xs", overdue ? "font-medium text-destructive" : "text-muted-foreground")}>
+            {overdue && <AlertTriangle className="size-3" />}
+            <span>{deadline ? formatDeadline(deadline) : "待补日期"}</span>
+          </div>
+        )}
       </td>
-      <td className="px-3 py-2">
+      <td className="w-[108px] px-3 py-3">
+        {editMode ? (
+          <div className="space-y-1.5">
+            <Select value={status} onChange={(event) => setStatus(event.target.value as Task["status"])} className="h-8 text-xs"><option value="PENDING">待启动</option><option value="IN_PROGRESS">进行中</option><option value="COMPLETED">已完成</option></Select>
+            <Select value={priority} onChange={(event) => setPriority(event.target.value)} className="h-8 text-xs font-semibold"><option value="P0">P0</option><option value="P1">P1</option><option value="P2">P2</option><option value="P3">P3</option></Select>
+          </div>
+        ) : (
+          <div className="space-y-1.5"><span className={cn("inline-flex rounded border px-1.5 py-0.5 text-[10px] font-medium", STATUS_STYLE[status])}>{TASK_STATUS_MAP[status]}</span><p className="text-[11px] font-semibold text-muted-foreground">{priority}</p></div>
+        )}
+      </td>
+      <td className="w-[120px] px-3 py-3">
         <div className="flex items-center gap-1">
-          {overdue && <AlertTriangle className="size-3 text-destructive" />}
-          <input
-            data-task-field={`${task.id}:deadline`}
-            type="date"
-            value={deadline}
-            onChange={(event) => setDeadline(event.target.value)}
-            onKeyDown={saveOnEnter}
-            readOnly={!canEdit}
-            className={`w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background ${
-              overdue ? "font-medium text-destructive" : ""
-            }`}
-          />
+          <Button type="button" size="icon" variant={historyOpen ? "secondary" : "ghost"} className="size-7" title="查看进度历史" onClick={() => setHistoryOpen((value) => !value)}><MessageSquarePlus className="size-3.5" /><span className="sr-only">日志 {task._count.logs}</span></Button>
+          {task._count.budgets > 0 && <Button type="button" size="icon" variant="ghost" className="size-7" title={`${task._count.budgets} 条预算流水`} onClick={() => router.push(`/projects/${task.projectId}?tab=ledger&ledgerTask=${task.id}`)}><WalletCards className="size-3.5" /></Button>}
+          {task._count.calendarEntries > 0 ? <Button type="button" size="icon" variant="ghost" className="size-7" title={`${task._count.calendarEntries} 个执行日历节点`} onClick={() => router.push(`/projects/${task.projectId}?tab=calendar&calendarTask=${task.id}`)}><CalendarDays className="size-3.5" /></Button> : canEdit && <Button type="button" size="icon" variant="ghost" className="size-7" title="创建执行日历" onClick={() => setScheduleOpen(true)}><CalendarPlus className="size-3.5" /></Button>}
         </div>
       </td>
-      <td className="px-3 py-2">
-        <Select
-          value={status}
-          onChange={(event) => setStatus(event.target.value as Task["status"])}
-          disabled={!canEdit}
-          className="h-8 text-xs"
-        >
-          <option value="PENDING">待启动</option>
-          <option value="IN_PROGRESS">进行中</option>
-          <option value="COMPLETED">已完成</option>
-        </Select>
+      <td className="min-w-[220px] px-3 py-3">
+        {editMode ? <input value={notes} onChange={(event) => setNotes(event.target.value)} onKeyDown={saveOnEnter} placeholder="进度/结论" className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:border-primary" /> : <p className="line-clamp-2 text-xs leading-5 text-sky-800">{notes || "暂无进度结论"}</p>}
       </td>
-      <td className="px-3 py-2">
-        <Select
-          value={priority}
-          onChange={(event) => setPriority(event.target.value)}
-          disabled={!canEdit}
-          className="h-8 text-xs font-semibold"
-        >
-          <option value="P0">P0</option>
-          <option value="P1">P1</option>
-          <option value="P2">P2</option>
-          <option value="P3">P3</option>
-        </Select>
-      </td>
-      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-        <Button
-          type="button"
-          size="sm"
-          variant={historyOpen ? "secondary" : "ghost"}
-          className="h-6 gap-1 px-2 text-[11px]"
-          onClick={() => setHistoryOpen((value) => !value)}
-        >
-          <MessageSquarePlus className="size-3" />
-          {task._count.logs}
-        </Button>
-      </td>
-      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-        {task._count.budgets > 0 ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-6 px-2 text-[11px]"
-            onClick={() => router.push(`/projects/${task.projectId}?tab=ledger&ledgerTask=${task.id}`)}
-          >
-            {task._count.budgets}
-          </Button>
-        ) : (
-          <span className="text-muted-foreground">0</span>
-        )}
-      </td>
-      <td className="px-3 py-2 text-right tabular-nums">
-        {task._count.calendarEntries > 0 ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-6 px-2 text-[11px]"
-            onClick={() => router.push(`/projects/${task.projectId}?tab=calendar&calendarTask=${task.id}`)}
-          >
-            {task._count.calendarEntries}
-          </Button>
-        ) : canEdit ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-6 gap-1 px-2 text-[11px]"
-            onClick={() => setScheduleOpen(true)}
-          >
-            <CalendarPlus className="size-3" />
-            排期
-          </Button>
-        ) : (
-          <span className="text-muted-foreground">0</span>
-        )}
-      </td>
-      <td className="px-3 py-2">
-        <input
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          onKeyDown={saveOnEnter}
-          readOnly={!canEdit}
-          placeholder="暂无"
-          className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-blue-600 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-        />
-      </td>
-      <td className="px-3 py-2">
+      <td className="w-[126px] px-3 py-3">
         <div className="flex items-center justify-between gap-2">
           {missing.length > 0 ? (
             <div className="flex flex-wrap gap-1">
@@ -596,37 +525,20 @@ function ControlTableRow({
               ))}
             </div>
           )}
-          {canEdit && dirty && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-6 shrink-0 px-2 text-[10px]"
-              onClick={save}
-              disabled={saving}
-            >
-              {saving ? "保存中" : "保存"}
-            </Button>
-          )}
         </div>
       </td>
       {canEdit && (
-        <td className="px-3 py-2 text-right">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="mr-1 size-3" />
-            删除
-          </Button>
+        <td className="w-[84px] px-3 py-3 text-right">
+          <div className="flex items-center justify-end gap-1">
+            {editMode ? <><Button type="button" size="icon" variant="ghost" className="size-7" title="收起并放弃未保存修改（Esc）" onClick={discardEdits} disabled={saving}><X className="size-3.5" /></Button><Button type="button" size="icon" className="size-7" title="保存修改" onClick={save} disabled={saving || !dirty}><Save className="size-3.5" /></Button></> : <Button type="button" size="icon" variant="ghost" className="size-7" title="编辑事项" onClick={() => setEditMode(true)}><Pencil className="size-3.5" /></Button>}
+            <Button type="button" size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-destructive" title="删除事项" onClick={() => setDeleteOpen(true)}><Trash2 className="size-3.5" /></Button>
+          </div>
         </td>
       )}
       </tr>
       {historyOpen && (
         <tr className="border-t bg-primary/[0.03]">
-          <td colSpan={canEdit ? 12 : 11} className="px-3 py-3">
+          <td colSpan={canEdit ? 8 : 7} className="px-4 py-4">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
               <div className="space-y-2">
                 {canEdit ? (
@@ -700,7 +612,7 @@ function ControlTableRow({
       )}
       {(scheduleOpen || deleteOpen) && (
         <tr>
-          <td colSpan={canEdit ? 12 : 11} className="p-0">
+          <td colSpan={canEdit ? 8 : 7} className="p-0">
             <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
               <DialogContent>
                 <DialogHeader>
@@ -982,14 +894,14 @@ export function ProjectControlTable({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium">项目管控表</p>
+          <p className="text-sm font-semibold">项目管控总表</p>
           <p className="text-xs text-muted-foreground">
             {canEdit
-              ? "直接编辑事项、负责人、部门、截止、状态、优先级和进度结论"
-              : "只读查看事项、负责人、部门、截止、状态、优先级和进度结论"}
+              ? "默认快速扫描；点击事项或编辑图标后，再进入字段编辑。"
+              : "快速查看事项、负责人、截止、状态、关联记录和最新结论。"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1004,8 +916,8 @@ export function ProjectControlTable({
               新增管控事项
             </Button>
           )}
-          <Badge variant={overdueCount > 0 ? "destructive" : "outline"}>
-            {overdueCount} 个逾期事项
+          <Badge variant={overdueCount > 0 ? "destructive" : "outline"} className="h-8 px-2.5">
+            {overdueCount > 0 ? `${overdueCount} 个逾期事项` : "无逾期事项"}
           </Badge>
         </div>
       </div>
@@ -1133,8 +1045,8 @@ export function ProjectControlTable({
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-background p-2">
+        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/20 p-2.5">
             <div className="flex flex-wrap gap-1.5">
               {CONTROL_FILTERS.map((item) => (
                 <button
@@ -1143,7 +1055,7 @@ export function ProjectControlTable({
                   type="button"
                   onClick={() => setFilter(item.value)}
                   className={cn(
-                    "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors",
+                    "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
                     filter === item.value
                       ? "border-primary bg-primary text-primary-foreground"
                       : "bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
@@ -1166,14 +1078,14 @@ export function ProjectControlTable({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="搜索事项 / 负责人 / 部门"
-                className="h-8 w-full rounded-md border bg-background px-2 pr-14 text-xs outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+                className="h-8 w-full rounded-md border bg-background px-3 pr-14 text-xs outline-none placeholder:text-muted-foreground/50 focus:border-primary"
               />
               <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                 /
               </span>
             </div>
           </div>
-          <div className="border-b bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground">
+          <div className="border-b bg-background px-4 py-2 text-[11px] text-muted-foreground">
             当前显示 {visibleTasks.length} / {tasks.length} 条管控事项
           </div>
           <div className="overflow-x-auto">
@@ -1185,21 +1097,17 @@ export function ProjectControlTable({
                 </p>
               </div>
             ) : (
-              <table className={cn("w-full text-left text-xs", canEdit ? "min-w-[1120px]" : "min-w-[1040px]")}>
-                <thead className="border-b bg-muted/40 text-muted-foreground">
+              <table className={cn("w-full text-left text-xs", canEdit ? "min-w-[1120px]" : "min-w-[1030px]")}>
+                <thead className="border-b bg-muted/30 text-[11px] text-muted-foreground">
                   <tr>
-                    <th className="min-w-56 px-3 py-2 font-medium">管控事项</th>
-                    <th className="w-24 px-3 py-2 font-medium">负责人</th>
-                    <th className="w-28 px-3 py-2 font-medium">部门</th>
-                    <th className="w-24 px-3 py-2 font-medium">截止</th>
-                    <th className="w-24 px-3 py-2 font-medium">状态</th>
-                    <th className="w-20 px-3 py-2 font-medium">优先级</th>
-                    <th className="w-20 px-3 py-2 text-right font-medium">日志</th>
-                    <th className="w-20 px-3 py-2 text-right font-medium">预算</th>
-                    <th className="w-20 px-3 py-2 text-right font-medium">日历</th>
-                    <th className="min-w-48 px-3 py-2 font-medium">进度/结论</th>
-                    <th className="w-36 px-3 py-2 font-medium">待补</th>
-                    {canEdit && <th className="w-20 px-3 py-2 text-right font-medium">操作</th>}
+                    <th className="min-w-[300px] px-4 py-2.5 font-medium">事项</th>
+                    <th className="min-w-[136px] px-3 py-2.5 font-medium">负责人</th>
+                    <th className="w-[108px] px-3 py-2.5 font-medium">截止</th>
+                    <th className="w-[108px] px-3 py-2.5 font-medium">状态</th>
+                    <th className="w-[120px] px-3 py-2.5 font-medium">关联</th>
+                    <th className="min-w-[220px] px-3 py-2.5 font-medium">最新结论</th>
+                    <th className="w-[126px] px-3 py-2.5 font-medium">完整度</th>
+                    {canEdit && <th className="w-[84px] px-3 py-2.5 text-right font-medium">编辑</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">

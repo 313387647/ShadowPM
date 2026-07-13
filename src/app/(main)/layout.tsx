@@ -15,9 +15,9 @@ export default async function MainLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar userRole={user.role} userName={user.name} />
-      <div className="ml-56 flex flex-1 flex-col">
-        <Header />
-        <main className="flex-1">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col md:ml-56">
+        <Header userRole={user.role} userName={user.name} />
+        <main className="min-w-0 flex-1">{children}</main>
       </div>
       <CopilotPanel />
     </div>

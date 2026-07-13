@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Loader2, TrendingUp, TrendingDown, Wallet, Search, X, Pencil, RotateCcw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Plus, Loader2, TrendingUp, TrendingDown, Wallet, Search, X, Pencil, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BUDGET_OPERATION_MAP, FLOW_TYPE_MAP } from "@/lib/constants";
+import { getBudgetSignal } from "@/lib/budget-signals";
 import { recordBudget, reverseBudgetFlow, updateBudgetFlowDescription } from "@/actions/ledger-actions";
 import { cn } from "@/lib/utils";
 
@@ -23,11 +24,12 @@ type Flow = {
   description: string;
   createdBy: string;
   createdAt: Date | string;
-  task: { id: string; name: string };
+  task: { id: string; name: string; workstream: string | null };
   counterpartyTask: { id: string; name: string } | null;
 };
 
-type TaskOption = { id: string; name: string; status: string };
+type TaskOption = { id: string; name: string; status: string; workstream: string | null };
+type LedgerCategory = "ALL" | "BUDGET_POOL" | "SPENDING" | "REFUND" | "CORRECTION" | "MOVEMENT";
 
 interface Props {
   plannedBudget: number;
@@ -49,6 +51,18 @@ const BUDGET_OPERATION_OPTIONS = [
 ] as const;
 
 const MOVEMENT_OPERATIONS = new Set(["TRANSFER", "SPLIT", "MERGE"]);
+const LEDGER_CATEGORIES: { value: LedgerCategory; label: string }[] = [
+  { value: "ALL", label: "全部" },
+  { value: "BUDGET_POOL", label: "预算池" },
+  { value: "SPENDING", label: "支出" },
+  { value: "REFUND", label: "退款" },
+  { value: "CORRECTION", label: "冲正" },
+  { value: "MOVEMENT", label: "流转" },
+];
+
+function formatTaskLabel(task: Pick<TaskOption, "name" | "workstream">) {
+  return task.workstream ? `${task.workstream} · ${task.name}` : task.name;
+}
 
 export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usagePercent, flows, tasks, canEdit }: Props) {
   const router = useRouter();
@@ -60,16 +74,23 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
   const [query, setQuery] = useState("");
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [operation, setOperation] = useState("EXPENSE");
+  const [categoryFilter, setCategoryFilter] = useState<LedgerCategory>("ALL");
   const [editingFlow, setEditingFlow] = useState<Flow | null>(null);
   const [reversingFlow, setReversingFlow] = useState<Flow | null>(null);
   const [editingDescription, setEditingDescription] = useState("");
   const [reversalReason, setReversalReason] = useState("");
+  const ledgerSignals = useMemo(
+    () => getBudgetSignal({ plannedBudget, allocatedBudget, balance, used, usagePercent, flowCount: flows.length }),
+    [allocatedBudget, balance, flows.length, plannedBudget, usagePercent, used]
+  );
+  const usageBarWidth = allocatedBudget > 0 ? Math.min(Math.max(usagePercent, 0), 100) : 0;
 
   const normalizedQuery = query.trim().toLowerCase();
   const selectedTask = taskFilter === "ALL" ? null : tasks.find((task) => task.id === taskFilter) ?? null;
   const visibleFlows = useMemo(() => {
     return flows.filter((flow) => {
       const matchesTask = taskFilter === "ALL" || flow.taskId === taskFilter;
+      const matchesCategory = categoryFilter === "ALL" || getLedgerCategory(flow) === categoryFilter;
       const matchesQuery = !normalizedQuery || [
         flow.task.name,
         flow.description,
@@ -81,9 +102,24 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
         flow.counterpartyTask?.name,
         new Date(flow.createdAt).toLocaleDateString("zh-CN"),
       ].some((value) => value?.toLowerCase().includes(normalizedQuery));
-      return matchesTask && matchesQuery;
+      return matchesTask && matchesCategory && matchesQuery;
     });
-  }, [flows, normalizedQuery, taskFilter]);
+  }, [categoryFilter, flows, normalizedQuery, taskFilter]);
+  const categoryCounts = useMemo(() => {
+    return LEDGER_CATEGORIES.reduce<Record<LedgerCategory, number>>((counts, category) => {
+      counts[category.value] = category.value === "ALL"
+        ? flows.length
+        : flows.filter((flow) => getLedgerCategory(flow) === category.value).length;
+      return counts;
+    }, {
+      ALL: 0,
+      BUDGET_POOL: 0,
+      SPENDING: 0,
+      REFUND: 0,
+      CORRECTION: 0,
+      MOVEMENT: 0,
+    });
+  }, [flows]);
 
   useEffect(() => {
     const taskId = searchParams.get("ledgerTask");
@@ -98,6 +134,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
   function clearLedgerFilter() {
     setQuery("");
     setTaskFilter("ALL");
+    setCategoryFilter("ALL");
     if (searchParams.get("ledgerTask")) {
       router.replace(`${window.location.pathname}?tab=ledger`, { scroll: false });
     }
@@ -218,6 +255,49 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
         </Card>
       </div>
 
+      <div className={cn(
+        "rounded-lg border px-4 py-3",
+        ledgerSignals.level === "HIGH" && "border-destructive/30 bg-destructive/5",
+        ledgerSignals.level === "MEDIUM" && "border-amber-200 bg-amber-50/70",
+        ledgerSignals.level === "OK" && "bg-background"
+      )}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              {ledgerSignals.level === "OK" ? (
+                <CheckCircle2 className="size-4 text-emerald-600" />
+              ) : (
+                <AlertTriangle className={cn("size-4", ledgerSignals.level === "HIGH" ? "text-destructive" : "text-amber-700")} />
+              )}
+              {ledgerSignals.title}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{ledgerSignals.description}</p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {ledgerSignals.badges.map((badge) => (
+              <Badge key={badge} variant={ledgerSignals.level === "HIGH" ? "destructive" : "outline"} className="h-5 text-[10px]">
+                {badge}
+              </Badge>
+            ))}
+          </div>
+        </div>
+        <div className="mt-3">
+          <div className="flex justify-between text-[11px] text-muted-foreground">
+            <span>确认预算使用率</span>
+            <span>{allocatedBudget > 0 ? `${usagePercent}%` : "未确认预算池"}</span>
+          </div>
+          <div className="mt-1.5 h-1.5 rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full",
+                ledgerSignals.level === "HIGH" ? "bg-destructive" : ledgerSignals.level === "MEDIUM" ? "bg-amber-500" : "bg-emerald-600"
+              )}
+              style={{ width: `${usageBarWidth}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
       {/* 表头 + 新增按钮 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
@@ -234,6 +314,24 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1 rounded-full border bg-muted/20 p-0.5">
+          {LEDGER_CATEGORIES.map((category) => (
+            <button
+              key={category.value}
+              type="button"
+              onClick={() => setCategoryFilter(category.value)}
+              className={cn(
+                "rounded-full px-2.5 py-1 text-xs transition-colors",
+                categoryFilter === category.value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {category.label}
+              <span className="ml-1 text-[10px] text-muted-foreground">{categoryCounts[category.value]}</span>
+            </button>
+          ))}
+        </div>
         <select
           value={taskFilter}
           onChange={(event) => {
@@ -246,7 +344,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
         >
           <option value="ALL">全部事项</option>
           {tasks.map((task) => (
-            <option key={task.id} value={task.id}>{task.name}</option>
+            <option key={task.id} value={task.id}>{formatTaskLabel(task)}</option>
           ))}
         </select>
         <div className="relative min-w-[260px] flex-1">
@@ -258,7 +356,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
             className="h-9 w-full rounded-full border bg-background pl-8 pr-9 text-xs outline-none placeholder:text-muted-foreground/50 focus:border-primary"
             data-ledger-search="true"
           />
-          {(query || taskFilter !== "ALL") && (
+          {(query || taskFilter !== "ALL" || categoryFilter !== "ALL") && (
             <button
               type="button"
               aria-label="清空预算筛选"
@@ -274,7 +372,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
       {selectedTask && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
           <span className="text-muted-foreground">
-            当前只查看 <span className="font-medium text-foreground">{selectedTask.name}</span> 的预算流水。
+            当前只查看 <span className="font-medium text-foreground">{formatTaskLabel(selectedTask)}</span> 的预算流水。
             这是从管控总表预算入口带来的聚焦筛选，不是数据丢失。
           </span>
           <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={clearLedgerFilter}>
@@ -326,13 +424,19 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
                     <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
                       {new Date(flow.createdAt).toLocaleDateString("zh-CN")}
                     </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">{flow.task.name}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      <p>{flow.task.name}</p>
+                      {flow.task.workstream && <p className="mt-0.5 text-[10px] text-muted-foreground">{flow.task.workstream}</p>}
+                    </td>
                     <td className="px-4 py-2.5">
                       <Badge variant={flow.flowType === "EXPENSE" ? "destructive" : "default"}>
                         {BUDGET_OPERATION_MAP[flow.operation as keyof typeof BUDGET_OPERATION_MAP] ??
                           FLOW_TYPE_MAP[flow.flowType as keyof typeof FLOW_TYPE_MAP] ??
                           flow.operation}
                       </Badge>
+                      <span className="ml-1.5 text-[10px] text-muted-foreground">
+                        {LEDGER_CATEGORIES.find((category) => category.value === getLedgerCategory(flow))?.label}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
                       {flow.counterpartyTask?.name ?? "-"}
@@ -412,7 +516,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
               >
                 <option value="">请选择事项</option>
                 {tasks.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t.id} value={t.id}>{formatTaskLabel(t)}</option>
                 ))}
               </select>
             </div>
@@ -448,7 +552,7 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
                 >
                   <option value="">请选择目标事项</option>
                   {tasks.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t.id} value={t.id}>{formatTaskLabel(t)}</option>
                   ))}
                 </select>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -547,4 +651,12 @@ export function LedgerTable({ plannedBudget, allocatedBudget, balance, used, usa
       </Dialog>
     </div>
   );
+}
+
+function getLedgerCategory(flow: Pick<Flow, "flowType" | "operation">): LedgerCategory {
+  if (flow.operation === "REVERSAL") return "CORRECTION";
+  if (MOVEMENT_OPERATIONS.has(flow.operation)) return "MOVEMENT";
+  if (flow.flowType === "EXPENSE") return "SPENDING";
+  if (flow.flowType === "REFUND") return "REFUND";
+  return "BUDGET_POOL";
 }

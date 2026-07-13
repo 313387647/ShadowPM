@@ -47,12 +47,14 @@ Configure these in the deployment environment:
 DATABASE_URL=
 SHADOWPM_SESSION_SECRET=
 DEEPSEEK_API_KEY=
+NEXT_PUBLIC_APP_URL=https://<your-test-domain>
 ```
 
 Notes:
 
 - `SHADOWPM_SESSION_SECRET` is required for signed session cookies.
 - `DEEPSEEK_API_KEY` is required for AI import and AI summaries.
+- `NEXT_PUBLIC_APP_URL` is required so generated share links and calendar subscriptions use the public domain.
 - Do not commit `.env`.
 - Production/shared deployment should not rely on the local development fallback secret.
 
@@ -69,6 +71,21 @@ npm run build
 npm run start
 ```
 
+Container deployment is also supported:
+
+```bash
+docker build -t shadowpm .
+docker run --env-file .env -p 3000:3000 shadowpm
+```
+
+After deployment, verify:
+
+```text
+GET /api/health
+```
+
+Expected status is `200` with `status: ok` and `database: connected`.
+
 Quality gate:
 
 ```bash
@@ -82,7 +99,7 @@ npm run build
 Before sharing the URL, run this exact flow:
 
 1. Open the deployed site.
-2. Log in as `林小夏`.
+2. Log in as `周予安`.
 3. Click `新建项目`.
 4. Upload:
 
@@ -101,6 +118,10 @@ project-docs/review-assets/one-million-project-control-sample.xlsx
 9. Submit the in-app `外测反馈` form on the project page.
 10. Confirm a leader user can see the feedback in `/feedback`.
 11. Confirm AI-generated budget rows and calendar rows can be edited after project creation.
+12. Open `输出与分享`, download the canonical workbook, and generate one report.
+13. Create a read-only link and confirm it opens without login.
+14. Add the ICS URL to a compatible calendar client or download it and verify it contains the project execution entries.
+15. Revoke the link and confirm both the project view and calendar feed stop working.
 
 ## 6. Reviewer Instructions
 
