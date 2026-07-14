@@ -1,6 +1,5 @@
 "use server";
 
-import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/permissions";
 import { buildWeeklyHealthSummary } from "@/lib/weekly-health-summary";
@@ -11,28 +10,16 @@ export async function generateDashboardSummary(): Promise<string | null> {
 
   const now = new Date();
 
-  const [projects, taskAgg, allocAgg, expenseAgg, refundAgg, overdueCount, missingOwnerCount, calendarEntries] = await Promise.all([
+  const [projects, taskAgg, overdueCount, missingOwnerCount, calendarEntries] = await Promise.all([
       prisma.project.findMany({
         select: {
-          id: true, name: true, totalBudget: true,
+          id: true, name: true, totalBudget: true, budgetStatus: true,
           _count: { select: { tasks: true } },
-          tasks: { select: { status: true, deadline: true, assignee: true } },
+          tasks: { select: { status: true, deadline: true, assignee: true, budgetAmount: true, budgetStatus: true } },
         },
         orderBy: { createdAt: "asc" },
       }),
       prisma.task.groupBy({ by: ["status"], _count: { id: true } }),
-      prisma.budgetFlow.aggregate({
-        _sum: { amount: true },
-        where: { flowType: "ALLOCATE" },
-      }),
-      prisma.budgetFlow.aggregate({
-        _sum: { amount: true },
-        where: { flowType: "EXPENSE" },
-      }),
-      prisma.budgetFlow.aggregate({
-        _sum: { amount: true },
-        where: { flowType: "REFUND" },
-      }),
       prisma.task.count({
         where: { deadline: { lt: now }, status: { not: "COMPLETED" } },
       }),
@@ -50,11 +37,11 @@ export async function generateDashboardSummary(): Promise<string | null> {
     missingOwnerCount: 0, plannedBudget: 0, allocatedBudget: 0, consumedBudget: 0, projects: [],
   });
 
-  const plannedBudget = projects.reduce((s, p) => s.add(p.totalBudget), new Prisma.Decimal(0));
-  const totalAllocated = allocAgg._sum.amount ?? new Prisma.Decimal(0);
-  const totalExpense = (expenseAgg._sum.amount ?? new Prisma.Decimal(0)).abs();
-  const totalRefund = refundAgg._sum.amount ?? new Prisma.Decimal(0);
-  const consumed = totalExpense.sub(totalRefund);
+  const plannedBudget = projects.reduce((sum, project) => sum + project.totalBudget.toNumber(), 0);
+  const totalAllocated = projects.reduce((sum, project) => sum + (project.budgetStatus === "CONFIRMED" ? project.totalBudget.toNumber() : 0), 0);
+  const consumed = projects.reduce((sum, project) => sum + project.tasks
+    .filter((task) => task.budgetStatus === "DISBURSED")
+    .reduce((taskSum, task) => taskSum + task.budgetAmount.toNumber(), 0), 0);
 
   const pending = taskAgg.find((g) => g.status === "PENDING")?._count.id ?? 0;
   const inProgress = taskAgg.find((g) => g.status === "IN_PROGRESS")?._count.id ?? 0;
@@ -73,9 +60,9 @@ export async function generateDashboardSummary(): Promise<string | null> {
     completed,
     overdueCount,
     missingOwnerCount,
-    plannedBudget: plannedBudget.toNumber(),
-    allocatedBudget: totalAllocated.toNumber(),
-    consumedBudget: consumed.toNumber(),
+    plannedBudget,
+    allocatedBudget: totalAllocated,
+    consumedBudget: consumed,
     projects: projects.map((project) => {
       const completedTasks = project.tasks.filter((task) => task.status === "COMPLETED").length;
       const overdueTasks = project.tasks.filter((task) => task.deadline && task.deadline < now && task.status !== "COMPLETED").length;

@@ -10,6 +10,12 @@
     "typecheck": "tsc --noEmit",
     "start": "next start",
     "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:status": "prisma migrate status",
+    "db:seed:demo": "SHADOWPM_ALLOW_DEMO_SEED=1 prisma db seed",
+    "team:bootstrap-admin": "tsx scripts/bootstrap-admin.ts",
+    "team:create-member": "tsx scripts/create-team-member.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

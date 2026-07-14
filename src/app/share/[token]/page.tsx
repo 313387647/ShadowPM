@@ -38,7 +38,7 @@ export default async function SharedProjectPage({ params }: { params: { token: s
             <Metric label="已确认预算" value={formatMoney(budget.confirmed)} />
             <Metric label="可用结余" value={formatMoney(budget.balance)} border />
             <div className="col-span-2 border-t px-3 py-2 text-xs text-muted-foreground">
-              已使用 {formatMoney(budget.consumed)} · 使用率 {budget.usagePercent}%
+              已分配 {formatMoney(budget.allocated)} · 已划拨 {formatMoney(budget.consumed)} · 使用率 {budget.usagePercent}%
             </div>
           </div>
         </section>
@@ -82,12 +82,12 @@ export default async function SharedProjectPage({ params }: { params: { token: s
 
         <div className="grid gap-6 xl:grid-cols-2">
           <section className="overflow-hidden rounded-lg border bg-card">
-            <div className="flex items-center gap-2 border-b px-4 py-3"><WalletCards className="size-4" /><h2 className="text-sm font-semibold">资金流水</h2></div>
+            <div className="flex items-center gap-2 border-b px-4 py-3"><WalletCards className="size-4" /><h2 className="text-sm font-semibold">事项预算</h2></div>
             <div className="divide-y">
-              {project.tasks.flatMap((task) => task.budgets.map((flow) => ({ ...flow, taskName: task.name }))).slice(0, 20).map((flow) => (
-                <div key={flow.id} className="flex items-start justify-between gap-4 px-4 py-3 text-sm">
-                  <div><p className="font-medium">{flow.description}</p><p className="mt-1 text-xs text-muted-foreground">{flow.taskName} · {flow.operation}</p></div>
-                  <span className="shrink-0 font-mono tabular-nums">{formatMoney(flow.amount)}</span>
+              {project.tasks.filter((task) => task.budgetAmount > 0 || task.budgetStatus !== "UNALLOCATED").slice(0, 20).map((task) => (
+                <div key={task.id} className="flex items-start justify-between gap-4 px-4 py-3 text-sm">
+                  <div><p className="font-medium">{task.name}</p><p className="mt-1 text-xs text-muted-foreground">{task.budgetStatus}{task.budgetRecipient ? ` · ${task.budgetRecipient}` : ""}</p></div>
+                  <span className="shrink-0 font-mono tabular-nums">{formatMoney(task.budgetAmount)}</span>
                 </div>
               ))}
             </div>

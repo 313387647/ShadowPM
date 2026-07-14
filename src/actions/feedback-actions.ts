@@ -81,7 +81,7 @@ export async function getProjectFeedback(projectId: string): Promise<ProjectFeed
 
 export async function getAlphaFeedback(): Promise<ProjectFeedbackDTO[]> {
   const user = await requireCurrentUser();
-  if (user.role !== "LEADER") throw new Error("只有管理者可以查看外测反馈");
+  if (user.role !== "LEADER") throw new Error("只有管理者可以查看使用反馈");
 
   const rows = await prisma.projectFeedback.findMany({
     include: { project: { select: { name: true } } },

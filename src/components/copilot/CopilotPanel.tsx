@@ -15,8 +15,8 @@ type Message = {
 };
 
 const QUICK_COMMANDS = [
-  { label: "Aster X9 预算", query: "Aster X9 国内上市整合传播预算还有多少" },
-  { label: "执行日历", query: "Aster X9 国内上市整合传播接下来有哪些执行日历" },
+  { label: "预算状态", query: "我的项目预算还有多少" },
+  { label: "执行日历", query: "接下来有哪些执行日历" },
   { label: "待处理项", query: "有哪些事项逾期或待确认" },
   { label: "项目列表", query: "现在有哪些项目" },
 ];
@@ -30,8 +30,8 @@ export function CopilotPanel() {
     {
       role: "copilot",
       content:
-        "👋 我是 ShadowPM Command Center。\n\n我先负责查询、定位和总结，不直接替你改项目数据：\n" +
-        "• 查预算：Aster X9 国内上市整合传播预算还有多少\n" +
+        "我是 ShadowPM Command Center。\n\n我负责查询、定位和总结，不直接修改正式项目数据：\n" +
+        "• 查预算：我的项目预算还有多少\n" +
         "• 查日历：接下来有哪些执行日历\n" +
         "• 查关注项：哪些事项逾期或待确认\n\n" +
         "进度和状态建议直接在管控表里改，会更快、更清楚。",
@@ -51,6 +51,12 @@ export function CopilotPanel() {
   }, [open]);
 
   useEffect(() => {
+    function openCommandCenter() { setOpen(true); }
+    window.addEventListener("shadowpm:open-command", openCommandCenter);
+    return () => window.removeEventListener("shadowpm:open-command", openCommandCenter);
+  }, []);
+
+  useEffect(() => {
     function openFromKeyboard(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -61,6 +67,15 @@ export function CopilotPanel() {
     window.addEventListener("keydown", openFromKeyboard);
     return () => window.removeEventListener("keydown", openFromKeyboard);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
 
   async function handleSend(query?: string) {
     const text = (query ?? input).trim();
@@ -90,27 +105,27 @@ export function CopilotPanel() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-30 flex h-10 items-center gap-2 rounded-full bg-gray-950 px-3 text-xs font-medium text-white shadow-lg transition-all hover:shadow-xl active:scale-95 sm:bottom-6 sm:right-6 sm:h-11 sm:px-4"
+        className="fixed bottom-4 right-4 z-30 flex h-10 items-center gap-2 rounded-full border border-primary/30 bg-surface-elevated px-3 text-xs font-medium text-foreground shadow-[0_14px_36px_rgba(0,5,18,0.42)] transition-all hover:border-primary/55 hover:bg-surface-3 active:scale-95 sm:bottom-6 sm:right-6 sm:h-11 sm:px-4"
         title="Command Center"
       >
         <Command className="size-4" />
         Command
-        <span className="hidden rounded bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/70 sm:inline">⌘K</span>
+        <span className="hidden rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary/90 sm:inline">⌘K</span>
       </button>
 
       {open && (
-        <div className="fixed inset-x-3 bottom-16 z-50 flex max-h-[78vh] flex-col overflow-hidden rounded-lg border bg-card shadow-2xl sm:inset-x-auto sm:bottom-20 sm:right-6 sm:max-h-[680px] sm:w-[460px]">
-          <div className="flex items-center justify-between border-b bg-gray-950 px-4 py-3 text-gray-50">
+        <div className="fixed inset-x-3 bottom-16 z-50 flex max-h-[78vh] flex-col overflow-hidden rounded-xl border border-primary/20 bg-surface-elevated shadow-[0_28px_80px_rgba(0,5,18,0.56)] sm:inset-x-auto sm:bottom-20 sm:right-6 sm:max-h-[680px] sm:w-[460px]">
+          <div className="flex items-center justify-between border-b border-border bg-surface-1 px-4 py-3 text-foreground">
             <div className="flex items-center gap-2">
-              <div className="flex size-7 items-center justify-center rounded-lg bg-gray-50/20">
+              <div className="flex size-7 items-center justify-center rounded-lg bg-primary/12 text-primary">
                 <Command className="size-4" />
               </div>
               <div>
                 <p className="text-sm font-semibold">ShadowPM Command Center</p>
-                <p className="text-[10px] text-gray-400">查询、定位、总结项目数据</p>
+                <p className="text-[10px] text-muted-foreground">查询、定位、总结项目数据</p>
               </div>
             </div>
-            <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-gray-800 size-7" onClick={() => setOpen(false)}>
+            <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setOpen(false)}>
               <X className="size-3.5" />
             </Button>
           </div>
@@ -118,7 +133,7 @@ export function CopilotPanel() {
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
             {messages.map((msg, i) => (
               <div key={i} className="flex gap-2.5">
-                <div className={`flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${msg.role === "copilot" ? "bg-gray-900 text-white" : "bg-muted text-muted-foreground"}`}>
+                <div className={`flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${msg.role === "copilot" ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"}`}>
                   {msg.role === "copilot" ? <Bot className="size-3.5" /> : "我"}
                 </div>
                 <div className="min-w-0 flex-1 space-y-2">

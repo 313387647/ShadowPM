@@ -41,6 +41,17 @@ function Dialog({
     [controlledOpen, onOpenChange]
   )
 
+  React.useEffect(() => {
+    if (!open) return
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false)
+    }
+
+    window.addEventListener("keydown", closeOnEscape)
+    return () => window.removeEventListener("keydown", closeOnEscape)
+  }, [open, setOpen])
+
   if (!open) return null
 
   return (
@@ -76,7 +87,7 @@ function DialogOverlay({ className }: { className?: string }) {
   const { setOpen } = useDialog()
   return (
     <div
-      className={cn("fixed inset-0 z-50 bg-black/40", className)}
+      className={cn("fixed inset-0 z-50 bg-canvas/80 backdrop-blur-[2px] motion-safe:animate-in motion-safe:fade-in-0", className)}
       onClick={() => setOpen(false)}
     />
   )
@@ -97,7 +108,7 @@ function DialogContent({
       <div className="fixed inset-0 z-50 flex items-end justify-center p-0 pointer-events-none sm:items-center sm:p-4">
         <div
           className={cn(
-            "pointer-events-auto relative z-50 w-full max-w-lg rounded-t-lg border bg-card p-6 shadow-2xl sm:rounded-lg",
+            "pointer-events-auto relative z-50 w-full max-w-lg rounded-t-xl border border-primary/15 bg-popover p-6 shadow-[0_28px_80px_rgba(0,5,18,0.55)] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 sm:rounded-xl",
             className
           )}
         >

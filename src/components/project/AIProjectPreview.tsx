@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CalendarDays, CheckCircle2, Loader2, Plus, Sparkles, Table2, Upload, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +10,43 @@ import { parseDocumentForProject, createProjectFromAI } from "@/actions/ai-actio
 import { buildAIImportPlan } from "@/lib/ai-import-plan";
 
 type Step = "upload" | "loading" | "clarify" | "preview" | "creating";
+
+const IMPORT_STEPS = ["上传来源", "AI 解析", "必要确认", "结构预览", "创建项目"];
+
+const IMPORT_LOADING_STAGES = [
+  {
+    afterSeconds: 0,
+    label: "正在读取来源",
+    detail: "提取文档、表格与可识别文本。",
+  },
+  {
+    afterSeconds: 3,
+    label: "正在请求 AI 识别",
+    detail: "按管控事项、预算和执行日历归类信息。",
+  },
+  {
+    afterSeconds: 12,
+    label: "正在生成可编辑草稿",
+    detail: "源文件较复杂时会继续处理，请保持此窗口打开。",
+  },
+] as const;
+
+function getImportLoadingStageIndex(elapsedSeconds: number) {
+  for (let index = IMPORT_LOADING_STAGES.length - 1; index >= 0; index -= 1) {
+    if (elapsedSeconds >= IMPORT_LOADING_STAGES[index].afterSeconds) return index;
+  }
+  return 0;
+}
+
+const IMPORT_LOADING_PROGRESS = [28, 62, 86] as const;
+
+function getStepIndex(step: Step) {
+  if (step === "upload") return 0;
+  if (step === "loading") return 1;
+  if (step === "clarify") return 2;
+  if (step === "preview") return 3;
+  return 4;
+}
 
 interface Props {
   onClose: () => void;
@@ -21,6 +58,20 @@ export function AIProjectCreator({ onClose }: Props) {
   const [parsed, setParsed] = useState<AIParsedProject | null>(null);
   const [edited, setEdited] = useState<CreateProjectFromAIDTO | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [loadingElapsedSeconds, setLoadingElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (step !== "loading") {
+      setLoadingElapsedSeconds(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const updateElapsed = () => setLoadingElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 500);
+    return () => window.clearInterval(timer);
+  }, [step]);
 
   function createDraft(project: AIParsedProject): CreateProjectFromAIDTO {
     return {
@@ -31,7 +82,6 @@ export function AIProjectCreator({ onClose }: Props) {
       tasks: project.tasks.map((t) => ({ ...t })),
       budgetItems: project.budgetItems,
       calendarEntries: project.calendarEntries,
-      risks: [],
       sourceQuality: project.sourceQuality,
       confidence: project.confidence,
       missingFields: project.missingFields,
@@ -71,9 +121,9 @@ export function AIProjectCreator({ onClose }: Props) {
   }
 
   function confidenceClass(confidence?: string | null) {
-    if (confidence === "high") return "bg-emerald-50 text-emerald-700";
-    if (confidence === "medium") return "bg-amber-50 text-amber-700";
-    return "bg-red-50 text-red-700";
+    if (confidence === "high") return "border border-success/25 bg-success/10 text-success";
+    if (confidence === "medium") return "border border-warning/25 bg-warning/10 text-warning";
+    return "border border-destructive/25 bg-destructive/10 text-destructive";
   }
 
   function diagnosticCount(project: CreateProjectFromAIDTO | null) {
@@ -138,6 +188,11 @@ export function AIProjectCreator({ onClose }: Props) {
     }
   }
 
+  function handleUploadSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void handleUpload(new FormData(event.currentTarget));
+  }
+
   // ── Confirm phase ──
   async function handleConfirm() {
     if (!edited) return;
@@ -189,7 +244,22 @@ export function AIProjectCreator({ onClose }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <ol className="grid grid-cols-5 gap-1 rounded-xl border border-border bg-secondary/55 p-2">
+        {IMPORT_STEPS.map((label, index) => {
+          const current = getStepIndex(step);
+          const complete = index < current;
+          const active = index === current;
+          return (
+            <li key={label} className="min-w-0">
+              <div className={complete || active ? "flex min-w-0 items-center gap-1.5 rounded-lg bg-primary/10 px-2 py-1.5 text-primary" : "flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-muted-foreground"}>
+                <span className={complete ? "flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground" : active ? "flex size-5 shrink-0 items-center justify-center rounded-full border border-primary bg-primary/10 text-[10px] font-semibold" : "flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-[10px]"}>{complete ? "✓" : index + 1}</span>
+                <span className="hidden truncate text-[11px] font-medium sm:block">{label}</span>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
       {/* ── Step: Upload ── */}
       {step === "upload" && (
         <div className="space-y-4">
@@ -199,8 +269,8 @@ export function AIProjectCreator({ onClose }: Props) {
 
           {/* File upload */}
           <form
-            action={handleUpload}
-            className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed p-8 text-center transition-colors hover:border-primary/50"
+            onSubmit={handleUploadSubmit}
+            className="focus-surface flex flex-col items-center gap-3 rounded-xl border-2 border-dashed p-8 text-center transition-colors hover:border-primary/50"
           >
             <Upload className="size-8 text-muted-foreground/40" />
             <div>
@@ -230,7 +300,7 @@ export function AIProjectCreator({ onClose }: Props) {
             </div>
           </div>
 
-          <form action={handleUpload} className="space-y-2">
+          <form onSubmit={handleUploadSubmit} className="space-y-2">
             <textarea
               name="text"
               rows={6}
@@ -260,18 +330,56 @@ export function AIProjectCreator({ onClose }: Props) {
 
       {/* ── Step: Loading ── */}
       {step === "loading" && (
-        <div className="flex flex-col items-center justify-center py-12 space-y-4">
-          <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
-            <Sparkles className="size-6 text-primary animate-pulse" />
-          </div>
-          <div className="text-center space-y-1">
-            <p className="text-sm font-medium">AI 正在分析文档...</p>
-            <p className="text-xs text-muted-foreground">这通常需要 5–15 秒</p>
-          </div>
-          <div className="w-48 h-1.5 rounded-full bg-muted overflow-hidden">
-            <div className="h-full bg-primary rounded-full animate-[loading_2s_ease-in-out_infinite]" style={{ width: "60%" }} />
-          </div>
-        </div>
+        (() => {
+          const currentStageIndex = getImportLoadingStageIndex(loadingElapsedSeconds);
+          const currentStage = IMPORT_LOADING_STAGES[currentStageIndex];
+          const progress = IMPORT_LOADING_PROGRESS[currentStageIndex];
+
+          return (
+            <div className="mx-auto flex max-w-md flex-col items-center justify-center py-12" role="status" aria-live="polite">
+              <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
+                <Sparkles className="size-6 animate-pulse text-primary" />
+              </div>
+              <div className="mt-4 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <p className="text-sm font-semibold">{currentStage.label}</p>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground">
+                    已等待 {loadingElapsedSeconds}s
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{currentStage.detail}</p>
+              </div>
+
+              <div className="mt-5 h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-label="AI 导入处理阶段">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <div className="mt-3 grid w-full grid-cols-3 gap-1.5" aria-label="AI 导入状态">
+                {IMPORT_LOADING_STAGES.map((stage, index) => {
+                  const isComplete = index < currentStageIndex;
+                  const isActive = index === currentStageIndex;
+                  return (
+                    <div
+                      key={stage.label}
+                      className={
+                        isComplete || isActive
+                          ? "truncate text-center text-[11px] font-medium text-primary"
+                          : "truncate text-center text-[11px] text-muted-foreground/60"
+                      }
+                    >
+                      {stage.label.replace("正在", "")}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-center text-[11px] leading-5 text-muted-foreground">
+                普通文本通常 10–20 秒；表格较大或结构复杂时可能需要更久。进度条表示处理阶段，不代表精确百分比。
+              </p>
+            </div>
+          );
+        })()
       )}
 
       {/* ── Step: Clarify ── */}
@@ -280,7 +388,7 @@ export function AIProjectCreator({ onClose }: Props) {
           {(() => {
             const importPlan = buildAIImportPlan(edited);
             return (
-              <div className="rounded-xl border bg-background p-3">
+          <div className="focus-surface rounded-xl p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold">AI 只保留必要确认</p>
@@ -306,7 +414,7 @@ export function AIProjectCreator({ onClose }: Props) {
             );
           })()}
 
-          <div className="rounded-xl border bg-muted/30 p-4">
+          <div className="rounded-xl border border-primary/20 bg-primary/[0.055] p-4">
             <div className="flex items-start gap-3">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <Sparkles className="size-4" />
@@ -321,15 +429,15 @@ export function AIProjectCreator({ onClose }: Props) {
           </div>
 
           {getRequiredGaps(edited).length > 0 && (
-            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-amber-900">
+            <div className="space-y-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-warning">
                 <AlertTriangle className="size-4" />
                 创建前必须确认
               </div>
 
               {!edited.projectName.trim() && (
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-amber-950">项目名称</label>
+                  <label className="block text-xs font-medium mb-1 text-warning">项目名称</label>
                   <input
                     value={edited.projectName}
                     onChange={(e) => setEdited({ ...edited, projectName: e.target.value })}
@@ -341,7 +449,7 @@ export function AIProjectCreator({ onClose }: Props) {
 
               {!edited.tasks.some((task) => task.name.trim()) && (
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-amber-950">第一条管控事项</label>
+                  <label className="block text-xs font-medium mb-1 text-warning">第一条管控事项</label>
                   <input
                     value={edited.tasks[0]?.name ?? ""}
                     onChange={(e) => {
@@ -432,14 +540,14 @@ export function AIProjectCreator({ onClose }: Props) {
 
           {/* Confidence warning */}
           {parsed?.confidence === "low" && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
               <AlertTriangle className="size-4 shrink-0 mt-0.5" />
               AI 对此文档信心较低，建议仔细检查每个字段。
             </div>
           )}
 
           {parsed && (
-            <div className="rounded-lg border bg-muted/20 p-3">
+            <div className="surface-panel rounded-xl p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold">AI 分诊结果</p>
@@ -447,25 +555,25 @@ export function AIProjectCreator({ onClose }: Props) {
                     源结构：{sourceQualityLabel(parsed.sourceQuality)} · 置信度：{parsed.confidence}
                   </p>
                 </div>
-                <span className="rounded-full bg-background px-2 py-1 text-xs text-muted-foreground">
+                <span className="rounded-md border border-border bg-canvas/30 px-2 py-1 text-xs text-muted-foreground">
                   同步生成 {candidateCount(edited)} · 诊断 {diagnosticCount(edited)}
                 </span>
               </div>
 
               <div className="mt-3 grid grid-cols-3 gap-2">
-                <div className="rounded-md bg-background p-2">
+                <div className="rounded-lg border border-border bg-canvas/30 p-2">
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <Table2 className="size-3" /> 管控总表
                   </div>
                   <p className="mt-1 text-base font-semibold">{edited.tasks.length}</p>
                 </div>
-                <div className="rounded-md bg-background p-2">
+                <div className="rounded-lg border border-border bg-canvas/30 p-2">
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <WalletCards className="size-3" /> 预算
                   </div>
                   <p className="mt-1 text-base font-semibold">{edited.budgetItems?.length ?? 0}</p>
                 </div>
-                <div className="rounded-md bg-background p-2">
+                <div className="rounded-lg border border-border bg-canvas/30 p-2">
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <CalendarDays className="size-3" /> 日历
                   </div>
@@ -493,18 +601,18 @@ export function AIProjectCreator({ onClose }: Props) {
           )}
 
           {parsed && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+            <div className="rounded-lg border border-primary/25 bg-primary/[0.07] p-3 text-sm text-secondary-foreground">
               <div className="flex items-start gap-2">
                 <Sparkles className="mt-0.5 size-4 shrink-0" />
                 <div className="space-y-1">
                   <p className="font-medium">本次创建范围</p>
-                  <p className="text-xs leading-relaxed text-blue-900/80">
+                  <p className="text-xs leading-relaxed text-muted-foreground">
                     将创建项目资料和项目管控总表。
                     {validBudgetItemCount(edited) > 0
-                      ? ` 将直接生成 ${validBudgetItemCount(edited)} 条预算流水，项目总预算作为计划预算保留，避免重复入账。`
+                      ? ` 将确认项目预算池，并把可匹配且不超过总额的预算分配到对应管控事项。`
                       : edited.totalBudget && edited.totalBudget > 0 && edited.createBudgetFlow
-                      ? " 已确认的总预算会生成一条初始 ALLOCATE 预算流水。"
-                      : " 当前预算池未确认，不会自动生成初始预算流水。"}
+                      ? " 已确认的总预算会作为项目预算池创建，不关联任何具体事项。"
+                      : " 当前预算池未确认，不会自动生成预算分配。"}
                     {candidateCount(edited) > 0
                       ? ` AI 识别出的预算和日历会随项目一起生成；你可以在创建前排除明显错误项，创建后直接在表格中修改。`
                       : " 未识别到可同步生成的预算或日历。"}
@@ -644,12 +752,12 @@ export function AIProjectCreator({ onClose }: Props) {
                         置信度{confidenceLabel(task.confidence)}
                       </span>
                       {(task.missingFields?.length ?? 0) > 0 && (
-                        <span className="truncate text-[10px] text-amber-700">
+                        <span className="truncate text-[10px] text-warning">
                           缺 {task.missingFields?.join("/")}
                         </span>
                       )}
                       {(task.conflicts?.length ?? 0) > 0 && (
-                        <span className="truncate text-[10px] text-red-700">
+                        <span className="truncate text-[10px] text-destructive">
                           冲突 {task.conflicts?.length}
                         </span>
                       )}
@@ -681,14 +789,14 @@ export function AIProjectCreator({ onClose }: Props) {
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    将生成预算流水 ({edited.budgetItems?.length ?? 0})
+                    将尝试分配到事项 ({edited.budgetItems?.length ?? 0})
                   </h4>
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                  <span className="rounded-md border border-success/25 bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
                     自动入账
                   </span>
                 </div>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  有明确金额的预算项会直接进入资金账本；无金额线索不会入账，后续可在管控表或资金账本中补齐。
+                  总预算会先建立项目预算池；有明确金额且可匹配到事项的条目才会分配，无法安全匹配的线索保留在导入记录中供后续参考。
                 </p>
               </div>
               {(edited.budgetItems?.length ?? 0) === 0 ? (
@@ -738,7 +846,7 @@ export function AIProjectCreator({ onClose }: Props) {
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   将生成执行日历 ({edited.calendarEntries?.length ?? 0})
                 </h4>
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                <span className="rounded-md border border-success/25 bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
                   自动创建
                 </span>
               </div>
@@ -785,13 +893,13 @@ export function AIProjectCreator({ onClose }: Props) {
               创建项目预算池初始流水（ALLOCATE: ¥{edited.totalBudget.toLocaleString()}）
             </label>
           ) : (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
               未确认总预算：项目会先创建，预算可稍后在资金账本中补齐。
             </div>
           )}
 
           {/* Action buttons */}
-          <div className="flex items-center justify-between pt-2 border-t">
+          <div className="sticky bottom-0 flex items-center justify-between border-t border-border bg-popover/95 pt-3 backdrop-blur">
             <Button variant="ghost" size="sm" onClick={handleReparse} className="gap-1.5 text-xs">
               <Sparkles className="size-3" /> 重新解析
             </Button>

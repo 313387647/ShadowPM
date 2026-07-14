@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
-import { AlertTriangle, Calendar, CalendarDays, CheckCircle2, ClipboardList, Coins, Eye, History, User, WalletCards } from "lucide-react";
+import { Calendar, CalendarDays, ClipboardList, Coins, Eye, History, User, WalletCards } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { getProjectDetail } from "@/actions/project-actions";
 import { getProjectTasks } from "@/actions/task-actions";
-import { getProjectLedger, getProjectBudgetBalance, getProjectTasksForSelect } from "@/actions/ledger-actions";
+import { getProjectBudgetControl, getProjectTasksForSelect } from "@/actions/ledger-actions";
 import { getProjectTimeline } from "@/actions/timeline-actions";
 import { getProjectPhases } from "@/actions/phase-actions";
 import { getProjectCalendarEntries } from "@/actions/calendar-actions";
@@ -18,7 +18,8 @@ import { ExecutionCalendarView } from "@/components/project/ExecutionCalendarVie
 import { ProjectFeedbackPanel } from "@/components/project/ProjectFeedbackPanel";
 import { ProjectMembersPanel } from "@/components/project/ProjectMembersPanel";
 import { ProjectOutputsPanel } from "@/components/project/ProjectOutputsPanel";
-import { getBudgetSignal } from "@/lib/budget-signals";
+import { ProjectManageActions } from "@/components/project/ProjectManageActions";
+import { getProjectLifecycle, PROJECT_LIFECYCLE_LABEL } from "@/lib/project-lifecycle";
 
 interface Props {
   params: { id: string };
@@ -32,7 +33,6 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
   const [
     project,
     tasks,
-    flows,
     budgetData,
     taskOptions,
     timeline,
@@ -44,8 +44,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
   ] = await Promise.all([
     getProjectDetail(params.id),
     getProjectTasks(params.id),
-    getProjectLedger(params.id),
-    getProjectBudgetBalance(params.id),
+    getProjectBudgetControl(params.id),
     getProjectTasksForSelect(params.id),
     getProjectTimeline(params.id),
     getProjectPhases(params.id),
@@ -57,30 +56,26 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
 
   if (!project) notFound();
 
-  const { balance, used, allocatedBudget, plannedBudget, usagePercent } = budgetData;
-  const budgetSignal = getBudgetSignal({
-    plannedBudget,
-    allocatedBudget,
-    balance,
-    used,
-    usagePercent,
-    flowCount: flows.length,
-  });
-  const budgetIsConfirmed = allocatedBudget > 0;
-  const hasOverspend = balance < 0 && budgetIsConfirmed;
-  const hasUnconfirmedSpend = allocatedBudget === 0 && used > 0;
-  const hasBudgetRisk = budgetSignal.level === "HIGH";
+  if (!budgetData) notFound();
+  const budgetIsConfirmed = budgetData.pool.status === "CONFIRMED";
+  const inProgressCount = tasks.filter((task) => task.status === "IN_PROGRESS").length;
+  const overdueCount = tasks.filter((task) => task.status !== "COMPLETED" && task.deadline && new Date(task.deadline) < new Date()).length;
+  const completedCount = tasks.filter((task) => task.status === "COMPLETED").length;
+  const scheduledCount = calendarEntries.filter((entry) => entry.date).length;
+  const projectLifecycle = getProjectLifecycle({ startDate: project.startDate, taskStatuses: tasks.map((task) => task.status) });
   const activeTab = PROJECT_TABS.includes(searchParams?.tab ?? "")
     ? searchParams?.tab ?? "tasks"
     : "tasks";
 
   return (
-    <div className="space-y-4 p-4 sm:p-5 lg:p-7">
-      <header className="border-b border-border/80 pb-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6 lg:p-7">
+      <header className="surface-panel relative overflow-hidden rounded-2xl px-5 py-5 sm:px-6">
+        <div className="hero-atmosphere opacity-70" aria-hidden="true" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <Badge variant="outline" className="font-normal">项目控制中心</Badge>
+              <Badge variant="outline" className={project.archivedAt ? "border-muted-foreground/30 bg-muted text-muted-foreground" : projectLifecycle === "COMPLETED" ? "border-success/25 bg-success/10 text-success" : projectLifecycle === "UPCOMING" ? "border-info/25 bg-info/10 text-info" : "border-primary/25 bg-primary/10 text-primary"}>{project.archivedAt ? "已归档" : PROJECT_LIFECYCLE_LABEL[projectLifecycle]}</Badge>
               {!project.canEdit && <Badge variant="outline" className="gap-1"><Eye className="size-3" />只读巡视</Badge>}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight lg:text-3xl">
@@ -104,64 +99,67 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
               <Badge variant="secondary">{project._count.tasks} 项管控事项</Badge>
             </div>
           </div>
-          <div className="flex w-full flex-col items-end gap-2 lg:w-auto lg:min-w-[280px]">
+          <div className="flex w-full flex-col items-end gap-2 lg:w-auto lg:min-w-[300px]">
+            <ProjectManageActions
+              project={{ id: project.id, name: project.name, startDate: project.startDate, endDate: project.endDate, archivedAt: project.archivedAt }}
+              canManage={project.canManage}
+            />
             <ProjectOutputsPanel projectId={params.id} canEdit={project.canEdit} data={projectOutputs} />
-            <div className="w-full rounded-lg border bg-muted/20 p-2 text-xs">
+            <div className="w-full rounded-xl border border-border bg-canvas/35 p-2 text-xs">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-md bg-background px-3 py-2">
-                  <p className="text-muted-foreground">{budgetIsConfirmed ? "已确认预算" : "计划预算"}</p>
-                  <p className="mt-1 font-mono font-medium">¥{(budgetIsConfirmed ? allocatedBudget : plannedBudget).toLocaleString("zh-CN")}</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">{budgetIsConfirmed ? `计划 ¥${plannedBudget.toLocaleString("zh-CN")}` : "尚未进入资金账本"}</p>
+                <div className="rounded-lg bg-surface-1/85 px-3 py-2.5">
+                  <p className="text-muted-foreground">项目预算池</p>
+                  <p className="mt-1 font-mono font-medium">¥{budgetData.pool.confirmedAmount.toLocaleString("zh-CN")}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">{budgetIsConfirmed ? "已确认，可分配到事项" : budgetData.pool.status === "CANCELED" ? "预算池已取消" : "尚未确认"}</p>
                 </div>
-                <div className="rounded-md bg-background px-3 py-2">
-                  <p className={hasBudgetRisk ? "text-destructive" : "text-muted-foreground"}>{hasOverspend ? "超支金额" : hasUnconfirmedSpend ? "已记录支出" : budgetIsConfirmed ? "可用结余" : "资金状态"}</p>
-                  <p className={hasBudgetRisk ? "mt-1 font-mono font-medium text-destructive" : "mt-1 font-mono font-medium"}>
-                    {hasOverspend ? `¥${Math.abs(balance).toLocaleString("zh-CN")}` : hasUnconfirmedSpend ? `¥${used.toLocaleString("zh-CN")}` : budgetIsConfirmed ? `¥${balance.toLocaleString("zh-CN")}` : "待确认"}
-                  </p>
-                  <p className={hasBudgetRisk ? "mt-1 flex items-center gap-1 text-[10px] text-destructive" : "mt-1 flex items-center gap-1 text-[10px] text-muted-foreground"}>
-                    {budgetSignal.level === "OK" ? <CheckCircle2 className="size-3 text-emerald-600" /> : <AlertTriangle className="size-3" />}
-                    {budgetSignal.title}
-                  </p>
+                <div className="rounded-lg bg-surface-1/85 px-3 py-2.5">
+                  <p className="text-muted-foreground">可分配余额</p>
+                  <p className={budgetData.remaining < 0 ? "mt-1 font-mono font-medium text-destructive" : "mt-1 font-mono font-medium"}>¥{budgetData.remaining.toLocaleString("zh-CN")}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">已分配 ¥{budgetData.allocated.toLocaleString("zh-CN")}</p>
                 </div>
               </div>
-              <p className="px-1 pt-2 text-[10px] leading-4 text-muted-foreground">{budgetSignal.description}</p>
+              <p className="px-1 pt-2 text-[10px] leading-4 text-muted-foreground">预算以项目预算池为上限；事项分配、报批、划拨和验收均在资金账本内完成，并同步记录到项目活动。</p>
             </div>
           </div>
+        </div>
+        <div className="relative mt-5 grid grid-cols-2 divide-x divide-y divide-border overflow-hidden rounded-xl border border-border bg-canvas/30 sm:grid-cols-4 sm:divide-y-0">
+          <PulseMetric label="进行中" value={inProgressCount} detail="正在推进" />
+          <PulseMetric label="已完成" value={completedCount} detail="管控事项" tone={completedCount > 0 ? "success" : "default"} />
+          <PulseMetric label="已逾期" value={overdueCount} detail="优先处理" tone={overdueCount > 0 ? "danger" : "default"} />
+          <PulseMetric label="已排节点" value={scheduledCount} detail="执行日历" />
         </div>
       </header>
 
       {!project.canEdit && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-950">
+        <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
           当前以只读视角查看该项目。你可以查看管控表、活动、预算和日历，但只有项目主负责人或可编辑协作者可以修改。
         </div>
       )}
 
-      {projectMembers && <ProjectMembersPanel projectId={params.id} data={projectMembers} />}
-
       {/* 四 Tab 布局 */}
       <Tabs key={activeTab} defaultValue={activeTab} className="w-full">
-        <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg border bg-muted/20 p-1">
+        <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-xl border border-border bg-secondary/70 p-1">
           <TabsTrigger
             value="tasks"
-            className="shrink-0 gap-1.5 rounded-md px-3 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            className="shrink-0 gap-1.5 px-3"
           >
             <ClipboardList className="size-3.5" />管控总表
           </TabsTrigger>
           <TabsTrigger
             value="timeline"
-            className="shrink-0 gap-1.5 rounded-md px-3 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            className="shrink-0 gap-1.5 px-3"
           >
             <History className="size-3.5" />项目活动
           </TabsTrigger>
           <TabsTrigger
             value="ledger"
-            className="shrink-0 gap-1.5 rounded-md px-3 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            className="shrink-0 gap-1.5 px-3"
           >
             <WalletCards className="size-3.5" />资金账本
           </TabsTrigger>
           <TabsTrigger
             value="calendar"
-            className="shrink-0 gap-1.5 rounded-md px-3 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            className="shrink-0 gap-1.5 px-3"
           >
             <CalendarDays className="size-3.5" />执行日历
           </TabsTrigger>
@@ -182,13 +180,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
 
         <TabsContent value="ledger" className="mt-4">
           <LedgerTable
-            plannedBudget={plannedBudget}
-            allocatedBudget={allocatedBudget}
-            balance={balance}
-            used={used}
-            usagePercent={usagePercent}
-            flows={flows}
-            tasks={taskOptions}
+            data={budgetData}
             canEdit={project.canEdit}
           />
         </TabsContent>
@@ -198,7 +190,14 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         </TabsContent>
       </Tabs>
 
+      {projectMembers && <ProjectMembersPanel projectId={params.id} data={projectMembers} />}
+
       <ProjectFeedbackPanel projectId={params.id} feedbacks={feedbacks} />
     </div>
   );
+}
+
+function PulseMetric({ label, value, detail, tone = "default" }: { label: string; value: number; detail: string; tone?: "default" | "success" | "danger" }) {
+  const valueClass = tone === "danger" ? "text-destructive" : tone === "success" ? "text-success" : "text-foreground";
+  return <div className="px-4 py-3.5"><p className="text-[11px] font-medium text-muted-foreground">{label}</p><p className={`mt-1 text-xl font-semibold tabular-nums ${valueClass}`}>{value}</p><p className="mt-1 text-[11px] text-muted-foreground">{detail}</p></div>;
 }

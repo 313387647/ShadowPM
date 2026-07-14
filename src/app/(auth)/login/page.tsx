@@ -1,19 +1,5 @@
-import { loginWithForm } from "@/actions/auth-actions";
-import { prisma } from "@/lib/prisma";
-
-// Test accounts come from the live demo database and must not be frozen at build time.
-export const dynamic = "force-dynamic";
-
-export default async function LoginPage() {
-  const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      name: true,
-      role: true,
-      _count: { select: { projects: true, projectMemberships: true } },
-    },
-    orderBy: [{ role: "asc" }, { name: "asc" }],
-  });
+export default function LoginPage({ searchParams }: { searchParams?: { error?: string } }) {
+  const hasError = searchParams?.error === "invalid-credentials";
 
   return (
     <div className="surface-grid flex min-h-screen items-center justify-center px-4 py-10 sm:px-6">
@@ -27,58 +13,30 @@ export default async function LoginPage() {
             ShadowPM
           </h1>
           <p className="mt-2 text-sm text-gray-500">
-            AI Native 项目管控工作区 · 请选择身份进入
+            AI Native 项目管控工作区
           </p>
         </div>
 
-        {/* 用户卡片列表 */}
-        <div className="grid gap-2.5">
-          {users.map((user) => (
-            <form key={user.id} action={loginWithForm}>
-              <input type="hidden" name="userId" value={user.id} />
-              <button
-                type="submit"
-                className="group flex w-full items-center gap-3 rounded-lg border bg-card p-3.5 text-left transition-colors hover:border-primary/35 hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-gray-950 text-sm font-semibold text-white">
-                  {user.name[0]}
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground">
-                    {user.name}
-                    <span
-                      className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                        user.role === "LEADER"
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-blue-100 text-blue-700"
-                      }`}
-                    >
-                      {user.role === "LEADER" ? "管理者" : "成员"}
-                    </span>
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {user.role === "LEADER"
-                      ? "团队管理者 · 全局大盘视角"
-                      : `项目负责人 · ${user._count.projects} 个自有项目 · ${user._count.projectMemberships} 个协作项目`}
-                  </p>
-                </div>
-                <span className="text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">进入</span>
-              </button>
-            </form>
-          ))}
-        </div>
+        <form action="/api/login" method="post" className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="text-sm font-medium text-foreground">工作邮箱</label>
+            <input id="email" name="email" type="email" autoComplete="email" required className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15" placeholder="name@company.com" />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="password" className="text-sm font-medium text-foreground">密码</label>
+            <input id="password" name="password" type="password" autoComplete="current-password" required className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15" placeholder="输入密码" />
+          </div>
+          {hasError && <p className="rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">邮箱或密码不正确，或账号已停用。</p>}
+          <button type="submit" className="w-full rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">登录 ShadowPM</button>
+        </form>
 
         <div className="flex items-center justify-center gap-4 text-xs text-gray-400">
-          <a href="/demo" className="hover:text-gray-600 underline underline-offset-2">
-            ← 返回 Demo 入口
-          </a>
-          <span>·</span>
           <a href="/guide" className="hover:text-gray-600 underline underline-offset-2">
-            查看小白教程
+            查看使用说明
           </a>
         </div>
         <p className="text-center text-xs text-gray-400">
-          演示环境 · 点击任意用户直接登录
+          团队内部系统 · 请使用管理员创建的账号登录
         </p>
       </div>
     </div>

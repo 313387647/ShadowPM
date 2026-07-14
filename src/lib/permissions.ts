@@ -2,21 +2,27 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, type SessionUser } from "@/lib/auth";
 import { canManageProjectMembers, canReadProject, canWriteProject } from "@/lib/permission-rules";
 
-export async function requireCurrentUser(): Promise<SessionUser> {
+export async function getPersistedCurrentUser(): Promise<SessionUser | null> {
   const user = await getCurrentUser();
-  if (!user) throw new Error("未登录");
+  if (!user) return null;
 
   const persisted = await prisma.user.findUnique({
     where: { id: user.id },
     select: { id: true, name: true, role: true },
   });
-  if (!persisted) throw new Error("登录已失效，请重新登录");
+  if (!persisted) return null;
 
   return {
     id: persisted.id,
     name: persisted.name,
     role: persisted.role,
   };
+}
+
+export async function requireCurrentUser(): Promise<SessionUser> {
+  const user = await getPersistedCurrentUser();
+  if (!user) throw new Error("登录已失效，请重新登录");
+  return user;
 }
 
 export async function assertCanReadProject(projectId: string): Promise<SessionUser> {
@@ -66,6 +72,22 @@ export async function assertCanManageProjectMembers(projectId: string): Promise<
   });
   if (!project || !canManageProjectMembers({ userId: user.id, ownerId: project.ownerId })) {
     throw new Error("只有项目主负责人可以管理协作者");
+  }
+
+  return user;
+}
+
+/** Project lifecycle operations are reserved for its owner.
+ * Leaders intentionally remain read-only on projects owned by other people. */
+export async function assertCanManageProject(projectId: string): Promise<SessionUser> {
+  const user = await requireCurrentUser();
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { ownerId: true },
+  });
+
+  if (!project || project.ownerId !== user.id) {
+    throw new Error("只有项目主负责人可以归档或删除项目");
   }
 
   return user;

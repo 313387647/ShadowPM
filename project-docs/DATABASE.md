@@ -37,31 +37,22 @@ available balance = confirmed budget - consumed
 
 These records support AI grounding, reporting, sharing, and calendar subscription without adding a standalone asset center.
 
-## Alpha Support Records
+## Team Pilot Support Records
 
-- `ProjectFeedback`: structured reviewer feedback.
+- `ProjectFeedback`: structured internal usage feedback.
 
-## Legacy Hidden Records
-
-- `Risk`
-- `AssetFolder`
-- `AssetItem`
-- `ImportDraft`
-- `HealthSnapshot`
-
-They remain for compatibility but are not current product surfaces.
+The former independent risk register, asset/wiki tree, AI review queue, and snapshot health table have been removed. They duplicated the control-table loop without improving operational decisions.
 
 ## Index Strategy
 
-Indexes cover project owner/creation, project member roles, control-item project/status/deadline/assignee, activity project/time, budget operation/time, calendar project/date/status/channel, source project/hash, report project/type/time, and share expiry/revocation.
+Indexes cover project owner/creation, project member roles, control-item project/status/deadline/assignee, project control-item status/deadline, activity project/time, budget operation/time, calendar project/date/status/channel, source project/hash, report project/type/time, and share expiry/revocation.
 
 ## Deployment
 
-For the current pre-migration-history repository:
+For shared and production databases:
 
 ```bash
-npx prisma generate
-npx prisma db push
+npm run db:migrate:deploy
 ```
 
-Production hardening after P2 should establish a reviewed migration baseline before multi-tenant rollout. Never use destructive reset commands on shared data.
+The repository now contains a reviewed initial migration. Never use destructive reset commands or demo seed data on shared data. See `TEAM_PILOT_DEPLOYMENT.md` for the complete runbook.

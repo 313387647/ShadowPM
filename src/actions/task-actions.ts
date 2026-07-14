@@ -73,7 +73,7 @@ function buildTaskChangeLog(
 export async function getProjectTasks(projectId: string) {
   await assertCanReadProject(projectId);
 
-  return prisma.task.findMany({
+  const tasks = await prisma.task.findMany({
     where: { projectId },
     include: {
       logs: {
@@ -85,6 +85,7 @@ export async function getProjectTasks(projectId: string) {
     },
     orderBy: [{ priority: "asc" }, { status: "asc" }, { name: "asc" }],
   });
+  return tasks.map((task) => ({ ...task, budgetAmount: task.budgetAmount.toNumber() }));
 }
 
 // ── 新增 ──
@@ -247,7 +248,7 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
   await prisma.$transaction([
     prisma.task.update({
       where: { id: taskId },
-      data: nextTask,
+      data: { ...nextTask, missingFields: [], conflicts: [], needsConfirmation: false },
     }),
     ...(changes.length > 0
       ? [
@@ -382,6 +383,9 @@ export async function fillMissingTaskFields(formData: FormData): Promise<ActionR
           assignee: nextTask.assignee,
           department: nextTask.department,
           deadline: nextTask.deadline,
+          missingFields: [],
+          conflicts: [],
+          needsConfirmation: false,
         },
       }),
       prisma.progressLog.create({
@@ -418,27 +422,6 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
   });
   if (!task) return { success: false, message: "任务不存在" };
 
-  const hasHistory = task._count.logs > 0 || task._count.budgets > 0 || task._count.calendarEntries > 0;
-  if (hasHistory) {
-    await prisma.activityLog.create({
-      data: {
-        projectId: task.projectId,
-        targetType: "CONTROL_ITEM",
-        targetId: taskId,
-        changeType: "DELETE_REQUEST",
-        summary: `🗂️ 管控事项「${task.name}」已有历史记录，已阻止硬删除。请改状态或在进度结论中说明取消原因。`,
-        beforeState: {
-          name: task.name,
-          counts: task._count,
-        },
-        source: "SYSTEM",
-        createdBy: user.name,
-      },
-    });
-    revalidatePath(`/projects/${task.projectId}`);
-    return { success: false, message: "该管控事项已有日志、预算或日历记录，不能硬删除。请改状态或在进度结论中说明取消原因。" };
-  }
-
   await prisma.$transaction([
     prisma.activityLog.create({
       data: {
@@ -446,7 +429,8 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
         targetType: "CONTROL_ITEM",
         targetId: taskId,
         changeType: "DELETE",
-        summary: `删除无历史管控事项：${task.name}`,
+        summary: `删除管控事项：${task.name}`,
+        beforeState: { name: task.name, relatedHistory: task._count },
         source: "HUMAN",
         createdBy: user.name,
       },

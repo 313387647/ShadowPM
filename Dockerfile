@@ -1,17 +1,28 @@
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
+ENV NPM_CONFIG_REGISTRY=https://mirrors.tencent.com/npm/
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=postgresql://shadowpm:shadowpm@db:5432/shadowpm
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN npx prisma generate
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM builder AS migrator
+CMD ["npx", "prisma", "migrate", "deploy"]
+
+FROM builder AS bootstrap-admin
+CMD ["npm", "run", "team:bootstrap-admin"]
+
+FROM builder AS create-member
+CMD ["npm", "run", "team:create-member"]
+
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

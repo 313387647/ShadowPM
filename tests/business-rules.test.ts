@@ -9,6 +9,9 @@ import { canReadProject, canWriteProject } from "../src/lib/permission-rules";
 import { buildWeeklyHealthSummary } from "../src/lib/weekly-health-summary";
 import { isCommandCenterWriteRequest, isProjectHealthQuery, isProjectListQuery } from "../src/lib/command-center-query";
 import { buildCalendarFeed, isValidShareToken, normalizeShareExpiryDays } from "../src/lib/p2-rules";
+import { getWorkspaceHealth } from "../src/lib/workspace-health";
+import { getProjectLifecycle } from "../src/lib/project-lifecycle";
+import { hashPassword, validatePassword, verifyPassword } from "../src/lib/password";
 
 describe("budget business rules", () => {
   it("treats BudgetFlow allocation as the financial source of truth", () => {
@@ -212,7 +215,8 @@ describe("AI import confirmation plan", () => {
     });
 
     assert.equal(plan.canCreateNow, true);
-    assert.equal(plan.confirmedBudgetFlowCount, 1);
+    // One project-level pool confirmation plus one safe item allocation.
+    assert.equal(plan.confirmedBudgetFlowCount, 2);
     assert.equal(plan.calendarEntryCount, 1);
     assert.equal(plan.rowsWithDiagnostics, 0);
   });
@@ -317,6 +321,36 @@ describe("weekly health summary", () => {
   });
 });
 
+describe("workspace health rules", () => {
+  it("prioritizes real risk signals over cosmetic progress", () => {
+    assert.equal(getWorkspaceHealth({ overdueCount: 1, missingInfoCount: 0, budgetUsage: 10, budgetBalance: 90000, hasUnconfirmedSpend: false }), "RISK");
+    assert.equal(getWorkspaceHealth({ overdueCount: 0, missingInfoCount: 1, budgetUsage: 20, budgetBalance: 90000, hasUnconfirmedSpend: false }), "WATCH");
+    assert.equal(getWorkspaceHealth({ overdueCount: 0, missingInfoCount: 0, budgetUsage: 40, budgetBalance: 90000, hasUnconfirmedSpend: false }), "HEALTHY");
+  });
+
+  it("flags unconfirmed spending and negative balances as risk", () => {
+    assert.equal(getWorkspaceHealth({ overdueCount: 0, missingInfoCount: 0, budgetUsage: 0, budgetBalance: -1, hasUnconfirmedSpend: false }), "RISK");
+    assert.equal(getWorkspaceHealth({ overdueCount: 0, missingInfoCount: 0, budgetUsage: 0, budgetBalance: 0, hasUnconfirmedSpend: true }), "RISK");
+  });
+});
+
+describe("project lifecycle rules", () => {
+  const now = new Date("2026-07-13T00:00:00.000Z");
+
+  it("derives completed projects from a fully completed control table", () => {
+    assert.equal(getProjectLifecycle({ startDate: new Date("2026-07-01"), taskStatuses: ["COMPLETED", "COMPLETED"], now }), "COMPLETED");
+  });
+
+  it("keeps future projects pending until an item actually starts", () => {
+    assert.equal(getProjectLifecycle({ startDate: new Date("2026-08-01"), taskStatuses: ["PENDING", "PENDING"], now }), "UPCOMING");
+    assert.equal(getProjectLifecycle({ startDate: new Date("2026-08-01"), taskStatuses: ["IN_PROGRESS", "PENDING"], now }), "ACTIVE");
+  });
+
+  it("treats an unstarted project past its planned start as active attention", () => {
+    assert.equal(getProjectLifecycle({ startDate: new Date("2026-07-01"), taskStatuses: ["PENDING"], now }), "ACTIVE");
+  });
+});
+
 describe("Command Center query boundaries", () => {
   it("routes formal write requests back to the source table", () => {
     assert.equal(isCommandCenterWriteRequest("把发布会状态更新为完成"), true);
@@ -360,5 +394,22 @@ describe("P2 sharing and calendar rules", () => {
     assert.match(feed, /DTSTART:20260720T093000/);
     assert.match(feed, /DTEND:20260720T103000/);
     assert.match(feed, /SUMMARY:媒体沟通会/);
+  });
+});
+
+describe("team authentication rules", () => {
+  it("hashes passwords without persisting their plaintext", async () => {
+    const password = "ShadowPM-team-2026!";
+    const hash = await hashPassword(password);
+
+    assert.ok(hash.startsWith("scrypt$"));
+    assert.equal(hash.includes(password), false);
+    assert.equal(await verifyPassword(password, hash), true);
+    assert.equal(await verifyPassword("incorrect-password", hash), false);
+  });
+
+  it("requires a usable team password", () => {
+    assert.equal(validatePassword("short"), "密码至少需要 12 个字符");
+    assert.equal(validatePassword("ShadowPM-team-2026!"), null);
   });
 });

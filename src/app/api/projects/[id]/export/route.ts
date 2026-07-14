@@ -23,6 +23,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
           orderBy: [{ phaseId: "asc" }, { deadline: "asc" }],
         },
         calendarEntries: { orderBy: [{ date: "asc" }, { createdAt: "asc" }] },
+        budgetFlows: { include: { task: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
         activityLogs: { orderBy: { createdAt: "desc" }, take: 200 },
         sources: { orderBy: { createdAt: "desc" } },
       },
@@ -33,7 +34,8 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     appendSheet(workbook, "项目信息", [{
       项目名称: project.name,
       主负责人: project.owner.name,
-      计划预算: project.totalBudget.toNumber(),
+      项目预算池: project.totalBudget.toNumber(),
+      预算池状态: project.budgetStatus,
       开始日期: formatDate(project.startDate),
       结束日期: formatDate(project.endDate),
       管控事项数: project.tasks.length,
@@ -54,15 +56,23 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       来源定位: task.sourceRef ?? "",
     })), [16, 30, 42, 14, 16, 14, 12, 10, 42, 12, 32]);
 
-    appendSheet(workbook, "预算流水", project.tasks.flatMap((task) => task.budgets.map((flow) => ({
+    appendSheet(workbook, "预算管控表", project.tasks.map((task) => ({
       管控事项: task.name,
+      当前预算: task.budgetAmount.toNumber(),
+      预算状态: task.budgetStatus,
+      划拨对象: task.budgetRecipient ?? "",
+    })), [30, 16, 16, 24]);
+
+    appendSheet(workbook, "预算变更记录", project.budgetFlows.map((flow) => ({
+      管控事项: flow.task?.name ?? "项目预算池",
       业务动作: BUDGET_OPERATION_MAP[flow.operation as keyof typeof BUDGET_OPERATION_MAP] ?? flow.operation,
       流水类型: flow.flowType,
       金额: flow.amount.toNumber(),
+      对方: flow.counterparty ?? "",
       事由: flow.description,
       记录人: flow.createdBy,
       记录时间: flow.createdAt.toLocaleString("zh-CN"),
-    }))), [28, 16, 12, 16, 42, 14, 22]);
+    })), [28, 16, 12, 16, 24, 42, 14, 22]);
 
     appendSheet(workbook, "执行日历", project.calendarEntries.map((entry) => ({
       日期: formatDate(entry.date),

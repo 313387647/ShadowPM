@@ -1,10 +1,8 @@
 "use server";
 
 import OpenAI from "openai";
-import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/permissions";
-import { calculateBudgetSnapshot } from "@/lib/budget";
 import { isCommandCenterWriteRequest, isProjectHealthQuery, isProjectListQuery } from "@/lib/command-center-query";
 
 export type CopilotResponse = {
@@ -103,6 +101,7 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
           id: true,
           name: true,
           totalBudget: true,
+          budgetStatus: true,
           tasks: {
             select: {
               id: true,
@@ -110,12 +109,8 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
               status: true,
               assignee: true,
               deadline: true,
-              budgets: {
-                select: {
-                  amount: true,
-                  flowType: true,
-                },
-              },
+              budgetAmount: true,
+              budgetStatus: true,
             },
           },
         },
@@ -157,33 +152,25 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
     });
 
     const budgetSummaries = userProjects.map((project) => {
-      const flows = project.tasks.flatMap((task) => task.budgets);
-      const allocated = flows
-        .filter((flow) => flow.flowType === "ALLOCATE")
-        .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
-      const expense = flows
-        .filter((flow) => flow.flowType === "EXPENSE")
-        .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
-      const refund = flows
-        .filter((flow) => flow.flowType === "REFUND")
-        .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
-      const budget = calculateBudgetSnapshot({
-        plannedBudget: project.totalBudget,
-        allocated,
-        expense,
-        refund,
-      });
+      const confirmedPool = project.budgetStatus === "CONFIRMED" ? project.totalBudget.toNumber() : 0;
+      const allocated = project.tasks
+        .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
+        .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+      const disbursed = project.tasks
+        .filter((task) => task.budgetStatus === "DISBURSED")
+        .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+      const balance = confirmedPool - allocated;
 
       return {
         id: project.id,
         name: project.name,
-        plannedBudget: budget.plannedBudget.toNumber(),
-        allocatedBudget: budget.allocated.toNumber(),
-        balance: budget.balance.toNumber(),
-        used: budget.consumed.toNumber(),
-        expense: budget.expense.toNumber(),
-        refund: budget.refund.toNumber(),
-        flowCount: flows.length,
+        plannedBudget: project.totalBudget.toNumber(),
+        allocatedBudget: confirmedPool,
+        balance,
+        used: allocated,
+        expense: disbursed,
+        refund: 0,
+        flowCount: project.tasks.filter((task) => task.budgetAmount.gt(0)).length,
       };
     });
 

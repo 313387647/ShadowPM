@@ -5,13 +5,11 @@ export function middleware(request: NextRequest) {
   const session = request.cookies.get("shadowpm-session");
   const { pathname } = request.nextUrl;
 
-  // 放行公开演示页、登录页与静态资源
+  // 放行登录页、公开只读分享和静态资源
   if (
-    pathname === "/demo" ||
     pathname === "/guide" ||
     pathname === "/login" ||
     pathname.startsWith("/share/") ||
-    pathname.startsWith("/demo-assets") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon")
   ) {

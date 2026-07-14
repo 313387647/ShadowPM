@@ -63,7 +63,7 @@ export function ProjectFeedbackPanel({ projectId, feedbacks }: Props) {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <MessageSquareText className="size-4 text-primary" />
-            <h2 className="text-sm font-semibold">外测反馈</h2>
+            <h2 className="text-sm font-semibold">使用反馈</h2>
             {feedbacks.length > 0 && (
               <Badge variant="secondary">{feedbacks.length} 条</Badge>
             )}

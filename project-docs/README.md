@@ -4,14 +4,13 @@ This folder is the durable project memory for ShadowPM.
 
 Start here:
 
-- `PROJECT_INTRO.md` - shareable product introduction for testers and reviewers
-- `DEMO_DATASET.md` - simulated users, projects, permissions, and test scenarios
+- `PROJECT_INTRO.md` - product introduction and product boundaries
 - `REVIEW_PACKAGE.md` - current Alpha review brief
-- `BEGINNER_TUTORIAL.md` - step-by-step tutorial for first-time testers
-- `EXTERNAL_TESTER_QUICKSTART.md` - short guide that can be sent with the test link
-- `USER_GUIDE.md` - complete reviewer user guide
+- `BEGINNER_TUTORIAL.md` - complete step-by-step guide for team members
+- `USER_GUIDE.md` - feature reference guide
 - `FEEDBACK_TEMPLATE.md` - structured feedback template
-- `TEST_DEPLOYMENT.md` - private test deployment checklist
+- `TEAM_PILOT_DEPLOYMENT.md` - single-team production trial architecture and release runbook
+- `TENCENT_CVM_DEPLOYMENT.md` - hands-on Tencent Cloud CVM deployment guide
 - `P2_RELEASE_REVIEW.md` - P2 capabilities, boundaries, and final acceptance checklist
 - `TASKS.md` - current roadmap and P0/P1/P2 plan
 - `PROJECT.md` - product and engineering context
@@ -22,7 +21,7 @@ Start here:
 - `PRD.md` - original MVP PRD
 - `PRD_V2.md` - AI-native product direction draft
 
-Assets:
+Development-only assets:
 
 - `review-assets/one-million-project-control-sample.xlsx` - messy sample workbook used for AI import and review testing
 

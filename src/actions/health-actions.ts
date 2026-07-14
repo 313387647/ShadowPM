@@ -1,53 +1,9 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { assertCanReadProject, requireCurrentUser } from "@/lib/permissions";
+import { requireCurrentUser } from "@/lib/permissions";
 
-// ── 定时快照（Leader 可手动触发） ──
-
-export async function takeHealthSnapshot() {
-  const user = await requireCurrentUser();
-  if (user.role !== "LEADER") return { success: false };
-
-  const projects = await prisma.project.findMany({
-    include: {
-      tasks: { select: { status: true, deadline: true } },
-    },
-  });
-
-  let count = 0;
-  for (const p of projects) {
-    const total = p.tasks.length;
-    if (total === 0) continue;
-
-    const now = new Date();
-    const overdue = p.tasks.filter((t) => t.deadline && new Date(t.deadline) < now && t.status !== "COMPLETED").length;
-
-    const scheduleHealth = Math.max(0, 100 - (overdue / total) * 100);
-    const budgetHealth = 100; // Stubbed — full budget analysis needs per-project flow aggregation
-    const overallScore = Math.round((scheduleHealth + budgetHealth) / 2);
-
-    await prisma.healthSnapshot.create({
-      data: { projectId: p.id, budgetHealth, scheduleHealth: Math.round(scheduleHealth), riskCount: 0, overallScore: Math.max(0, overallScore) },
-    });
-    count++;
-  }
-
-  return { success: true, count };
-}
-
-// ── 获取快照历史 ──
-
-export async function getHealthHistory(projectId: string) {
-  await assertCanReadProject(projectId);
-  return prisma.healthSnapshot.findMany({
-    where: { projectId },
-    orderBy: { timestamp: "desc" },
-    take: 14, // 最近 14 次
-  });
-}
-
-// ── Team 工作负载 ──
+// 团队页只读取当前事项与授权关系；健康状态由实时管控表和资金账本推导。
 
 export async function getTeamWorkload() {
   const user = await requireCurrentUser();

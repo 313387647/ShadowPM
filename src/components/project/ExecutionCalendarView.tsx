@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, CheckCircle2, CircleDashed, Loader2, Search, Trash2, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, CircleDashed, Loader2, Pencil, Save, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -155,6 +155,7 @@ function ExecutionCalendarRow({
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   const dirty =
     date !== toDateInputValue(entry.date) ||
@@ -190,6 +191,7 @@ function ExecutionCalendarRow({
       const result = await updateCalendarEntry(formData);
       if (result.success) {
         toast.success("执行日历已更新");
+        setEditMode(false);
         router.refresh();
       } else {
         toast.error(result.message ?? "保存失败");
@@ -228,7 +230,7 @@ function ExecutionCalendarRow({
   }
 
   return (
-    <tr className={cn("bg-card transition-colors hover:bg-muted/30", focused && "bg-primary/5 ring-1 ring-inset ring-primary/30")}>
+    <tr className={cn("bg-card transition-colors hover:bg-primary/[0.045]", focused && "bg-primary/[0.075] ring-1 ring-inset ring-primary/35", editMode && "bg-primary/[0.04]")}>
       <td className="px-3 py-2">
         <div className="flex items-center gap-1">
           {date ? (
@@ -242,10 +244,10 @@ function ExecutionCalendarRow({
             onChange={(event) => setDate(event.target.value)}
             onInput={(event) => setDate(event.currentTarget.value)}
             onKeyDown={saveOnEnter}
-            readOnly={!canEdit}
+            readOnly={!canEdit || !editMode}
             title={date ? formatDate(date) : "日期待确认"}
             className={`w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background ${
-              date ? "" : "font-medium text-amber-700"
+              date ? "" : "font-medium text-warning"
             }`}
           />
         </div>
@@ -257,7 +259,7 @@ function ExecutionCalendarRow({
             value={startTime}
             onChange={(event) => setStartTime(event.target.value)}
             onKeyDown={saveOnEnter}
-            readOnly={!canEdit}
+            readOnly={!canEdit || !editMode}
             className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
           />
           <span className="text-muted-foreground/50">-</span>
@@ -266,7 +268,7 @@ function ExecutionCalendarRow({
             value={endTime}
             onChange={(event) => setEndTime(event.target.value)}
             onKeyDown={saveOnEnter}
-            readOnly={!canEdit}
+            readOnly={!canEdit || !editMode}
             className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
           />
         </div>
@@ -276,7 +278,7 @@ function ExecutionCalendarRow({
           value={workstream}
           onChange={(event) => setWorkstream(event.target.value)}
           onKeyDown={saveOnEnter}
-          readOnly={!canEdit}
+          readOnly={!canEdit || !editMode}
           placeholder="未分组"
           className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
         />
@@ -286,7 +288,7 @@ function ExecutionCalendarRow({
           value={channel}
           onChange={(event) => setChannel(event.target.value)}
           onKeyDown={saveOnEnter}
-          readOnly={!canEdit}
+          readOnly={!canEdit || !editMode}
           placeholder="渠道待确认"
           className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
         />
@@ -296,7 +298,7 @@ function ExecutionCalendarRow({
           <select
             value={taskId}
             onChange={(event) => setTaskId(event.target.value)}
-            disabled={!canEdit}
+            disabled={!canEdit || !editMode}
             className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
           >
             <option value="">未关联</option>
@@ -322,7 +324,7 @@ function ExecutionCalendarRow({
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
-            readOnly={!canEdit}
+            readOnly={!canEdit || !editMode}
             onKeyDown={(event) => {
               if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault();
@@ -336,7 +338,7 @@ function ExecutionCalendarRow({
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             onKeyDown={saveOnEnter}
-            readOnly={!canEdit}
+            readOnly={!canEdit || !editMode}
             placeholder="备注"
             className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
           />
@@ -348,7 +350,7 @@ function ExecutionCalendarRow({
             value={owner}
             onChange={(event) => setOwner(event.target.value)}
             onKeyDown={saveOnEnter}
-            readOnly={!canEdit}
+            readOnly={!canEdit || !editMode}
             placeholder="负责人"
             className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
           />
@@ -356,7 +358,7 @@ function ExecutionCalendarRow({
             value={department}
             onChange={(event) => setDepartment(event.target.value)}
             onKeyDown={saveOnEnter}
-            readOnly={!canEdit}
+            readOnly={!canEdit || !editMode}
             placeholder="部门"
             className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
           />
@@ -366,7 +368,7 @@ function ExecutionCalendarRow({
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value)}
-          disabled={!canEdit}
+          disabled={!canEdit || !editMode}
           className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
         >
           <option value="PLANNED">计划中</option>
@@ -378,15 +380,19 @@ function ExecutionCalendarRow({
       <td className="px-3 py-2 text-muted-foreground">
         <div className="flex items-center justify-between gap-2">
           <span>{entry.source === "AI_IMPORT" ? "AI 导入" : "手动"}</span>
-          {canEdit && dirty && (
+          {canEdit && (
             <Button
               size="sm"
-              variant="outline"
-              className="h-6 shrink-0 px-2 text-[10px]"
-              onClick={save}
+              variant={editMode && dirty ? "default" : "ghost"}
+              className="h-6 shrink-0 gap-1 px-2 text-[10px]"
+              onClick={() => {
+                if (!editMode) setEditMode(true);
+                else if (dirty) void save();
+                else setEditMode(false);
+              }}
               disabled={saving}
             >
-              {saving ? "保存中" : "保存"}
+              {saving ? "保存中" : editMode && dirty ? <><Save className="size-3" />保存</> : editMode ? "完成" : <><Pencil className="size-3" />编辑</>}
             </Button>
           )}
         </div>

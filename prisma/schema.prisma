@@ -27,43 +27,76 @@ enum FlowType {
   REFUND // 费用退回 (正数)
 }
 
+/// Whether the project-level budget pool has been formally established.
+/// The amount itself is held on Project.totalBudget; this enum makes its
+/// business meaning explicit instead of inferring it from a synthetic flow.
+enum ProjectBudgetStatus {
+  UNCONFIRMED
+  CONFIRMED
+  CANCELED
+}
+
+/// The current budget position of one control item. Detailed historical
+/// movements are retained in BudgetFlow and surfaced through project activity.
+enum TaskBudgetStatus {
+  UNALLOCATED
+  ALLOCATED
+  APPROVED
+  DISBURSED
+  ACCEPTED
+  CANCELED
+}
+
 enum ProjectMemberRole {
   EDITOR // 可编辑项目管控表、预算账本、执行日历
   VIEWER // 可查看项目，但不能修改
 }
 
-enum AssetType {
-  DOCUMENT // 富文本
-  LINK // 外部链接
-  FILE // 附件
-}
-
 model User {
   id                 String            @id @default(cuid())
   name               String
+  email              String            @unique
+  passwordHash       String
+  isActive           Boolean           @default(true)
   role               Role              @default(MEMBER)
   createdAt          DateTime          @default(now())
   projects           Project[]
   feedbacks          ProjectFeedback[]
   projectMemberships ProjectMember[]
+  projectFocuses     ProjectFocus[]
+  sessions           AuthSession[]
+}
+
+model AuthSession {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+  @@index([revokedAt])
 }
 
 model Project {
   id          String    @id @default(cuid())
   name        String
   ownerId     String
-  totalBudget Decimal   @db.Decimal(14, 2) // 规划的总预算池（14位总精度，2位小数）
+  totalBudget Decimal   @db.Decimal(14, 2) // 当前项目预算池（14位总精度，2位小数）
+  budgetStatus ProjectBudgetStatus @default(UNCONFIRMED)
   startDate   DateTime?
   endDate     DateTime?
+  archivedAt  DateTime?
   createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   owner           User                     @relation(fields: [ownerId], references: [id])
   tasks           Task[]
   phases          Phase[]
-  folders         AssetFolder[]
-  risks           Risk[]
-  healthSnaps     HealthSnapshot[]
-  importDrafts    ImportDraft[]
   calendarEntries ExecutionCalendarEntry[]
   activityLogs    ActivityLog[]
   feedbacks       ProjectFeedback[]
@@ -71,9 +104,27 @@ model Project {
   sources         ProjectSource[]
   reports         ProjectReport[]
   shareLinks      ProjectShareLink[]
+  focuses         ProjectFocus[]
+  budgetFlows     BudgetFlow[]
 
   @@index([ownerId])
+  @@index([archivedAt])
   @@index([createdAt])
+}
+
+/// A user-specific shortcut for projects that need sustained attention.
+/// It does not grant access or editing permissions.
+model ProjectFocus {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId, createdAt])
 }
 
 model ProjectMember {
@@ -119,11 +170,15 @@ model Task {
   priority          String     @default("P2") // P0 | P1 | P2 | P3
   deadline          DateTime?
   status            TaskStatus @default(PENDING)
+  budgetAmount      Decimal    @default(0) @db.Decimal(14, 2)
+  budgetStatus      TaskBudgetStatus @default(UNALLOCATED)
+  budgetRecipient   String?
   aiConfidence      String? // AI 导入行置信度：high | medium | low
   sourceRef         String? // AI 导入来源：文件/工作表/行列/段落
   missingFields     Json       @default("[]") // 可在管控表内补齐的字段
   conflicts         Json       @default("[]") // 源数据冲突或 AI 无法安全判断的信息
   needsConfirmation Boolean    @default(false) // 是否需要人工确认
+  updatedAt         DateTime   @updatedAt
 
   project         Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   phase           Phase?                   @relation(fields: [phaseId], references: [id], onDelete: SetNull)
@@ -136,6 +191,7 @@ model Task {
   @@index([status])
   @@index([deadline])
   @@index([assignee])
+  @@index([projectId, status, deadline])
 }
 
 model ProgressLog {
@@ -174,44 +230,27 @@ model ActivityLog {
 
 model BudgetFlow {
   id                 String   @id @default(cuid())
-  taskId             String
+  projectId          String
+  taskId             String?
   counterpartyTaskId String?
   groupId            String?
   flowType           FlowType
-  operation          String   @default("ALLOCATE") // CONFIRM | SUPPLEMENT | REDUCE | ALLOCATE | RETURN | TRANSFER | SPLIT | MERGE | EXPENSE | REFUND
-  amount             Decimal  @db.Decimal(14, 2) // 正负号表达对当前 task 的预算影响
+  operation          String   @default("ALLOCATE") // CONFIRM_POOL | ADJUST_POOL | ALLOCATE | ADJUST | SPLIT_OUT | SPLIT_IN | APPROVE | DISBURSE | ACCEPT | CANCEL
+  amount             Decimal  @db.Decimal(14, 2) // 当前动作对应金额；历史审计不参与余额计算
+  counterparty       String?
   description        String // 事由
   createdBy          String
   createdAt          DateTime @default(now())
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
+  @@index([projectId, createdAt])
   @@index([taskId])
   @@index([counterpartyTaskId])
   @@index([groupId])
   @@index([operation])
   @@index([createdAt])
-}
-
-model Risk {
-  /// LEGACY: hidden from Alpha core. Do not build new product flows on this model.
-  /// Open issues and risks should live in control item notes/activity unless this model is explicitly restored.
-  id          String   @id @default(cuid())
-  projectId   String
-  title       String? // 风险标题；历史自动检测风险可为空
-  type        String // BUDGET | SCHEDULE | RESOURCE | SCOPE | COMMUNICATION | OTHER
-  level       String   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
-  description String // AI 生成的风险描述
-  suggestion  String? // AI 建议的应对措施
-  status      String   @default("OPEN") // OPEN | ACKNOWLEDGED | MITIGATED | CLOSED
-  source      String   @default("MANUAL") // MANUAL | AI_IMPORT | AI_DETECTION
-  createdAt   DateTime @default(now())
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-  @@index([type])
-  @@index([status])
 }
 
 model ExecutionCalendarEntry {
@@ -240,67 +279,7 @@ model ExecutionCalendarEntry {
   @@index([date])
   @@index([status])
   @@index([channel])
-}
-
-model AssetFolder {
-  /// LEGACY: hidden from Alpha core. Do not build new product flows on this model.
-  /// Project references should not become a separate Alpha surface before the control table loop is stable.
-  id        String  @id @default(cuid())
-  projectId String
-  name      String
-  parentId  String? // 支持树状层级
-
-  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assets  AssetItem[]
-}
-
-model HealthSnapshot {
-  id             String   @id @default(cuid())
-  projectId      String
-  timestamp      DateTime @default(now())
-  budgetHealth   Float // 0-100
-  scheduleHealth Float // 0-100
-  riskCount      Int      @default(0)
-  overallScore   Float // 加权综合 0-100
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-  @@index([timestamp])
-}
-
-model AssetItem {
-  /// LEGACY: hidden from Alpha core. Do not build new product flows on this model.
-  id       String    @id @default(cuid())
-  folderId String
-  title    String
-  type     AssetType
-  content  String? // 富文本或外部链接
-  fileUrl  String?
-  version  Int       @default(1)
-
-  folder AssetFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
-}
-
-model ImportDraft {
-  /// LEGACY: hidden from Alpha core. AI imports now create editable official records directly.
-  /// Do not rebuild a separate review queue unless Product Constitution is updated.
-  id              String   @id @default(cuid())
-  projectId       String
-  sourceType      String   @default("AI_IMPORT") // AI_IMPORT | MANUAL_IMPORT
-  status          String   @default("PENDING") // PENDING | APPLIED | DISMISSED
-  sourceQuality   String   @default("messy") // clean | usable | messy | unsafe
-  confidence      String   @default("low") // high | medium | low
-  budgetItems     Json     @default("[]")
-  calendarEntries Json     @default("[]")
-  risks           Json     @default("[]")
-  createdBy       String
-  createdAt       DateTime @default(now())
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-  @@index([status])
+  @@index([projectId, date])
 }
 
 model ProjectFeedback {

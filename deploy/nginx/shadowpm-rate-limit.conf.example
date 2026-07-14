@@ -1,0 +1,3 @@
+# Place this file in /etc/nginx/conf.d/. It is included from Nginx's http block.
+# The login endpoint gets a low burst to slow password guessing without affecting normal use.
+limit_req_zone $binary_remote_addr zone=shadowpm_login:10m rate=10r/m;

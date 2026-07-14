@@ -58,7 +58,7 @@ Expected ShadowPM behavior:
 
 ### Step 1: Log In
 
-1. Open the test site.
+1. Open the team site.
 2. Choose `周予安`.
 3. You should land on the AI workspace.
 
@@ -176,7 +176,7 @@ Expected result:
 
 ### Step 10: Submit In-App Feedback
 
-On the project detail page, use the `外测反馈` panel.
+On the project detail page, use the `使用反馈` panel.
 
 Please submit:
 

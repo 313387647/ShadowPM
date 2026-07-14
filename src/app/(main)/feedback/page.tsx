@@ -47,13 +47,13 @@ export default async function FeedbackPage() {
     <div className="space-y-6 p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">外测反馈</h1>
+          <h1 className="text-2xl font-bold tracking-tight">使用反馈</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            收集测试者上传案例、AI 识别、项目创建和后续使用意愿。
+            收集团队成员对上传案例、AI 识别、项目创建和日常使用的反馈。
           </p>
         </div>
         <Button asChild variant="outline">
-          <Link href="/demo">打开 Demo 入口</Link>
+          <Link href="/workspace">返回工作台</Link>
         </Button>
       </div>
 
@@ -87,7 +87,7 @@ export default async function FeedbackPage() {
             <AlertTriangle className="size-6 text-muted-foreground" />
             <div>
               <p className="text-sm font-medium">还没有收到反馈</p>
-              <p className="mt-1 text-sm text-muted-foreground">分享 `/demo` 给测试者，创建项目后即可提交。</p>
+              <p className="mt-1 text-sm text-muted-foreground">成员可在项目页提交使用反馈，帮助团队持续优化流程。</p>
             </div>
           </div>
         ) : (

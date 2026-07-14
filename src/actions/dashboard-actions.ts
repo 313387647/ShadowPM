@@ -1,9 +1,8 @@
 "use server";
 
-import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/permissions";
-import { calculateBudgetSnapshot } from "@/lib/budget";
+import { getProjectLifecycle } from "@/lib/project-lifecycle";
 
 // ── 全局大盘聚合（全部压力交给 PostgreSQL） ──
 
@@ -18,28 +17,26 @@ export async function getGlobalDashboardStats() {
   // ════════════════════════════════════════
 
   const [
-    allocAgg,
-    expenseAgg,
-    refundAgg,
+    poolAgg,
+    allocationAgg,
+    disbursementAgg,
     taskStatusGroups,
     activeProjectResult,
     overdueCount,
     projectCount,
   ] = await Promise.all([
-    // ALLOCATE 总和
-    prisma.budgetFlow.aggregate({
-      _sum: { amount: true },
-      where: { flowType: "ALLOCATE" },
+    // Current budget state is held on projects and control items, not by replaying flows.
+    prisma.project.aggregate({
+      _sum: { totalBudget: true },
+      where: { budgetStatus: "CONFIRMED" },
     }),
-    // EXPENSE 总和
-    prisma.budgetFlow.aggregate({
-      _sum: { amount: true },
-      where: { flowType: "EXPENSE" },
+    prisma.task.aggregate({
+      _sum: { budgetAmount: true },
+      where: { budgetStatus: { in: ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"] } },
     }),
-    // REFUND 总和
-    prisma.budgetFlow.aggregate({
-      _sum: { amount: true },
-      where: { flowType: "REFUND" },
+    prisma.task.aggregate({
+      _sum: { budgetAmount: true },
+      where: { budgetStatus: "DISBURSED" },
     }),
 
     // 任务按状态 groupBy —— PostgreSQL 层面完成聚合
@@ -67,12 +64,9 @@ export async function getGlobalDashboardStats() {
     prisma.project.count(),
   ]);
 
-  const totalAllocated: Prisma.Decimal =
-    allocAgg._sum.amount ?? new Prisma.Decimal(0);
-  const totalExpense: Prisma.Decimal =
-    (expenseAgg._sum.amount ?? new Prisma.Decimal(0)).abs();
-  const totalRefund: Prisma.Decimal =
-    refundAgg._sum.amount ?? new Prisma.Decimal(0);
+  const totalPool = poolAgg._sum.totalBudget?.toNumber() ?? 0;
+  const totalAllocated = allocationAgg._sum.budgetAmount?.toNumber() ?? 0;
+  const totalExpense = disbursementAgg._sum.budgetAmount?.toNumber() ?? 0;
 
   // 从 groupBy 结果中提取各状态计数
   const byStatus = { PENDING: 0, IN_PROGRESS: 0, COMPLETED: 0 };
@@ -83,10 +77,10 @@ export async function getGlobalDashboardStats() {
   }
 
   return {
-    totalPool: totalAllocated.toNumber(),
-    totalAllocated: totalAllocated.toNumber(),
-    totalExpense: totalExpense.toNumber(),
-    totalRefund: totalRefund.toNumber(),
+    totalPool,
+    totalAllocated,
+    totalExpense,
+    totalRefund: 0,
     projectCount,
     activeProjectCount: activeProjectResult.length || projectCount,
     overdueTaskCount: overdueCount,
@@ -106,60 +100,23 @@ export async function getProjectsHealth() {
   const projects = await prisma.project.findMany({
     include: {
       owner: { select: { name: true } },
-      tasks: { select: { id: true, status: true, deadline: true, assignee: true } },
+      tasks: { select: { id: true, status: true, deadline: true, assignee: true, budgetAmount: true, budgetStatus: true } },
       _count: { select: { tasks: true } },
     },
     orderBy: { createdAt: "asc" },
   });
 
-  // 2. 流水按 (taskId, flowType) groupBy —— 绝对不用 findMany 拉全表
-  const flowGroups = await prisma.budgetFlow.groupBy({
-    by: ["taskId", "flowType"],
-    _sum: { amount: true },
-  });
-
-  // 3. taskId → projectId 映射（仅 ID，O(任务数)，不 OOM）
-  const taskIdToProjectId = new Map<string, string>();
-  for (const p of projects) {
-    for (const t of p.tasks) {
-      taskIdToProjectId.set(t.id, p.id);
-    }
-  }
-
-  // 4. 按 projectId + flowType 聚合（仅 12 条 groupBy 行，非全量流水行）
-  const projectFinance = new Map<
-    string,
-    { alloc: Prisma.Decimal; expense: Prisma.Decimal; refund: Prisma.Decimal }
-  >();
-  for (const g of flowGroups) {
-    const pid = taskIdToProjectId.get(g.taskId);
-    if (!pid) continue;
-    const entry = projectFinance.get(pid) ?? {
-      alloc: new Prisma.Decimal(0),
-      expense: new Prisma.Decimal(0),
-      refund: new Prisma.Decimal(0),
-    };
-    const amount: Prisma.Decimal = g._sum.amount ?? new Prisma.Decimal(0);
-    if (g.flowType === "ALLOCATE") entry.alloc = entry.alloc.add(amount);
-    else if (g.flowType === "EXPENSE") entry.expense = entry.expense.add(amount);
-    else if (g.flowType === "REFUND") entry.refund = entry.refund.add(amount);
-    projectFinance.set(pid, entry);
-  }
-
-  // 5. 套用财务铁律公式
+  // Each project is computed from its current pool and current item budgets.
   return projects.map((p) => {
-    const fin = projectFinance.get(p.id) ?? {
-      alloc: new Prisma.Decimal(0),
-      expense: new Prisma.Decimal(0),
-      refund: new Prisma.Decimal(0),
-    };
-
-    const budget = calculateBudgetSnapshot({
-      plannedBudget: p.totalBudget,
-      allocated: fin.alloc,
-      expense: fin.expense,
-      refund: fin.refund,
-    });
+    const confirmedPool = p.budgetStatus === "CONFIRMED" ? p.totalBudget.toNumber() : 0;
+    const allocated = p.tasks
+      .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
+      .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+    const disbursed = p.tasks
+      .filter((task) => task.budgetStatus === "DISBURSED")
+      .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+    const balance = confirmedPool - allocated;
+    const usagePercent = confirmedPool > 0 ? Math.round((allocated / confirmedPool) * 100) : 0;
 
     const completedTasks = p.tasks.filter((t) => t.status === "COMPLETED").length;
     const totalTasks = p._count.tasks;
@@ -171,29 +128,29 @@ export async function getProjectsHealth() {
     const overdueCount = p.tasks.filter(
       (t) => t.deadline && new Date(t.deadline) < now && t.status !== "COMPLETED"
     ).length;
-    const missingOwnerCount = p.tasks.filter((t) => !t.assignee?.trim()).length;
     const pendingCount = p.tasks.filter((t) => t.status === "PENDING").length;
     const inProgressCount = p.tasks.filter((t) => t.status === "IN_PROGRESS").length;
+    const lifecycle = getProjectLifecycle({ startDate: p.startDate, taskStatuses: p.tasks.map((task) => task.status), now });
 
-    const isAtRisk = budget.usagePercent > 90 || hasOverdueTasks;
+    const isAtRisk = usagePercent > 90 || hasOverdueTasks;
 
     return {
       id: p.id,
       name: p.name,
       ownerName: p.owner.name,
-      dynamicTotal: budget.allocated.toNumber(),
-      plannedBudget: budget.plannedBudget.toNumber(),
-      consumed: budget.consumed.toNumber(),
-      balance: budget.balance.toNumber(),
-      budgetUsage: budget.usagePercent,
+      dynamicTotal: confirmedPool,
+      plannedBudget: p.totalBudget.toNumber(),
+      consumed: disbursed,
+      balance,
+      budgetUsage: usagePercent,
       totalTasks,
       completedTasks,
       taskProgress,
       hasOverdueTasks,
       overdueCount,
-      missingOwnerCount,
       pendingCount,
       inProgressCount,
+      lifecycle,
       isAtRisk,
     };
   });
@@ -211,9 +168,6 @@ export async function getLeaderDashboardAttention() {
       where: {
         status: { not: "COMPLETED" },
         OR: [
-          { assignee: null },
-          { assignee: "" },
-          { deadline: null },
           { deadline: { lt: now } },
           { deadline: { lte: nextSevenDays }, status: "PENDING" },
         ],
@@ -235,7 +189,6 @@ export async function getLeaderDashboardAttention() {
       where: {
         status: { notIn: ["DONE", "CANCELED"] },
         OR: [
-          { date: null },
           { date: { gte: now, lte: nextSevenDays } },
         ],
       },
@@ -261,7 +214,7 @@ export async function getLeaderDashboardAttention() {
         id: true,
         name: true,
         owner: { select: { name: true } },
-        tasks: { select: { status: true, deadline: true, assignee: true } },
+        tasks: { select: { status: true, deadline: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 8,
@@ -272,7 +225,6 @@ export async function getLeaderDashboardAttention() {
     const total = project.tasks.length;
     const completed = project.tasks.filter((task) => task.status === "COMPLETED").length;
     const overdue = project.tasks.filter((task) => task.deadline && task.deadline < now && task.status !== "COMPLETED").length;
-    const missingOwner = project.tasks.filter((task) => !task.assignee?.trim()).length;
     const active = project.tasks.filter((task) => task.status !== "COMPLETED").length;
 
     return {
@@ -283,7 +235,6 @@ export async function getLeaderDashboardAttention() {
       active,
       completed,
       overdue,
-      missingOwner,
       progress: total > 0 ? Math.round((completed / total) * 100) : 0,
     };
   });
@@ -310,8 +261,6 @@ export async function getLeaderDashboardAttention() {
       projectName: attentionProjectById.get(task.projectId)?.name ?? "未知项目",
       ownerName: attentionProjectById.get(task.projectId)?.owner.name ?? "未知负责人",
       signals: [
-        !task.assignee?.trim() ? "缺负责人" : null,
-        !task.deadline ? "缺截止日期" : null,
         task.deadline && task.deadline < now ? "已逾期" : null,
         task.deadline && task.deadline <= nextSevenDays && task.status === "PENDING" ? "临近未启动" : null,
       ].filter((item): item is string => Boolean(item)),
@@ -328,8 +277,55 @@ export async function getLeaderDashboardAttention() {
       content: entry.content,
       owner: entry.owner,
       status: entry.status,
-      isUnscheduled: !entry.date,
     })),
     projectBriefs,
+  };
+}
+
+export async function getLeaderDashboardCalendar(monthKey?: string) {
+  const user = await requireCurrentUser();
+  if (user.role !== "LEADER") throw new Error("仅 Leader 可访问");
+
+  const now = new Date();
+  const parsed = monthKey?.match(/^(\d{4})-(\d{2})$/);
+  const requestedYear = parsed ? Number(parsed[1]) : now.getFullYear();
+  const requestedMonth = parsed ? Number(parsed[2]) - 1 : now.getMonth();
+  const safeYear = requestedYear >= 2020 && requestedYear <= 2100 ? requestedYear : now.getFullYear();
+  const safeMonth = requestedMonth >= 0 && requestedMonth <= 11 ? requestedMonth : now.getMonth();
+  const monthStart = new Date(safeYear, safeMonth, 1);
+  const nextMonthStart = new Date(safeYear, safeMonth + 1, 1);
+
+  const entries = await prisma.executionCalendarEntry.findMany({
+    where: {
+      date: { gte: monthStart, lt: nextMonthStart },
+      status: { not: "CANCELED" },
+    },
+    select: {
+      id: true,
+      projectId: true,
+      taskId: true,
+      date: true,
+      startTime: true,
+      content: true,
+      owner: true,
+      status: true,
+      project: { select: { name: true } },
+    },
+    orderBy: [{ date: "asc" }, { startTime: "asc" }, { createdAt: "asc" }],
+  });
+
+  return {
+    month: `${safeYear}-${String(safeMonth + 1).padStart(2, "0")}`,
+    entries: entries.map((entry) => ({
+      id: entry.id,
+      projectId: entry.projectId,
+      projectName: entry.project.name,
+      taskId: entry.taskId,
+      date: entry.date!,
+      startTime: entry.startTime,
+      content: entry.content,
+      owner: entry.owner,
+      status: entry.status,
+    })),
   };
 }

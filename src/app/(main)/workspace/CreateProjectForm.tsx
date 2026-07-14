@@ -46,18 +46,18 @@ export function CreateProjectForm() {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>新建项目</DialogTitle>
           </DialogHeader>
 
           {/* Tab 切换 */}
-          <div className="flex rounded-lg border bg-muted/40 p-1 -mx-1">
+          <div className="flex rounded-xl border border-border bg-secondary/70 p-1 -mx-1">
             <button
               onClick={() => setMode("ai")}
               className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
                 mode === "ai"
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "border border-primary/20 bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -68,7 +68,7 @@ export function CreateProjectForm() {
               onClick={() => setMode("manual")}
               className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
                 mode === "manual"
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "border border-primary/20 bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >

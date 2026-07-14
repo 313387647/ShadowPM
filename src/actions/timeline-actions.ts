@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertCanReadProject, assertCanWriteProject, assertCanWriteTask } from "@/lib/permissions";
-import { calculateBudgetSnapshot } from "@/lib/budget";
 import type { ActionResult } from "@/actions/types";
 
 type ProjectAIInsight = {
@@ -135,6 +134,7 @@ export async function generateProjectActivitySummary(projectId: string): Promise
     select: {
       name: true,
       totalBudget: true,
+      budgetStatus: true,
       startDate: true,
       endDate: true,
       tasks: {
@@ -146,6 +146,8 @@ export async function generateProjectActivitySummary(projectId: string): Promise
           status: true,
           priority: true,
           notes: true,
+          budgetAmount: true,
+          budgetStatus: true,
         },
         orderBy: [{ priority: "asc" }, { deadline: "asc" }],
         take: 80,
@@ -166,24 +168,7 @@ export async function generateProjectActivitySummary(projectId: string): Promise
 
   if (!project) return { success: false, message: "项目不存在" };
 
-  const taskIds = await prisma.task.findMany({
-    where: { projectId },
-    select: { id: true },
-  });
-  const taskIdList = taskIds.map((task) => task.id);
-  const [budgetExpense, budgetAllocation, budgetRefund, recentProgressLogs, calendarEntries] = await Promise.all([
-    prisma.budgetFlow.aggregate({
-      where: { taskId: { in: taskIdList }, flowType: "EXPENSE" },
-      _sum: { amount: true },
-    }),
-    prisma.budgetFlow.aggregate({
-      where: { taskId: { in: taskIdList }, flowType: "ALLOCATE" },
-      _sum: { amount: true },
-    }),
-    prisma.budgetFlow.aggregate({
-      where: { taskId: { in: taskIdList }, flowType: "REFUND" },
-      _sum: { amount: true },
-    }),
+  const [recentProgressLogs, calendarEntries] = await Promise.all([
     prisma.progressLog.findMany({
       where: { task: { projectId } },
       select: {
@@ -218,12 +203,14 @@ export async function generateProjectActivitySummary(projectId: string): Promise
     missingOwner: project.tasks.filter((task) => !task.assignee?.trim()).length,
     p0: project.tasks.filter((task) => task.priority === "P0").length,
   };
-  const budget = calculateBudgetSnapshot({
-    plannedBudget: project.totalBudget,
-    allocated: budgetAllocation._sum.amount,
-    expense: budgetExpense._sum.amount,
-    refund: budgetRefund._sum.amount,
-  });
+  const confirmed = project.budgetStatus === "CONFIRMED" ? project.totalBudget.toNumber() : 0;
+  const allocated = project.tasks
+    .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
+    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+  const disbursed = project.tasks
+    .filter((task) => task.budgetStatus === "DISBURSED")
+    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+  const balance = confirmed - allocated;
 
   const prompt = `你是 ShadowPM 的项目状态分析助手。ShadowPM 不是任务管理工具，而是 AI Native Project Management Platform。
 
@@ -253,12 +240,11 @@ JSON 结构：
 项目：
 - 名称：${project.name}
 - 周期：${formatDate(project.startDate)} 至 ${formatDate(project.endDate)}
-- 计划预算：${formatMoney(budget.plannedBudget)}
-- 已确认预算池：${formatMoney(budget.allocated)}
-- 已使用预算：${formatMoney(budget.consumed)}
-- 可用结余：${formatMoney(budget.balance)}
-- 支出流水：${formatMoney(budget.expense)}
-- 退款：${formatMoney(budget.refund)}
+- 项目预算池：${formatMoney(project.totalBudget)}
+- 已确认预算池：${formatMoney(confirmed)}
+- 已分配到事项：${formatMoney(allocated)}
+- 已划拨给第三方：${formatMoney(disbursed)}
+- 可分配余额：${formatMoney(balance)}
 
 管控总表：
 - 总事项：${taskStats.total}
@@ -318,12 +304,11 @@ ${recentProgressLogs.slice(0, 8).map((log) => `- ${formatDate(log.createdAt)}｜
           ...insight,
           taskStats,
           budget: {
-            planned: budget.plannedBudget.toString(),
-            allocated: budget.allocated.toString(),
-            consumed: budget.consumed.toString(),
-            balance: budget.balance.toString(),
-            expense: budget.expense.toString(),
-            refund: budget.refund.toString(),
+            planned: project.totalBudget.toString(),
+            confirmed: confirmed.toString(),
+            allocated: allocated.toString(),
+            disbursed: disbursed.toString(),
+            balance: balance.toString(),
           },
           generatedAt: new Date().toISOString(),
         },
@@ -580,120 +565,10 @@ export async function scheduleAIActionSuggestion(formData: FormData): Promise<Ac
 
 export async function adoptAIBudgetSignal(formData: FormData): Promise<ActionResult<{ budgetFlowId: string }>> {
   const projectId = formData.get("projectId") as string;
-  const user = await assertCanWriteProject(projectId);
-  const activityLogId = formData.get("activityLogId") as string;
-  const budgetIndex = Number(formData.get("budgetIndex"));
-  const taskId = formData.get("taskId") as string;
-  const flowType = normalizeFlowType(normalizeOptionalText(formData.get("flowType")));
-  const amountRaw = normalizeOptionalText(formData.get("amount"));
-  const description = normalizeOptionalText(formData.get("description"));
-
-  if (!projectId || !activityLogId || !Number.isInteger(budgetIndex) || budgetIndex < 0) {
-    return { success: false, message: "AI 预算信号参数无效" };
-  }
-  if (!taskId || !amountRaw || !description) {
-    return { success: false, message: "管控事项、金额和事由为必填项" };
-  }
-
-  let amount = new Prisma.Decimal(amountRaw);
-  if (amount.isNaN() || amount.lte(0)) {
-    return { success: false, message: "金额必须为正数" };
-  }
-  if (flowType === "EXPENSE") amount = amount.negated();
-
-  const [log, task] = await Promise.all([
-    prisma.activityLog.findFirst({
-      where: {
-        id: activityLogId,
-        projectId,
-        targetType: "PROJECT",
-        changeType: "AI_ACTION",
-        source: "AI",
-      },
-    }),
-    prisma.task.findFirst({
-      where: { id: taskId, projectId },
-      select: { id: true, name: true },
-    }),
-  ]);
-  if (!log) return { success: false, message: "AI 判断记录不存在" };
-  if (!task) return { success: false, message: "关联管控事项不存在" };
-
-  const insight = parseStoredProjectAIInsight(log.afterState);
-  if (!insight) return { success: false, message: "AI 判断结构不完整，无法确认预算信号" };
-
-  const budgetSignal = insight.budgetSignals[budgetIndex];
-  if (!budgetSignal) return { success: false, message: "AI 预算信号不存在" };
-  if (insight.adoptedBudgetSignalIndexes.includes(budgetIndex)) {
-    return { success: false, message: "这条 AI 预算信号已记账" };
-  }
-
-  const budgetFlow = await prisma.$transaction(async (tx) => {
-    const createdFlow = await tx.budgetFlow.create({
-      data: {
-        taskId,
-        flowType,
-        operation: flowType,
-        amount,
-        description,
-        createdBy: user.name,
-      },
-    });
-
-    const nextInsightState = {
-      ...insight.raw,
-      adoptedBudgetSignalIndexes: [...insight.adoptedBudgetSignalIndexes, budgetIndex],
-      adoptedBudgetFlows: [
-        ...insight.adoptedBudgetFlows,
-        {
-          budgetIndex,
-          budgetFlowId: createdFlow.id,
-          taskId,
-          taskName: task.name,
-          flowType,
-          amount: amount.toString(),
-          description,
-          adoptedBy: user.name,
-          adoptedAt: new Date().toISOString(),
-        },
-      ],
-    } as Prisma.InputJsonValue;
-
-    await tx.activityLog.update({
-      where: { id: activityLogId },
-      data: { afterState: nextInsightState },
-    });
-
-    await tx.activityLog.create({
-      data: {
-        projectId,
-        targetType: "BUDGET_ITEM",
-        targetId: createdFlow.id,
-        changeType: "AI_ACTION",
-        summary: `💰 已确认 AI 预算信号并写入预算流转：${description}`,
-        source: "AI",
-        createdBy: user.name,
-        afterState: {
-          sourceActivityLogId: activityLogId,
-          budgetIndex,
-          budgetFlowId: createdFlow.id,
-          budgetSignal,
-          adoptedBudgetFlow: {
-            taskId,
-            taskName: task.name,
-            flowType,
-            amount: amount.toString(),
-            description,
-          },
-        },
-      },
-    });
-
-    return createdFlow;
-  });
-
-  revalidatePath(`/projects/${projectId}`);
-  return { success: true, message: "AI 预算信号已写入预算流转", data: { budgetFlowId: budgetFlow.id } };
+  await assertCanWriteProject(projectId);
+  // Budget changes must pass the budget-control table, which validates pool
+  // capacity and requires a human reason. AI insights remain query evidence.
+  return { success: false, message: "AI 预算建议仅供参考。请在资金账本的预算管控表中确认、分配或调整预算。" };
 }
 
 function parseProjectAIInsight(content: string): ProjectAIInsight | null {
@@ -767,13 +642,6 @@ function parseDateSafe(value: string | null) {
   if (!value) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   return new Date(`${value}T00:00:00.000Z`);
-}
-
-function normalizeFlowType(value: string | null) {
-  const allowed = ["ALLOCATE", "EXPENSE", "REFUND"] as const;
-  return allowed.includes(value as (typeof allowed)[number])
-    ? value as (typeof allowed)[number]
-    : "EXPENSE";
 }
 
 function formatDate(value: Date | string | null | undefined) {

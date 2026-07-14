@@ -150,8 +150,8 @@ export default function BeginnerGuidePage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild className="gap-2">
-              <Link href="/demo">
-                返回 Demo 入口
+              <Link href="/login">
+                前往登录
                 <ArrowRight className="size-4" />
               </Link>
             </Button>

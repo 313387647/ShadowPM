@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { calculateBudgetSnapshot } from "@/lib/budget";
 import { isValidShareToken } from "@/lib/p2-rules";
 
 export async function getSharedProject(token: string) {
@@ -20,6 +19,7 @@ export async function getSharedProject(token: string) {
           id: true,
           name: true,
           totalBudget: true,
+          budgetStatus: true,
           startDate: true,
           endDate: true,
           owner: { select: { name: true } },
@@ -34,18 +34,10 @@ export async function getSharedProject(token: string) {
               deadline: true,
               status: true,
               priority: true,
+              budgetAmount: true,
+              budgetStatus: true,
+              budgetRecipient: true,
               phase: { select: { name: true } },
-              budgets: {
-                select: {
-                  id: true,
-                  flowType: true,
-                  operation: true,
-                  amount: true,
-                  description: true,
-                  createdAt: true,
-                },
-                orderBy: { createdAt: "desc" },
-              },
             },
             orderBy: [{ status: "asc" }, { deadline: "asc" }],
           },
@@ -71,13 +63,13 @@ export async function getSharedProject(token: string) {
   });
   if (!link) return null;
 
-  const flows = link.project.tasks.flatMap((task) => task.budgets);
-  const budget = calculateBudgetSnapshot({
-    plannedBudget: link.project.totalBudget,
-    allocated: flows.filter((flow) => flow.flowType === "ALLOCATE").reduce((sum, flow) => sum + flow.amount.toNumber(), 0),
-    expense: flows.filter((flow) => flow.flowType === "EXPENSE").reduce((sum, flow) => sum + flow.amount.toNumber(), 0),
-    refund: flows.filter((flow) => flow.flowType === "REFUND").reduce((sum, flow) => sum + flow.amount.toNumber(), 0),
-  });
+  const confirmed = link.project.budgetStatus === "CONFIRMED" ? link.project.totalBudget.toNumber() : 0;
+  const allocated = link.project.tasks
+    .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
+    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+  const disbursed = link.project.tasks
+    .filter((task) => task.budgetStatus === "DISBURSED")
+    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
 
   return {
     expiresAt: link.expiresAt,
@@ -86,15 +78,16 @@ export async function getSharedProject(token: string) {
       totalBudget: link.project.totalBudget.toNumber(),
       tasks: link.project.tasks.map((task) => ({
         ...task,
-        budgets: task.budgets.map((flow) => ({ ...flow, amount: flow.amount.toNumber() })),
+        budgetAmount: task.budgetAmount.toNumber(),
       })),
     },
     budget: {
-      planned: budget.plannedBudget.toNumber(),
-      confirmed: budget.allocated.toNumber(),
-      consumed: budget.consumed.toNumber(),
-      balance: budget.balance.toNumber(),
-      usagePercent: budget.usagePercent,
+      planned: link.project.totalBudget.toNumber(),
+      confirmed,
+      allocated,
+      consumed: disbursed,
+      balance: confirmed - allocated,
+      usagePercent: confirmed > 0 ? Math.round((allocated / confirmed) * 100) : 0,
     },
   };
 }

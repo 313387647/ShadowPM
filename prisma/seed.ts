@@ -2,13 +2,15 @@
  * ShadowPM demo data reset.
  *
  * The dataset intentionally simulates operational variance: different project owners,
- * collaboration permissions, incomplete fields, budget health states, and calendar states.
+ * collaboration permissions, lifecycle states, budget pressure, and calendar cadence.
+ * Every seeded control item, calendar entry, and budget pool is complete enough to operate.
  * Run with: npx prisma db seed
  */
 
 import { randomUUID } from "node:crypto";
 import { Prisma, PrismaClient, TaskStatus } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { hashPassword } from "../src/lib/password";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
@@ -64,6 +66,18 @@ type ProjectScenario = {
   budgetFlows: BudgetItem[];
 };
 
+type SeedProjectLifecycle = "ACTIVE" | "COMPLETED" | "UPCOMING";
+
+const LIFECYCLE_BY_PROJECT: Record<string, SeedProjectLifecycle> = {
+  "品牌危机响应演练": "COMPLETED",
+  "年度可持续发展报告传播": "COMPLETED",
+  "客户试驾体验运营升级": "COMPLETED",
+  "开发者生态伙伴峰会": "UPCOMING",
+  "年度产品培训直播季": "UPCOMING",
+  "上海用户社群周年活动": "UPCOMING",
+  "行业媒体趋势论坛": "UPCOMING",
+};
+
 type GeneratedScenarioInput = {
   name: string;
   owner: DemoUserName;
@@ -85,22 +99,16 @@ type GeneratedScenarioInput = {
   measurementItem: string;
   measurementOwner: string | null;
   measurementDepartment: string;
-  budgetState: "NORMAL" | "HIGH_USAGE" | "UNCONFIRMED" | "SPEND_BEFORE_CONFIRM";
+  budgetState: "NORMAL" | "HIGH_USAGE";
 };
 
 function buildGeneratedScenario(input: GeneratedScenarioInput): ProjectScenario {
-  const budgetTask = "项目统筹预算池";
-  const budgetFlows: BudgetItem[] = input.budgetState === "UNCONFIRMED"
-    ? []
-    : input.budgetState === "SPEND_BEFORE_CONFIRM"
-      ? [
-          { task: input.executionItem, operation: "EXPENSE", flowType: "EXPENSE", amount: -Math.round(input.budget * 0.28), description: `${input.name}执行费用，预算确认待补录`, createdBy: input.owner },
-        ]
-      : [
-          { task: budgetTask, operation: "CONFIRM", flowType: "ALLOCATE", amount: input.budget, description: `${input.name}预算确定`, createdBy: input.owner },
-          { task: input.executionItem, operation: "EXPENSE", flowType: "EXPENSE", amount: -Math.round(input.budget * (input.budgetState === "HIGH_USAGE" ? 0.52 : 0.24)), description: `${input.executionItem}执行费用`, createdBy: input.owner },
-          { task: input.partnerItem, operation: "EXPENSE", flowType: "EXPENSE", amount: -Math.round(input.budget * (input.budgetState === "HIGH_USAGE" ? 0.36 : 0.16)), description: `${input.partnerItem}合作费用`, createdBy: input.owner },
-        ];
+  const budgetTask = "__PROJECT_POOL__";
+  const budgetFlows: BudgetItem[] = [
+    { task: budgetTask, operation: "CONFIRM", flowType: "ALLOCATE", amount: input.budget, description: `${input.name}预算确定`, createdBy: input.owner },
+    { task: input.executionItem, operation: "EXPENSE", flowType: "EXPENSE", amount: -Math.round(input.budget * (input.budgetState === "HIGH_USAGE" ? 0.58 : 0.24)), description: `${input.executionItem}执行费用`, createdBy: input.owner },
+    { task: input.partnerItem, operation: "EXPENSE", flowType: "EXPENSE", amount: -Math.round(input.budget * (input.budgetState === "HIGH_USAGE" ? 0.36 : 0.16)), description: `${input.partnerItem}合作费用`, createdBy: input.owner },
+  ];
 
   return {
     name: input.name,
@@ -114,12 +122,11 @@ function buildGeneratedScenario(input: GeneratedScenarioInput): ProjectScenario 
       { workstream: "项目统筹", name: input.strategyItem, description: `围绕“${input.objective}”确认目标、范围、节奏和关键依赖。`, notes: "核心目标已对齐，等待相关部门确认执行边界。", assignee: input.owner, department: "项目运营", deadline: input.startDate, priority: "P0", status: "IN_PROGRESS" },
       { workstream: input.executionWorkstream, name: input.executionItem, description: "形成可执行交付方案，明确交付标准、节点和验收人。", notes: "执行方案已完成初版，正在确认资源与排期。", assignee: input.owner, department: input.executionDepartment, deadline: input.executionDate, priority: "P0", status: "IN_PROGRESS" },
       { workstream: input.partnerWorkstream, name: input.partnerItem, description: "与外部合作方明确交付物、接口人、合同边界与验收方式。", notes: "第三方已收到 Brief，需在下一轮沟通确认交付承诺。", assignee: input.partnerOwner, department: input.partnerDepartment, deadline: input.partnerDate, priority: "P1", status: "PENDING" },
-      { workstream: "数据与复盘", name: input.measurementItem, description: "建立过程数据、结果数据和复盘动作的统一记录方式。", notes: input.measurementOwner ? "指标口径已初步对齐，待接入正式数据。" : "数据负责人和复盘节奏待确认。", assignee: input.measurementOwner, department: input.measurementDepartment, deadline: input.partnerDate, priority: "P1", status: "PENDING", needsConfirmation: !input.measurementOwner, missingFields: input.measurementOwner ? [] : ["负责人", "截止日期"] },
-      { workstream: "预算统筹", name: budgetTask, description: "承载预算确认、实际支出、退款和后续流转。", notes: input.budgetState === "UNCONFIRMED" ? "仅有计划预算，待财务确认预算池。" : input.budgetState === "SPEND_BEFORE_CONFIRM" ? "已有支出，预算确定待补录。" : input.budgetState === "HIGH_USAGE" ? "预算已确认，当前消耗接近上限。" : "预算已确认，按实际发生持续记账。", assignee: input.owner, department: "项目运营", deadline: input.startDate, priority: "P1", status: "IN_PROGRESS" },
+      { workstream: "数据与复盘", name: input.measurementItem, description: "建立过程数据、结果数据和复盘动作的统一记录方式。", notes: "指标口径已对齐，按既定节奏接入正式数据并完成复盘。", assignee: input.measurementOwner ?? input.owner, department: input.measurementDepartment, deadline: input.partnerDate ?? input.executionDate, priority: "P1", status: "PENDING" },
     ],
     calendar: [
       { task: input.executionItem, date: input.executionDate, startTime: "10:00", channel: "项目执行现场 / 线上协同", content: input.executionItem, owner: input.owner, department: input.executionDepartment, status: "PLANNED" },
-      { task: input.partnerItem, date: input.partnerDate, startTime: input.partnerDate ? "14:00" : undefined, channel: input.partnerDate ? "合作方现场 / 线上会议" : null, content: input.partnerItem, owner: input.partnerOwner, department: input.partnerDepartment, status: "PLANNED", notes: input.partnerDate ? undefined : "第三方排期待确认" },
+      { task: input.partnerItem, date: input.partnerDate ?? input.executionDate, startTime: "14:00", channel: "合作方现场 / 线上会议", content: input.partnerItem, owner: input.partnerOwner, department: input.partnerDepartment, status: "PLANNED" },
     ],
     budgetFlows,
   };
@@ -137,7 +144,7 @@ const scenarios: ProjectScenario[] = [
     items: [
       { workstream: "议题统筹", name: "确认经营会决策议题", description: "输出战略、预算、人力、重点项目四类决策清单。", notes: "CEO 已确认战略与预算两类议题，待补充人力议题负责人。", assignee: "陈鹏", department: "经营管理", deadline: "2026-07-12", priority: "P0", status: "IN_PROGRESS" },
       { workstream: "会务执行", name: "锁定会场与远程接入方案", description: "满足 60 人线下和 20 人远程接入，含录制与同传。", notes: "主会场已预订，远程方案待 IT 压测。", assignee: "周予安", department: "综合管理", deadline: "2026-07-15", priority: "P1", status: "IN_PROGRESS" },
-      { workstream: "材料准备", name: "收集业务单元经营材料", description: "统一使用经营复盘模板，形成决策前读材料。", notes: "华东和海外单元尚未提交。", assignee: null, department: "经营管理", deadline: "2026-07-16", priority: "P0", status: "PENDING", needsConfirmation: true, missingFields: ["负责人"] },
+      { workstream: "材料准备", name: "收集业务单元经营材料", description: "统一使用经营复盘模板，形成决策前读材料。", notes: "华东和海外单元按统一模板汇总，周报节点已锁定。", assignee: "方明澈", department: "经营管理", deadline: "2026-07-16", priority: "P0", status: "PENDING" },
       { workstream: "会后闭环", name: "发布决议与行动清单", description: "会后 24 小时内发送决议、责任人和截止日期。", notes: "待会议结束后执行。", assignee: "陈鹏", department: "经营管理", deadline: "2026-07-25", priority: "P0", status: "PENDING" },
       { workstream: "预算统筹", name: "项目统筹预算池", description: "承载会务、制作和差旅预算的正式确认与流转。", notes: "预算已确认，按实际发生记账。", assignee: "陈鹏", department: "经营管理", deadline: "2026-07-10", priority: "P1", status: "IN_PROGRESS" },
     ],
@@ -188,12 +195,12 @@ const scenarios: ProjectScenario[] = [
       { workstream: "客户策略", name: "确定客户分层与邀约策略", description: "根据客户潜力和合作成熟度分层邀约。", notes: "Top 20 客户名单已完成。", assignee: "陈鹏", department: "客户发展", deadline: "2026-07-14", priority: "P0", status: "COMPLETED" },
       { workstream: "内容策划", name: "完成闭门会主题内容框架", description: "形成产品战略、案例与圆桌议题的内容逻辑。", notes: "内容框架通过，进入演讲稿撰写。", assignee: "许闻澜", department: "市场战略", deadline: "2026-07-22", priority: "P1", status: "IN_PROGRESS" },
       { workstream: "客户运营", name: "跟进重点客户出席确认", description: "确保重点客户 RSVP 与高层接待安排完成。", notes: "已有 13 家确认出席。", assignee: "陈鹏", department: "客户发展", deadline: "2026-08-03", priority: "P1", status: "IN_PROGRESS" },
-      { workstream: "会后转化", name: "输出客户行动清单", description: "将现场反馈转化为客户机会与下一步负责人。", notes: "待活动结束。", assignee: null, department: "客户发展", deadline: "2026-08-20", priority: "P0", status: "PENDING", needsConfirmation: true, missingFields: ["负责人"] },
-      { workstream: "预算统筹", name: "项目统筹预算池", description: "闭门会预算池。", notes: "仅有计划预算，待财务正式确认。", assignee: "陈鹏", department: "经营管理", deadline: null, priority: "P2", status: "PENDING", needsConfirmation: true, missingFields: ["截止日期"] },
+      { workstream: "会后转化", name: "输出客户行动清单", description: "将现场反馈转化为客户机会与下一步负责人。", notes: "会后行动清单模板已锁定，活动结束后按既定流程执行。", assignee: "陈鹏", department: "客户发展", deadline: "2026-08-20", priority: "P0", status: "PENDING" },
+      { workstream: "预算统筹", name: "项目统筹预算池", description: "闭门会预算池。", notes: "预算已确认，按实际发生持续记账。", assignee: "陈鹏", department: "经营管理", deadline: "2026-07-16", priority: "P2", status: "PENDING" },
     ],
     calendar: [
       { task: "完成闭门会主题内容框架", date: "2026-08-16", startTime: "14:00", channel: "上海外滩会所", content: "客户年度闭门会", owner: "陈鹏", department: "客户发展", status: "PLANNED" },
-      { task: "输出客户行动清单", date: null, channel: null, content: "会后客户机会复盘", owner: null, department: "客户发展", status: "PLANNED", notes: "日期和负责人待确认" },
+      { task: "输出客户行动清单", date: "2026-08-20", startTime: "10:00", channel: "上海外滩会所", content: "会后客户机会复盘", owner: "陈鹏", department: "客户发展", status: "PLANNED" },
     ],
     budgetFlows: [],
   },
@@ -233,13 +240,13 @@ const scenarios: ProjectScenario[] = [
       { workstream: "策略统筹", name: "确认上市传播策略与节奏", description: "统一预热、发布、持续传播三个阶段的核心叙事。", notes: "策略会已通过，待客户签字版本。", assignee: "周予安", department: "整合营销", deadline: "2026-07-12", priority: "P0", status: "IN_PROGRESS" },
       { workstream: "媒体公关", name: "完成核心媒体沟通与专访排期", description: "锁定汽车、科技、财经媒体的专访与试驾资源。", notes: "8 家媒体确认，2 家档期冲突。", assignee: "周予安", department: "品牌公关", deadline: "2026-07-25", priority: "P0", status: "IN_PROGRESS" },
       { workstream: "社交内容", name: "完成首批社媒内容资产", description: "输出产品卖点短视频、长图文和互动话题素材。", notes: "首批 6 条短视频完成内审。", assignee: "许闻澜", department: "内容营销", deadline: "2026-07-20", priority: "P1", status: "IN_PROGRESS" },
-      { workstream: "用户运营", name: "配置上市期线索承接机制", description: "打通预约、试驾、CRM 回传和销售跟进。", notes: "CRM 字段映射仍待销售确认。", assignee: null, department: "用户运营", deadline: "2026-07-30", priority: "P0", status: "PENDING", needsConfirmation: true, missingFields: ["负责人"] },
+      { workstream: "用户运营", name: "配置上市期线索承接机制", description: "打通预约、试驾、CRM 回传和销售跟进。", notes: "CRM 字段映射已锁定，按测试数据验证回传链路。", assignee: "罗嘉言", department: "用户运营", deadline: "2026-07-30", priority: "P0", status: "PENDING" },
       { workstream: "预算统筹", name: "项目统筹预算池", description: "新品上市确认预算池。", notes: "预算已确认，包含内容与媒体资源。", assignee: "周予安", department: "整合营销", deadline: "2026-07-08", priority: "P1", status: "IN_PROGRESS" },
     ],
     calendar: [
       { task: "完成核心媒体沟通与专访排期", date: "2026-07-22", startTime: "10:00", channel: "北京试驾基地", content: "核心媒体预沟通与试驾", owner: "周予安", department: "品牌公关", status: "CONFIRMED" },
       { task: "完成首批社媒内容资产", date: "2026-07-28", startTime: "12:00", channel: "小红书 / 抖音 / 视频号", content: "Aster X9 首批预热内容上线", owner: "许闻澜", department: "内容营销", status: "PLANNED" },
-      { task: "配置上市期线索承接机制", date: "2026-08-08", startTime: "19:30", channel: "官网 / 小程序", content: "新品发布会直播与预约承接", owner: null, department: "用户运营", status: "PLANNED" },
+      { task: "配置上市期线索承接机制", date: "2026-08-08", startTime: "19:30", channel: "官网 / 小程序", content: "新品发布会直播与预约承接", owner: "罗嘉言", department: "用户运营", status: "PLANNED" },
     ],
     budgetFlows: [
       { task: "项目统筹预算池", operation: "CONFIRM", flowType: "ALLOCATE", amount: 5200000, description: "Aster X9 上市整合传播预算确定", createdBy: "周予安" },
@@ -259,13 +266,13 @@ const scenarios: ProjectScenario[] = [
     items: [
       { workstream: "区域策略", name: "完成城市优先级与门店分组", description: "按销量潜力和库存压力划分 12 个重点城市。", notes: "城市分组完成，待大区签字。", assignee: "周予安", department: "区域营销", deadline: "2026-07-17", priority: "P0", status: "IN_PROGRESS" },
       { workstream: "零售活动", name: "发布周末试驾活动模板", description: "统一门店物料、活动机制和数据回传口径。", notes: "首版模板待销售培训反馈。", assignee: "周予安", department: "区域营销", deadline: "2026-07-24", priority: "P1", status: "PENDING" },
-      { workstream: "销售赋能", name: "完成经销商产品话术培训", description: "覆盖产品卖点、竞品对比和试驾转化话术。", notes: "培训讲师确认中。", assignee: null, department: "销售培训", deadline: null, priority: "P1", status: "PENDING", needsConfirmation: true, missingFields: ["负责人", "截止日期"] },
+      { workstream: "销售赋能", name: "完成经销商产品话术培训", description: "覆盖产品卖点、竞品对比和试驾转化话术。", notes: "讲师与场次已排定，按区域分批交付。", assignee: "方明澈", department: "销售培训", deadline: "2026-08-03", priority: "P1", status: "PENDING" },
       { workstream: "数据运营", name: "建立门店线索周报", description: "每周汇总到店、试驾、成交和异常门店。", notes: "已确定数据字段。", assignee: "周予安", department: "数据运营", deadline: "2026-07-31", priority: "P1", status: "IN_PROGRESS" },
       { workstream: "预算统筹", name: "项目统筹预算池", description: "区域增长计划预算池。", notes: "计划预算待区域财务确认。", assignee: "周予安", department: "区域营销", deadline: "2026-07-15", priority: "P2", status: "PENDING" },
     ],
     calendar: [
       { task: "发布周末试驾活动模板", date: "2026-07-26", startTime: "09:00", channel: "华东重点门店", content: "首轮周末试驾活动上线", owner: "周予安", department: "区域营销", status: "PLANNED" },
-      { task: "完成经销商产品话术培训", date: null, channel: "线上培训", content: "经销商产品话术培训", owner: null, department: "销售培训", status: "PLANNED", notes: "讲师和场次待确认" },
+      { task: "完成经销商产品话术培训", date: "2026-08-03", startTime: "15:00", channel: "线上培训", content: "经销商产品话术培训", owner: "方明澈", department: "销售培训", status: "PLANNED" },
     ],
     budgetFlows: [],
   },
@@ -331,7 +338,7 @@ const scenarios: ProjectScenario[] = [
       { workstream: "案例策略", name: "确定案例选题池", description: "从行业、客户规模和产品价值筛选 10 个案例。", notes: "第一批 6 个案例已获销售确认。", assignee: "周予安", department: "内容营销", deadline: "2026-07-13", priority: "P1", status: "COMPLETED" },
       { workstream: "内容生产", name: "完成三篇深度客户案例", description: "输出访谈、文稿、视觉和审批版本。", notes: "第一篇进入客户审阅。", assignee: "许闻澜", department: "内容营销", deadline: "2026-07-29", priority: "P1", status: "IN_PROGRESS" },
       { workstream: "分发运营", name: "建立案例分发节奏", description: "覆盖官网、公众号、销售资料和行业媒体。", notes: "渠道优先级已确认。", assignee: "周予安", department: "内容营销", deadline: "2026-08-05", priority: "P2", status: "PENDING" },
-      { workstream: "销售协同", name: "配置销售案例使用指引", description: "为销售团队提供行业/场景检索与使用话术。", notes: "待销售 enablement 团队反馈。", assignee: null, department: "销售赋能", deadline: "2026-08-12", priority: "P2", status: "PENDING", needsConfirmation: true, missingFields: ["负责人"] },
+      { workstream: "销售协同", name: "配置销售案例使用指引", description: "为销售团队提供行业/场景检索与使用话术。", notes: "销售案例使用指引已纳入 enablement 发布节奏。", assignee: "方明澈", department: "销售赋能", deadline: "2026-08-12", priority: "P2", status: "PENDING" },
       { workstream: "预算统筹", name: "项目统筹预算池", description: "内容增长预算池。", notes: "已确认预算，准备拆分至内容生产。", assignee: "周予安", department: "内容营销", deadline: "2026-07-05", priority: "P2", status: "IN_PROGRESS" },
     ],
     calendar: [
@@ -382,7 +389,7 @@ const scenarios: ProjectScenario[] = [
       { workstream: "场地运营", name: "锁定快闪场地与排期", description: "选择上海和杭州两座城市的高流量商圈。", notes: "上海场地已锁定，杭州仍在比价。", assignee: "许闻澜", department: "品牌体验", deadline: "2026-07-15", priority: "P0", status: "IN_PROGRESS" },
       { workstream: "创意内容", name: "完成快闪互动装置创意", description: "设计打卡、互动、试驾预约和内容采集机制。", notes: "创意方案已进入制作报价。", assignee: "许闻澜", department: "创意内容", deadline: "2026-07-19", priority: "P1", status: "IN_PROGRESS" },
       { workstream: "达人传播", name: "确认本地达人合作名单", description: "覆盖探店、汽车和生活方式达人。", notes: "首轮名单待品牌安全审核。", assignee: "周予安", department: "社交营销", deadline: "2026-07-25", priority: "P1", status: "PENDING" },
-      { workstream: "数据复盘", name: "配置快闪数据看板", description: "跟踪客流、互动、留资、试驾预约与内容传播。", notes: "指标定义完成，待接入门店数据。", assignee: null, department: "数据运营", deadline: "2026-08-05", priority: "P1", status: "PENDING", needsConfirmation: true, missingFields: ["负责人"] },
+      { workstream: "数据复盘", name: "配置快闪数据看板", description: "跟踪客流、互动、留资、试驾预约与内容传播。", notes: "指标定义完成，门店数据按日同步至看板。", assignee: "罗嘉言", department: "数据运营", deadline: "2026-08-05", priority: "P1", status: "PENDING" },
       { workstream: "预算统筹", name: "项目统筹预算池", description: "快闪体验计划预算池。", notes: "预算已确认，场地费预付款已发生。", assignee: "许闻澜", department: "品牌体验", deadline: "2026-07-10", priority: "P1", status: "IN_PROGRESS" },
     ],
     calendar: [
@@ -406,12 +413,12 @@ const scenarios: ProjectScenario[] = [
     items: [
       { workstream: "报告内容", name: "完成报告核心叙事提炼", description: "从长报告中提炼三条核心叙事与证据链。", notes: "ESG 数据已核验，叙事待管理层确认。", assignee: "许闻澜", department: "品牌战略", deadline: "2026-07-11", priority: "P0", status: "IN_PROGRESS" },
       { workstream: "视觉内容", name: "制作报告传播视觉资产", description: "制作长图、短视频、数据卡片和演讲模板。", notes: "首批数据卡片已完成。", assignee: "许闻澜", department: "创意内容", deadline: "2026-07-21", priority: "P1", status: "IN_PROGRESS" },
-      { workstream: "利益相关方", name: "安排媒体与机构沟通", description: "面向财经、ESG 媒体和行业机构组织沟通。", notes: "机构沟通名单需补负责人。", assignee: null, department: "品牌公关", deadline: "2026-07-27", priority: "P1", status: "PENDING", needsConfirmation: true, missingFields: ["负责人"] },
+      { workstream: "利益相关方", name: "安排媒体与机构沟通", description: "面向财经、ESG 媒体和行业机构组织沟通。", notes: "机构沟通名单与对接分工已进入执行节奏。", assignee: "许闻澜", department: "品牌公关", deadline: "2026-07-27", priority: "P1", status: "PENDING" },
       { workstream: "对外发布", name: "发布年度可持续发展报告", description: "官网发布、内外部邮件和社交内容同步。", notes: "待董事会确认发布时间。", assignee: "许闻澜", department: "品牌战略", deadline: "2026-08-08", priority: "P0", status: "PENDING" },
       { workstream: "预算统筹", name: "项目统筹预算池", description: "报告传播预算池。", notes: "已确认预算，存在一笔供应商退款。", assignee: "许闻澜", department: "品牌战略", deadline: "2026-07-03", priority: "P2", status: "IN_PROGRESS" },
     ],
     calendar: [
-      { task: "安排媒体与机构沟通", date: null, channel: "线上圆桌", content: "ESG 媒体与机构沟通会", owner: null, department: "品牌公关", status: "PLANNED", notes: "日期待董事会窗口确认" },
+      { task: "安排媒体与机构沟通", date: "2026-07-27", startTime: "14:00", channel: "线上圆桌", content: "ESG 媒体与机构沟通会", owner: "许闻澜", department: "品牌公关", status: "PLANNED" },
       { task: "发布年度可持续发展报告", date: "2026-08-08", startTime: "09:00", channel: "官网 / 公众号 / LinkedIn", content: "年度可持续发展报告发布", owner: "许闻澜", department: "品牌战略", status: "PLANNED" },
     ],
     budgetFlows: [
@@ -431,7 +438,7 @@ const scenarios: ProjectScenario[] = [
     items: [
       { workstream: "伙伴策略", name: "确定伙伴分层与峰会邀约名单", description: "锁定开发者、ISV、渠道和战略伙伴四类对象。", notes: "伙伴分层规则已确认。", assignee: "许闻澜", department: "生态合作", deadline: "2026-07-23", priority: "P0", status: "IN_PROGRESS" },
       { workstream: "峰会内容", name: "完成主论坛议程与演讲人确认", description: "确认主题演讲、产品发布和伙伴圆桌。", notes: "两位外部嘉宾仍未确认。", assignee: "许闻澜", department: "生态合作", deadline: "2026-08-02", priority: "P0", status: "IN_PROGRESS" },
-      { workstream: "开发者运营", name: "建立会后开发者社区承接", description: "配置报名、资料下载、社群和技术问答入口。", notes: "社区工具选型待 IT 确认。", assignee: null, department: "开发者运营", deadline: "2026-08-12", priority: "P1", status: "PENDING", needsConfirmation: true, missingFields: ["负责人"] },
+      { workstream: "开发者运营", name: "建立会后开发者社区承接", description: "配置报名、资料下载、社群和技术问答入口。", notes: "社区工具与运营节奏已锁定，按峰会节点上线。", assignee: "罗嘉言", department: "开发者运营", deadline: "2026-08-12", priority: "P1", status: "PENDING" },
       { workstream: "现场执行", name: "完成峰会现场总控", description: "覆盖签到、直播、舞台、演示和应急流程。", notes: "待议程锁定后进入详细总控。", assignee: "许闻澜", department: "生态合作", deadline: "2026-09-04", priority: "P0", status: "PENDING" },
       { workstream: "预算统筹", name: "项目统筹预算池", description: "伙伴峰会预算池。", notes: "预算确认，当前消耗偏高。", assignee: "许闻澜", department: "生态合作", deadline: "2026-07-18", priority: "P1", status: "IN_PROGRESS" },
     ],
@@ -457,7 +464,7 @@ const scenarios: ProjectScenario[] = [
       { workstream: "内容策略", name: "制定八周内容主题排期", description: "规划功能、场景、用户故事和热点四类主题。", notes: "内容主题完成，待确认品牌敏感词。", assignee: "许闻澜", department: "社交营销", deadline: "2026-07-14", priority: "P0", status: "IN_PROGRESS" },
       { workstream: "达人合作", name: "签约首批垂类达人", description: "完成汽车、科技、生活方式达人合作与 Brief。", notes: "已签 12 位，待补充 3 位城市达人。", assignee: "周予安", department: "社交营销", deadline: "2026-07-21", priority: "P1", status: "IN_PROGRESS" },
       { workstream: "账号运营", name: "完成官方账号内容生产机制", description: "建立周选题、审核、发布和复盘节奏。", notes: "首周内容已排期。", assignee: "许闻澜", department: "社交营销", deadline: "2026-07-18", priority: "P1", status: "IN_PROGRESS" },
-      { workstream: "转化承接", name: "接入社交线索转化看板", description: "追踪内容互动、预约和线索成本。", notes: "数据口径与销售侧不一致。", assignee: null, department: "数据运营", deadline: "2026-07-29", priority: "P0", status: "PENDING", needsConfirmation: true, missingFields: ["负责人"] },
+      { workstream: "转化承接", name: "接入社交线索转化看板", description: "追踪内容互动、预约和线索成本。", notes: "数据口径已统一，按周复盘内容到线索的转化表现。", assignee: "罗嘉言", department: "数据运营", deadline: "2026-07-29", priority: "P0", status: "PENDING" },
       { workstream: "预算统筹", name: "项目统筹预算池", description: "社交内容战役预算池。", notes: "已确认预算，达人资源已发生支出。", assignee: "许闻澜", department: "社交营销", deadline: "2026-07-08", priority: "P1", status: "IN_PROGRESS" },
     ],
     calendar: [
@@ -514,7 +521,7 @@ const scenarios: ProjectScenario[] = [
     measurementItem: "复盘试驾到成交转化链路",
     measurementOwner: null,
     measurementDepartment: "销售数据",
-    budgetState: "UNCONFIRMED",
+    budgetState: "NORMAL",
   }),
   buildGeneratedScenario({
     name: "Q4销售战役内容支持",
@@ -537,7 +544,7 @@ const scenarios: ProjectScenario[] = [
     measurementItem: "建立内容使用率与线索贡献复盘",
     measurementOwner: "方明澈",
     measurementDepartment: "销售赋能",
-    budgetState: "SPEND_BEFORE_CONFIRM",
+    budgetState: "NORMAL",
   }),
   buildGeneratedScenario({
     name: "年度产品培训直播季",
@@ -629,7 +636,7 @@ const scenarios: ProjectScenario[] = [
     measurementItem: "复盘社群活动满意度与内容产出",
     measurementOwner: null,
     measurementDepartment: "用户运营",
-    budgetState: "UNCONFIRMED",
+    budgetState: "NORMAL",
   }),
   buildGeneratedScenario({
     name: "行业媒体趋势论坛",
@@ -660,14 +667,42 @@ function toDate(value: string | null) {
   return value ? new Date(`${value}T00:00:00.000Z`) : null;
 }
 
+function activityTimestamp(scenarioIndex: number, offsetMinutes: number) {
+  return new Date(Date.now() - (scenarioIndex * 53 + offsetMinutes) * 60 * 1000);
+}
+
+function lifecycleForScenario(name: string): SeedProjectLifecycle {
+  return LIFECYCLE_BY_PROJECT[name] ?? "ACTIVE";
+}
+
+function completeBudgetFlows(scenario: ProjectScenario, owner: DemoUserName): BudgetItem[] {
+  const budgetTask = "__PROJECT_POOL__";
+  const hasConfirmedBudget = scenario.budgetFlows.some((flow) => flow.flowType === "ALLOCATE");
+  return hasConfirmedBudget
+    ? scenario.budgetFlows
+    : [{ task: budgetTask, operation: "CONFIRM", flowType: "ALLOCATE", amount: scenario.budget, description: `${scenario.name}预算确定`, createdBy: owner }, ...scenario.budgetFlows];
+}
+
+async function assertDemoDataComplete() {
+  const [incompleteTasks, incompleteCalendarEntries, unconfirmedBudgetProjects] = await Promise.all([
+    prisma.task.count({ where: { OR: [{ needsConfirmation: true }, { assignee: null }, { deadline: null }] } }),
+    prisma.executionCalendarEntry.count({ where: { OR: [{ date: null }, { owner: null }, { channel: null }] } }),
+    prisma.project.count({ where: { budgetStatus: { not: "CONFIRMED" } } }),
+  ]);
+
+  if (incompleteTasks || incompleteCalendarEntries || unconfirmedBudgetProjects) {
+    throw new Error(`Demo dataset integrity failed: tasks=${incompleteTasks}, calendar=${incompleteCalendarEntries}, budget=${unconfirmedBudgetProjects}`);
+  }
+}
+
+function upcomingDate(scenarioIndex: number, offsetDays: number) {
+  return new Date(Date.UTC(2026, 7, 10 + scenarioIndex + offsetDays));
+}
+
 async function resetDemoData() {
   await prisma.projectFeedback.deleteMany();
+  await prisma.projectFocus.deleteMany();
   await prisma.activityLog.deleteMany();
-  await prisma.importDraft.deleteMany();
-  await prisma.healthSnapshot.deleteMany();
-  await prisma.risk.deleteMany();
-  await prisma.assetItem.deleteMany();
-  await prisma.assetFolder.deleteMany();
   await prisma.executionCalendarEntry.deleteMany();
   await prisma.budgetFlow.deleteMany();
   await prisma.progressLog.deleteMany();
@@ -679,34 +714,47 @@ async function resetDemoData() {
 }
 
 async function main() {
+  if (process.env.SHADOWPM_ALLOW_DEMO_SEED !== "1") {
+    throw new Error("演示数据重置已被保护。仅可通过 npm run db:seed:demo 在一次性开发数据库执行。");
+  }
   console.log("Resetting ShadowPM demo data...");
   await resetDemoData();
 
   const users = new Map<string, { id: string; name: string }>();
+  const demoPasswordHash = await hashPassword("ShadowPM-demo-2026!");
   for (const user of [
-    { name: "陈鹏", role: "LEADER" as const },
-    { name: "周予安", role: "MEMBER" as const },
-    { name: "许闻澜", role: "MEMBER" as const },
-    { name: "方明澈", role: "MEMBER" as const },
-    { name: "罗嘉言", role: "MEMBER" as const },
+    { name: "陈鹏", email: "chen.peng@example.test", role: "LEADER" as const },
+    { name: "周予安", email: "zhou.yuan@example.test", role: "MEMBER" as const },
+    { name: "许闻澜", email: "xu.wenlan@example.test", role: "MEMBER" as const },
+    { name: "方明澈", email: "fang.mingche@example.test", role: "MEMBER" as const },
+    { name: "罗嘉言", email: "luo.jiayan@example.test", role: "MEMBER" as const },
   ]) {
-    const created = await prisma.user.create({ data: user });
+    const created = await prisma.user.create({ data: { ...user, passwordHash: demoPasswordHash } });
     users.set(created.name, created);
   }
 
-  for (const scenario of scenarios) {
+  const projectIds = new Map<string, string>();
+  for (let scenarioIndex = 0; scenarioIndex < scenarios.length; scenarioIndex += 1) {
+    const scenario = scenarios[scenarioIndex]!;
     const owner = users.get(scenario.owner)!;
+    const budgetFlows = completeBudgetFlows(scenario, scenario.owner);
+    const lifecycle = lifecycleForScenario(scenario.name);
+    const projectStartDate = lifecycle === "UPCOMING" ? upcomingDate(scenarioIndex, 0) : toDate(scenario.startDate);
+    const projectEndDate = lifecycle === "UPCOMING" ? upcomingDate(scenarioIndex, 45) : toDate(scenario.endDate);
     const project = await prisma.project.create({
       data: {
         name: scenario.name,
         ownerId: owner.id,
         totalBudget: new Prisma.Decimal(scenario.budget),
-        startDate: toDate(scenario.startDate),
-        endDate: toDate(scenario.endDate),
+        budgetStatus: "CONFIRMED",
+        startDate: projectStartDate,
+        endDate: projectEndDate,
       },
     });
+    projectIds.set(scenario.name, project.id);
     const phaseByName = new Map<string, string>();
-    for (const workstream of Array.from(new Set(scenario.items.map((item) => item.workstream)))) {
+    const controlItems = scenario.items.filter((item) => item.name !== "项目统筹预算池");
+    for (const workstream of Array.from(new Set(controlItems.map((item) => item.workstream)))) {
       const phase = await prisma.phase.create({
         data: { projectId: project.id, name: workstream, sortOrder: phaseByName.size },
       });
@@ -714,30 +762,35 @@ async function main() {
     }
 
     const taskByName = new Map<string, { id: string; name: string }>();
-    for (const item of scenario.items) {
+    for (let itemIndex = 0; itemIndex < controlItems.length; itemIndex += 1) {
+      const item = controlItems[itemIndex]!;
+      const assignee = item.assignee ?? owner.name;
+      const deadline = lifecycle === "UPCOMING" ? upcomingDate(scenarioIndex, itemIndex + 2) : toDate(item.deadline) ?? activityTimestamp(scenarioIndex, -24 - itemIndex);
+      const status = lifecycle === "COMPLETED" ? "COMPLETED" : lifecycle === "UPCOMING" ? "PENDING" : item.status;
+      const notes = lifecycle === "COMPLETED" ? `已完成并进入结算与复盘：${item.notes}` : lifecycle === "UPCOMING" ? `项目尚未启动：${item.notes}` : item.notes;
       const task = await prisma.task.create({
         data: {
           projectId: project.id,
           phaseId: phaseByName.get(item.workstream),
           name: item.name,
           description: item.description,
-          notes: item.notes,
-          assignee: item.assignee,
+          notes,
+          assignee,
           department: item.department,
-          deadline: toDate(item.deadline),
+          deadline,
           priority: item.priority,
-          status: item.status,
-          needsConfirmation: item.needsConfirmation ?? false,
-          missingFields: item.missingFields ?? [],
-          aiConfidence: item.needsConfirmation ? "medium" : "high",
-          sourceRef: "DEMO_DATASET",
+          status,
+          needsConfirmation: false,
+          missingFields: [],
+          aiConfidence: "high",
+          sourceRef: null,
         },
       });
       taskByName.set(task.name, task);
       await prisma.progressLog.create({
         data: {
           taskId: task.id,
-          content: item.notes,
+          content: notes,
           createdBy: item.assignee ?? owner.name,
         },
       });
@@ -750,19 +803,20 @@ async function main() {
       });
     }
 
-    for (const entry of scenario.calendar) {
+    for (let entryIndex = 0; entryIndex < scenario.calendar.length; entryIndex += 1) {
+      const entry = scenario.calendar[entryIndex]!;
       await prisma.executionCalendarEntry.create({
         data: {
           projectId: project.id,
           taskId: taskByName.get(entry.task)?.id ?? null,
-          date: toDate(entry.date),
+          date: lifecycle === "UPCOMING" ? upcomingDate(scenarioIndex, entryIndex + 4) : toDate(entry.date) ?? activityTimestamp(scenarioIndex, -48 - entryIndex),
           startTime: entry.startTime ?? null,
-          channel: entry.channel,
+          channel: entry.channel ?? "项目执行协同",
           workstream: scenario.items.find((item) => item.name === entry.task)?.workstream ?? null,
           content: entry.content,
-          owner: entry.owner,
+          owner: entry.owner ?? owner.name,
           department: entry.department,
-          status: entry.status,
+          status: lifecycle === "COMPLETED" ? "DONE" : lifecycle === "UPCOMING" ? "PLANNED" : entry.status,
           notes: entry.notes ?? null,
           createdBy: owner.name,
         },
@@ -770,24 +824,40 @@ async function main() {
     }
 
     const transferGroups = new Map<string, string>();
-    for (const flow of scenario.budgetFlows) {
+    for (const flow of budgetFlows) {
       const task = taskByName.get(flow.task);
-      if (!task) throw new Error(`Missing budget task: ${scenario.name} / ${flow.task}`);
       const groupId = flow.operation === "TRANSFER"
         ? transferGroups.get(flow.description) ?? randomUUID()
         : null;
       if (groupId) transferGroups.set(flow.description, groupId);
+      const isPoolFlow = flow.task === "__PROJECT_POOL__" || flow.task === "项目统筹预算池";
+      if (!task && !isPoolFlow) throw new Error(`Missing budget task: ${scenario.name} / ${flow.task}`);
+      const amount = new Prisma.Decimal(flow.amount).abs();
       await prisma.budgetFlow.create({
         data: {
-          taskId: task.id,
+          projectId: project.id,
+          taskId: task?.id,
           groupId,
-          operation: flow.operation,
+          operation: isPoolFlow ? "CONFIRM_POOL" : flow.flowType === "EXPENSE" ? "DISBURSE" : flow.operation,
           flowType: flow.flowType,
-          amount: new Prisma.Decimal(flow.amount),
+          amount,
+          counterparty: flow.flowType === "EXPENSE" ? "模拟合作方" : null,
           description: flow.description,
           createdBy: flow.createdBy,
         },
       });
+      if (task && flow.flowType === "EXPENSE") {
+        await prisma.task.update({
+          where: { id: task.id },
+          data: {
+            budgetAmount: amount,
+            budgetStatus: lifecycle === "COMPLETED" ? "ACCEPTED" : "DISBURSED",
+            budgetRecipient: lifecycle === "COMPLETED" ? null : "模拟合作方",
+          },
+        });
+      } else if (task && flow.flowType === "ALLOCATE" && amount.gt(0)) {
+        await prisma.task.update({ where: { id: task.id }, data: { budgetAmount: amount, budgetStatus: "ALLOCATED" } });
+      }
     }
 
     await prisma.activityLog.createMany({
@@ -800,7 +870,8 @@ async function main() {
           source: "SYSTEM",
           createdBy: owner.name,
           summary: `创建模拟项目：${scenario.objective}`,
-          afterState: { objective: scenario.objective, scenario: "DEMO_DATASET" },
+          afterState: { objective: scenario.objective, scenario: "模拟案例" },
+          createdAt: activityTimestamp(scenarioIndex, 28),
         },
         {
           projectId: project.id,
@@ -808,12 +879,57 @@ async function main() {
           changeType: "IMPORT",
           source: "SYSTEM",
           createdBy: "ShadowPM Demo Seed",
-          summary: `已生成 ${scenario.items.length} 条管控事项、${scenario.budgetFlows.length} 条资金流水、${scenario.calendar.length} 条执行日历。`,
-          afterState: { items: scenario.items.length, budgetFlows: scenario.budgetFlows.length, calendar: scenario.calendar.length },
+          summary: `已生成 ${controlItems.length} 条管控事项、项目预算池与 ${budgetFlows.length} 条预算审计记录、${scenario.calendar.length} 条执行日历。`,
+          afterState: { items: controlItems.length, budgetFlows: budgetFlows.length, calendar: scenario.calendar.length },
+          createdAt: activityTimestamp(scenarioIndex, 24),
         },
+        ...controlItems.map((item, itemIndex) => ({
+          projectId: project.id,
+          targetType: "CONTROL_ITEM",
+          targetId: taskByName.get(item.name)?.id,
+          changeType: lifecycle === "COMPLETED" || item.status === "COMPLETED" ? "STATUS_CHANGE" : "UPDATE",
+          source: "HUMAN",
+          createdBy: item.assignee ?? owner.name,
+          summary: `更新管控事项「${item.name}」：${lifecycle === "COMPLETED" ? `已完成并进入结算与复盘：${item.notes}` : lifecycle === "UPCOMING" ? `项目尚未启动：${item.notes}` : item.notes}`,
+          afterState: { status: lifecycle === "COMPLETED" ? "COMPLETED" : lifecycle === "UPCOMING" ? "PENDING" : item.status, needsConfirmation: false },
+          createdAt: activityTimestamp(scenarioIndex, 20 - itemIndex * 2),
+        })),
+        ...budgetFlows.map((flow, flowIndex) => ({
+          projectId: project.id,
+          targetType: "BUDGET_ITEM",
+          targetId: taskByName.get(flow.task)?.id,
+          changeType: "UPDATE",
+          source: "HUMAN",
+          createdBy: flow.createdBy,
+          summary: `资金账本已记录${flow.operation}：${flow.description}`,
+          afterState: { operation: flow.operation, amount: flow.amount, flowType: flow.flowType },
+          createdAt: activityTimestamp(scenarioIndex, 9 - flowIndex),
+        })),
+        ...scenario.calendar.map((entry, entryIndex) => ({
+          projectId: project.id,
+          targetType: "CALENDAR_ENTRY",
+          targetId: taskByName.get(entry.task)?.id,
+          changeType: "UPDATE",
+          source: "HUMAN",
+          createdBy: entry.owner ?? owner.name,
+          summary: `执行日历已${lifecycle === "COMPLETED" || entry.status === "DONE" ? "完成" : entry.status === "CONFIRMED" ? "确认" : "更新"}：${entry.content}`,
+          afterState: { status: lifecycle === "COMPLETED" ? "DONE" : lifecycle === "UPCOMING" ? "PLANNED" : entry.status, date: lifecycle === "UPCOMING" ? upcomingDate(scenarioIndex, entryIndex + 4).toISOString() : entry.date, channel: entry.channel },
+          createdAt: activityTimestamp(scenarioIndex, 4 - entryIndex),
+        })),
       ],
     });
   }
+
+  await assertDemoDataComplete();
+
+  const focusRows = Array.from(users.values()).flatMap((user) => {
+    const ownProject = scenarios.find((scenario) => scenario.owner === user.name);
+    const memberProject = scenarios.find((scenario) => scenario.collaborators?.some((collaborator) => collaborator.name === user.name));
+    return [ownProject, memberProject]
+      .filter((scenario): scenario is ProjectScenario => Boolean(scenario))
+      .map((scenario) => ({ projectId: projectIds.get(scenario.name)!, userId: user.id }));
+  });
+  await prisma.projectFocus.createMany({ data: focusRows, skipDuplicates: true });
 
   const [userCount, projectCount, taskCount, budgetCount, calendarCount, logCount] = await Promise.all([
     prisma.user.count(),

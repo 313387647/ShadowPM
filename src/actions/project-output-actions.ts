@@ -5,7 +5,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { calculateBudgetSnapshot } from "@/lib/budget";
 import { assertCanReadProject, assertCanWriteProject } from "@/lib/permissions";
 import { normalizeShareExpiryDays } from "@/lib/p2-rules";
 import type { ActionResult } from "@/actions/types";
@@ -71,7 +70,6 @@ export async function generateProjectReport(
         include: {
           phase: { select: { name: true } },
           logs: { where: { createdAt: { gte: periodStart, lte: periodEnd } }, orderBy: { createdAt: "desc" } },
-          budgets: { where: { createdAt: { lte: periodEnd } }, orderBy: { createdAt: "asc" } },
         },
         orderBy: [{ status: "asc" }, { deadline: "asc" }],
       },
@@ -85,22 +83,13 @@ export async function generateProjectReport(
   });
   if (!project) return { success: false, message: "项目不存在" };
 
-  const allFlows = project.tasks.flatMap((task) => task.budgets);
-  const allocated = allFlows
-    .filter((flow) => flow.flowType === "ALLOCATE")
-    .reduce((sum, flow) => sum + flow.amount.toNumber(), 0);
-  const expense = allFlows
-    .filter((flow) => flow.flowType === "EXPENSE")
-    .reduce((sum, flow) => sum + flow.amount.toNumber(), 0);
-  const refund = allFlows
-    .filter((flow) => flow.flowType === "REFUND")
-    .reduce((sum, flow) => sum + flow.amount.toNumber(), 0);
-  const budget = calculateBudgetSnapshot({
-    plannedBudget: project.totalBudget,
-    allocated,
-    expense,
-    refund,
-  });
+  const confirmed = project.budgetStatus === "CONFIRMED" ? project.totalBudget.toNumber() : 0;
+  const allocated = project.tasks
+    .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
+    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+  const disbursed = project.tasks
+    .filter((task) => task.budgetStatus === "DISBURSED")
+    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
   const facts = {
     project: {
       name: project.name,
@@ -119,11 +108,12 @@ export async function generateProjectReport(
       periodUpdates: task.logs.map((log) => ({ content: log.content, createdAt: log.createdAt })),
     })),
     budget: {
-      planned: budget.plannedBudget.toNumber(),
-      confirmed: budget.allocated.toNumber(),
-      consumed: budget.consumed.toNumber(),
-      balance: budget.balance.toNumber(),
-      usagePercent: budget.usagePercent,
+      planned: project.totalBudget.toNumber(),
+      confirmed,
+      allocated,
+      disbursed,
+      balance: confirmed - allocated,
+      usagePercent: confirmed > 0 ? Math.round((allocated / confirmed) * 100) : 0,
     },
     calendar: project.calendarEntries.map((entry) => ({
       date: entry.date,

@@ -77,31 +77,31 @@ const ACTIVITY_BLUEPRINTS = [
     title: "管控变更",
     description: "负责人、部门、截止日期与批量补齐",
     Icon: ClipboardList,
-    className: "border-sky-200 text-sky-600",
+    className: "border-primary/30 bg-primary/[0.06] text-primary",
   },
   {
     title: "人工进度",
     description: "关键进展、阻塞、结论和下一步",
     Icon: MessageSquare,
-    className: "border-blue-200 text-blue-600",
+    className: "border-info/30 bg-info/[0.06] text-info",
   },
   {
     title: "预算流转",
     description: "预算分配、支出、退款和余额变化",
     Icon: CircleDollarSign,
-    className: "border-emerald-200 text-emerald-600",
+    className: "border-success/30 bg-success/[0.06] text-success",
   },
   {
     title: "执行日历",
     description: "传播排期、渠道动作和执行状态",
     Icon: CalendarCheck,
-    className: "border-violet-200 text-violet-600",
+    className: "border-primary/25 bg-primary/[0.05] text-primary",
   },
   {
     title: "AI 导入",
     description: "表格识别、直接入表和可追溯修正",
     Icon: Sparkles,
-    className: "border-gray-200 text-gray-600",
+    className: "border-border bg-secondary text-muted-foreground",
   },
 ];
 

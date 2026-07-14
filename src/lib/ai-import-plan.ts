@@ -79,8 +79,7 @@ export function buildAIImportPlan(draft: AIImportPlanInput) {
     ...optionalGaps.slice(0, requiredGaps.length > 0 ? 1 : 3).map((gap) => `可稍后补齐：${gap}`),
   ].slice(0, 3);
 
-  const initialBudgetFlowCount =
-    draft.createBudgetFlow && draft.totalBudget && draft.totalBudget > 0 && confirmedBudgetItems.length === 0 ? 1 : 0;
+  const initialBudgetFlowCount = draft.createBudgetFlow && draft.totalBudget && draft.totalBudget > 0 ? 1 : 0;
 
   return {
     canCreateNow: requiredGaps.length === 0,

@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CalendarDays, CalendarPlus, CheckCircle2, Loader2, MessageSquarePlus, Pencil, Plus, Save, Trash2, WalletCards, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CalendarPlus, Loader2, MessageSquarePlus, Pencil, Plus, Save, Trash2, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,16 +26,15 @@ type Task = {
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   phaseId: string | null;
   priority: string;
+  budgetAmount: { toNumber?: () => number } | number;
+  budgetStatus: string;
   aiConfidence?: string | null;
   sourceRef?: string | null;
-  missingFields?: unknown;
-  conflicts?: unknown;
-  needsConfirmation?: boolean;
   logs: { id: string; content: string; createdBy: string; createdAt: Date | string }[];
   _count: { logs: number; budgets: number; calendarEntries: number };
 };
 
-type ControlFilter = "ALL" | "MISSING" | "OVERDUE" | "WITH_BUDGET" | "WITH_LOGS" | "WITH_CALENDAR";
+type ControlFilter = "ALL" | "OVERDUE" | "WITH_BUDGET" | "WITH_LOGS" | "WITH_CALENDAR";
 type PhaseOption = { id: string; name: string };
 type CreateDraft = {
   template: string;
@@ -50,10 +49,13 @@ type CreateDraft = {
   notes: string;
 };
 
+function budgetAmount(task: Pick<Task, "budgetAmount">) {
+  return typeof task.budgetAmount === "number" ? task.budgetAmount : task.budgetAmount.toNumber?.() ?? 0;
+}
+
 const CONTROL_FILTERS: { value: ControlFilter; label: string }[] = [
-  { value: "ALL", label: "全部" },
-  { value: "MISSING", label: "待补" },
-  { value: "OVERDUE", label: "逾期" },
+  { value: "ALL", label: "全部事项" },
+  { value: "OVERDUE", label: "已逾期" },
   { value: "WITH_BUDGET", label: "有预算" },
   { value: "WITH_LOGS", label: "有日志" },
   { value: "WITH_CALENDAR", label: "有日历" },
@@ -139,45 +141,6 @@ const EMPTY_CREATE_DRAFT: CreateDraft = {
   notes: "",
 };
 
-function getMissingFields(task: Task) {
-  const missing = new Set(normalizeStringList(task.missingFields).map(formatDiagnosticField));
-  if (!task.assignee?.trim()) missing.add("负责人");
-  if (!task.department?.trim()) missing.add("部门");
-  if (!task.deadline) missing.add("截止");
-  return Array.from(missing);
-}
-
-function normalizeStringList(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    : [];
-}
-
-function formatDiagnosticField(field: string) {
-  const map: Record<string, string> = {
-    assignee: "负责人",
-    owner: "负责人",
-    department: "部门",
-    deadline: "截止",
-    date: "日期",
-    status: "状态",
-    amount: "金额",
-    type: "类型",
-    relatedItemName: "关联事项",
-  };
-  return map[field] ?? field;
-}
-
-function missingFieldToInput(field: string) {
-  const map: Record<string, string> = {
-    负责人: "assignee",
-    部门: "department",
-    截止: "deadline",
-  };
-
-  return map[field] ?? "assignee";
-}
-
 function isOverdue(task: Task) {
   if (!task.deadline || task.status === "COMPLETED") return false;
   const deadline = new Date(task.deadline);
@@ -207,16 +170,15 @@ function formatDeadline(value: string) {
 }
 
 const STATUS_STYLE: Record<Task["status"], string> = {
-  PENDING: "border-amber-200 bg-amber-50 text-amber-800",
-  IN_PROGRESS: "border-sky-200 bg-sky-50 text-sky-800",
-  COMPLETED: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  PENDING: "border-warning/25 bg-warning/10 text-warning",
+  IN_PROGRESS: "border-primary/25 bg-primary/10 text-primary",
+  COMPLETED: "border-success/25 bg-success/10 text-success",
 };
 
 function matchesControlFilter(task: Task, filter: ControlFilter) {
   if (filter === "ALL") return true;
-  if (filter === "MISSING") return getMissingFields(task).length > 0;
   if (filter === "OVERDUE") return isOverdue(task);
-  if (filter === "WITH_BUDGET") return task._count.budgets > 0;
+  if (filter === "WITH_BUDGET") return budgetAmount(task) > 0;
   if (filter === "WITH_LOGS") return task._count.logs > 0;
   if (filter === "WITH_CALENDAR") return task._count.calendarEntries > 0;
   return true;
@@ -271,16 +233,7 @@ function ControlTableRow({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const conflicts = normalizeStringList(task.conflicts);
   const phaseName = phases?.find((phase) => phase.id === task.phaseId)?.name ?? "";
-  const hasHistory = task._count.logs > 0 || task._count.budgets > 0 || task._count.calendarEntries > 0;
-
-  const missing = getMissingFields({
-    ...task,
-    assignee,
-    department,
-    deadline: deadline || null,
-  });
   const overdue = isOverdue({ ...task, deadline: deadline || null });
   const dirty =
     name !== task.name ||
@@ -425,17 +378,16 @@ function ControlTableRow({
         id={`control-task-${task.id}`}
         onKeyDown={handleEditShortcut}
         className={cn(
-          "bg-card transition-colors hover:bg-muted/30",
-          focused && "bg-primary/5 ring-1 ring-inset ring-primary/30",
-          historyOpen && "bg-primary/5"
+          "bg-card transition-colors hover:bg-primary/[0.045]",
+          focused && "bg-primary/[0.075] ring-1 ring-inset ring-primary/35",
+          historyOpen && "bg-primary/[0.04]"
         )}
       >
       <td className="min-w-[300px] px-4 py-3">
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            {phaseName && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{phaseName}</span>}
-            {task.needsConfirmation && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">待确认</span>}
-            {task.sourceRef && task.sourceRef !== "DEMO_DATASET" && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">AI 导入</span>}
+            {phaseName && <span className="rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{phaseName}</span>}
+            {task.sourceRef && <span className="rounded-md border border-primary/20 bg-primary/[0.07] px-1.5 py-0.5 text-[10px] text-primary">AI 导入</span>}
           </div>
           {editMode ? (
             <>
@@ -458,7 +410,7 @@ function ControlTableRow({
           </div>
         ) : (
           <div>
-            <p className={assignee ? "font-medium" : "font-medium text-amber-700"}>{assignee || "负责人待补"}</p>
+            <p className={assignee ? "font-medium" : "font-medium text-warning"}>{assignee || "负责人待补"}</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">{department || "部门待补"}</p>
           </div>
         )}
@@ -486,45 +438,16 @@ function ControlTableRow({
       <td className="w-[120px] px-3 py-3">
         <div className="flex items-center gap-1">
           <Button type="button" size="icon" variant={historyOpen ? "secondary" : "ghost"} className="size-7" title="查看进度历史" onClick={() => setHistoryOpen((value) => !value)}><MessageSquarePlus className="size-3.5" /><span className="sr-only">日志 {task._count.logs}</span></Button>
-          {task._count.budgets > 0 && <Button type="button" size="icon" variant="ghost" className="size-7" title={`${task._count.budgets} 条预算流水`} onClick={() => router.push(`/projects/${task.projectId}?tab=ledger&ledgerTask=${task.id}`)}><WalletCards className="size-3.5" /></Button>}
+          {budgetAmount(task) > 0 && <Button type="button" size="icon" variant="ghost" className="size-7" title={`编辑事项预算：¥${budgetAmount(task).toLocaleString("zh-CN")}`} onClick={() => router.push(`/projects/${task.projectId}?tab=ledger&ledgerTask=${task.id}`)}><WalletCards className="size-3.5" /></Button>}
           {task._count.calendarEntries > 0 ? <Button type="button" size="icon" variant="ghost" className="size-7" title={`${task._count.calendarEntries} 个执行日历节点`} onClick={() => router.push(`/projects/${task.projectId}?tab=calendar&calendarTask=${task.id}`)}><CalendarDays className="size-3.5" /></Button> : canEdit && <Button type="button" size="icon" variant="ghost" className="size-7" title="创建执行日历" onClick={() => setScheduleOpen(true)}><CalendarPlus className="size-3.5" /></Button>}
         </div>
       </td>
       <td className="min-w-[220px] px-3 py-3">
-        {editMode ? <input value={notes} onChange={(event) => setNotes(event.target.value)} onKeyDown={saveOnEnter} placeholder="进度/结论" className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:border-primary" /> : <p className="line-clamp-2 text-xs leading-5 text-sky-800">{notes || "暂无进度结论"}</p>}
+        {editMode ? <input value={notes} onChange={(event) => setNotes(event.target.value)} onKeyDown={saveOnEnter} placeholder="进度/结论" className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:border-primary" /> : <p className="line-clamp-2 text-xs leading-5 text-secondary-foreground">{notes || "暂无进度结论"}</p>}
       </td>
       <td className="w-[126px] px-3 py-3">
         <div className="flex items-center justify-between gap-2">
-          {missing.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {missing.map((field) => (
-                <span
-                  key={field}
-                  className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
-                >
-                  {field}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-emerald-600">
-              <CheckCircle2 className="size-3" />
-              完整
-            </span>
-          )}
-          {conflicts.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {conflicts.slice(0, 2).map((conflict) => (
-                <span
-                  key={conflict}
-                  className="max-w-28 truncate rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
-                  title={conflict}
-                >
-                  冲突：{conflict}
-                </span>
-              ))}
-            </div>
-          )}
+          <span className="text-[11px] text-muted-foreground">点击事项直接编辑</span>
         </div>
       </td>
       {canEdit && (
@@ -720,35 +643,11 @@ function ControlTableRow({
             <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{hasHistory ? "不能直接删除该事项" : "删除管控事项"}</DialogTitle>
+                  <DialogTitle>删除管控事项</DialogTitle>
                 </DialogHeader>
-                {hasHistory ? (
-                  <div className="space-y-3">
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
-                「{task.name}」已有日志、预算或日历记录。为了保证项目历史和资金账本可追溯，不能硬删除。
-              </div>
+                <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                建议打开日志，在“追加管控进展”里记录取消原因，或把进度/结论改为不再执行。
-              </p>
-              <DialogFooter>
-                <Button type="button" variant="ghost" onClick={() => setDeleteOpen(false)}>
-                  关闭
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setDeleteOpen(false);
-                    setHistoryOpen(true);
-                  }}
-                >
-                  去记录取消原因
-                </Button>
-              </DialogFooter>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                这会删除误建的管控事项「{task.name}」。删除后不可恢复。
+                这会删除事项「{task.name}」及其关联的日历、预算明细和事项内进度。已有项目活动会保留删除记录。
               </p>
               <DialogFooter>
                 <Button type="button" variant="ghost" onClick={() => setDeleteOpen(false)}>
@@ -759,7 +658,6 @@ function ControlTableRow({
                 </Button>
               </DialogFooter>
                   </div>
-                )}
               </DialogContent>
             </Dialog>
           </td>
@@ -797,7 +695,6 @@ export function ProjectControlTable({
     return counts;
   }, {
     ALL: 0,
-    MISSING: 0,
     OVERDUE: 0,
     WITH_BUDGET: 0,
     WITH_LOGS: 0,
@@ -827,19 +724,15 @@ export function ProjectControlTable({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [query]);
 
-  function jumpToTask(taskId: string, firstMissingField?: string) {
+  function jumpToTask(taskId: string) {
     setFocusedTaskId(taskId);
     document.getElementById(`control-task-${taskId}`)?.scrollIntoView({
       behavior: "smooth",
       block: "center",
     });
     window.setTimeout(() => {
-      const field = firstMissingField ? missingFieldToInput(firstMissingField) : "assignee";
-      const input = document.querySelector<HTMLInputElement>(
-        `[data-task-field="${taskId}:${field}"]`
-      );
-      input?.focus();
-      input?.select?.();
+      const row = document.getElementById(`control-task-${taskId}`);
+      row?.querySelector<HTMLButtonElement>("button")?.click();
     }, 350);
     window.setTimeout(() => setFocusedTaskId(null), 1800);
   }
@@ -926,7 +819,7 @@ export function ProjectControlTable({
         <form
           ref={createFormRef}
           action={handleCreate}
-          className="rounded-lg border bg-card p-3"
+          className="focus-surface rounded-xl p-3"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -1038,15 +931,15 @@ export function ProjectControlTable({
       )}
 
       {tasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed py-16 text-center">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface-1/55 py-16 text-center">
           <p className="text-sm text-muted-foreground">暂无管控事项</p>
           <p className="mt-1 text-xs text-muted-foreground/60">
             使用上方「新增管控事项」添加第一条，或用 AI 生成项目
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/20 p-2.5">
+        <div className="table-shell">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-secondary/55 p-2.5">
             <div className="flex flex-wrap gap-1.5">
               {CONTROL_FILTERS.map((item) => (
                 <button
@@ -1055,16 +948,16 @@ export function ProjectControlTable({
                   type="button"
                   onClick={() => setFilter(item.value)}
                   className={cn(
-                    "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
+                    "inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs transition-colors",
                     filter === item.value
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                      ? "border-primary/35 bg-primary/15 text-primary"
+                      : "bg-canvas/25 text-muted-foreground hover:border-primary/35 hover:text-foreground"
                   )}
                 >
                   {item.label}
                   <span className={cn(
                     "rounded-full px-1.5 text-[10px]",
-                    filter === item.value ? "bg-primary-foreground/20" : "bg-muted"
+                    filter === item.value ? "bg-primary/15" : "bg-muted"
                   )}>
                     {filterCounts[item.value]}
                   </span>
@@ -1085,7 +978,7 @@ export function ProjectControlTable({
               </span>
             </div>
           </div>
-          <div className="border-b bg-background px-4 py-2 text-[11px] text-muted-foreground">
+          <div className="border-b border-border bg-canvas/20 px-4 py-2 text-[11px] text-muted-foreground">
             当前显示 {visibleTasks.length} / {tasks.length} 条管控事项
           </div>
           <div className="overflow-x-auto">
@@ -1097,8 +990,8 @@ export function ProjectControlTable({
                 </p>
               </div>
             ) : (
-              <table className={cn("w-full text-left text-xs", canEdit ? "min-w-[1120px]" : "min-w-[1030px]")}>
-                <thead className="border-b bg-muted/30 text-[11px] text-muted-foreground">
+              <table className={cn("data-table w-full text-left text-xs", canEdit ? "min-w-[1120px]" : "min-w-[1030px]")}>
+                <thead className="border-b border-border text-[11px] text-muted-foreground">
                   <tr>
                     <th className="min-w-[300px] px-4 py-2.5 font-medium">事项</th>
                     <th className="min-w-[136px] px-3 py-2.5 font-medium">负责人</th>

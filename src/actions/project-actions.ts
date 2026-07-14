@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { calculateBudgetSnapshot } from "@/lib/budget";
-import { assertCanReadProject, assertCanWriteProject, requireCurrentUser } from "@/lib/permissions";
+import { assertCanManageProject, assertCanReadProject, requireCurrentUser } from "@/lib/permissions";
 import { canWriteProject } from "@/lib/permission-rules";
 import type { ActionResult } from "@/actions/types";
 
@@ -35,32 +34,37 @@ export async function createProject(formData: FormData): Promise<ActionResult<{ 
     data: {
       name,
       totalBudget,
+      budgetStatus: totalBudget.gt(0) ? "CONFIRMED" : "UNCONFIRMED",
       ownerId: user.id,
       startDate: parseDateSafe(formData.get("startDate") as string),
       endDate: parseDateSafe(formData.get("endDate") as string),
     },
   });
 
-  // 自动创建占位任务；有确认预算时才创建初始 ALLOCATE 流水
-  const placeholderTask = await prisma.task.create({
-    data: {
-      projectId: project.id,
-      name: "项目统筹",
-      assignee: user.name,
-      status: "IN_PROGRESS",
-    },
-  });
+  // 项目预算池是项目级数据，不再伪装成“项目统筹”事项的一笔预算。
   if (totalBudget.gt(0)) {
-    await prisma.budgetFlow.create({
-      data: {
-        taskId: placeholderTask.id,
-        flowType: "ALLOCATE",
-        operation: "CONFIRM",
-        amount: totalBudget,
-        description: `「${name}」项目预算确定`,
-        createdBy: user.name,
-      },
-    });
+    await prisma.$transaction([
+      prisma.budgetFlow.create({
+        data: {
+          projectId: project.id,
+          flowType: "ALLOCATE",
+          operation: "CONFIRM_POOL",
+          amount: totalBudget,
+          description: "创建项目时确认预算池",
+          createdBy: user.name,
+        },
+      }),
+      prisma.activityLog.create({
+        data: {
+          projectId: project.id,
+          targetType: "BUDGET_POOL",
+          changeType: "CREATE",
+          summary: `创建项目时确认预算池：¥${totalBudget.toNumber().toLocaleString("zh-CN")}`,
+          source: "HUMAN",
+          createdBy: user.name,
+        },
+      }),
+    ]);
   }
 
   revalidatePath("/workspace");
@@ -79,16 +83,7 @@ export async function getUserProjects() {
     },
     include: {
       _count: { select: { tasks: true } },
-      tasks: {
-        select: {
-          budgets: {
-            select: {
-              flowType: true,
-              amount: true,
-            },
-          },
-        },
-      },
+      tasks: { select: { budgetAmount: true, budgetStatus: true } },
       activityLogs: {
         where: { changeType: "IMPORT" },
         select: { afterState: true },
@@ -105,32 +100,9 @@ export async function getUserProjects() {
     tasks: undefined,
     activityLogs: undefined,
     totalBudget: p.totalBudget.toNumber(),
-    confirmedBudget: calculateProjectConfirmedBudget(p).toNumber(),
+    confirmedBudget: p.budgetStatus === "CONFIRMED" ? p.totalBudget.toNumber() : 0,
     pendingBudgetSignal: extractPendingBudgetSignal(p.activityLogs.map((log) => log.afterState)),
   }));
-}
-
-function calculateProjectConfirmedBudget(project: {
-  totalBudget: Prisma.Decimal;
-  tasks: { budgets: { flowType: string; amount: Prisma.Decimal }[] }[];
-}) {
-  const flows = project.tasks.flatMap((task) => task.budgets);
-  const allocated = flows
-    .filter((flow) => flow.flowType === "ALLOCATE")
-    .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
-  const expense = flows
-    .filter((flow) => flow.flowType === "EXPENSE")
-    .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
-  const refund = flows
-    .filter((flow) => flow.flowType === "REFUND")
-    .reduce((sum, flow) => sum.add(flow.amount), new Prisma.Decimal(0));
-
-  return calculateBudgetSnapshot({
-    plannedBudget: project.totalBudget,
-    allocated,
-    expense,
-    refund,
-  }).allocated;
 }
 
 function extractPendingBudgetSignal(states: unknown[]) {
@@ -162,7 +134,7 @@ function extractPendingBudgetSignal(states: unknown[]) {
 }
 
 export async function deleteProject(projectId: string): Promise<ActionResult> {
-  await assertCanWriteProject(projectId);
+  const user = await assertCanManageProject(projectId);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -170,9 +142,111 @@ export async function deleteProject(projectId: string): Promise<ActionResult> {
   });
   if (!project) return { success: false, message: "项目不存在" };
 
-  await prisma.project.delete({ where: { id: projectId } });
+  await prisma.$transaction([
+    prisma.activityLog.create({
+      data: {
+        projectId,
+        targetType: "PROJECT",
+        targetId: projectId,
+        changeType: "DELETE",
+        summary: `删除项目：${project.name}`,
+        source: "HUMAN",
+        createdBy: user.name,
+      },
+    }),
+    prisma.project.delete({ where: { id: projectId } }),
+  ]);
   revalidatePath("/workspace");
+  revalidatePath("/dashboard");
   return { success: true, message: `项目「${project.name}」已删除` };
+}
+
+export async function updateProjectInfo(formData: FormData): Promise<ActionResult> {
+  const projectId = (formData.get("projectId") as string) || "";
+  const user = await assertCanManageProject(projectId);
+  const name = ((formData.get("name") as string) || "").trim();
+  const startDate = parseDateSafe((formData.get("startDate") as string) || null);
+  const endDate = parseDateSafe((formData.get("endDate") as string) || null);
+
+  if (!name) return { success: false, message: "项目名称不能为空" };
+  if (startDate && endDate && startDate > endDate) {
+    return { success: false, message: "结束日期不能早于开始日期" };
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true, startDate: true, endDate: true },
+  });
+  if (!project) return { success: false, message: "项目不存在" };
+
+  const before = {
+    name: project.name,
+    startDate: project.startDate?.toISOString().slice(0, 10) ?? null,
+    endDate: project.endDate?.toISOString().slice(0, 10) ?? null,
+  };
+  const after = {
+    name,
+    startDate: startDate?.toISOString().slice(0, 10) ?? null,
+    endDate: endDate?.toISOString().slice(0, 10) ?? null,
+  };
+  const changes = [
+    before.name !== after.name ? `项目名称：${before.name} → ${after.name}` : null,
+    before.startDate !== after.startDate ? `开始日期：${before.startDate ?? "未设置"} → ${after.startDate ?? "未设置"}` : null,
+    before.endDate !== after.endDate ? `结束日期：${before.endDate ?? "未设置"} → ${after.endDate ?? "未设置"}` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  if (changes.length === 0) return { success: true, message: "项目基本信息无变化" };
+
+  await prisma.$transaction([
+    prisma.project.update({ where: { id: projectId }, data: { name, startDate, endDate } }),
+    prisma.activityLog.create({
+      data: {
+        projectId,
+        targetType: "PROJECT",
+        targetId: projectId,
+        changeType: "UPDATE",
+        summary: `项目基本信息更新\n${changes.map((change) => `- ${change}`).join("\n")}`,
+        beforeState: before,
+        afterState: after,
+        source: "HUMAN",
+        createdBy: user.name,
+      },
+    }),
+  ]);
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/workspace");
+  revalidatePath("/dashboard");
+  return { success: true, message: "项目基本信息已更新" };
+}
+
+export async function setProjectArchived(projectId: string, archived: boolean): Promise<ActionResult> {
+  const user = await assertCanManageProject(projectId);
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true, archivedAt: true } });
+  if (!project) return { success: false, message: "项目不存在" };
+  if (Boolean(project.archivedAt) === archived) {
+    return { success: true, message: archived ? "项目已归档" : "项目已恢复" };
+  }
+
+  await prisma.$transaction([
+    prisma.project.update({ where: { id: projectId }, data: { archivedAt: archived ? new Date() : null } }),
+    prisma.activityLog.create({
+      data: {
+        projectId,
+        targetType: "PROJECT",
+        targetId: projectId,
+        changeType: archived ? "ARCHIVE" : "RESTORE",
+        summary: archived ? `项目已归档：${project.name}` : `项目已恢复到工作区：${project.name}`,
+        source: "HUMAN",
+        createdBy: user.name,
+      },
+    }),
+  ]);
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/workspace");
+  revalidatePath("/dashboard");
+  return { success: true, message: archived ? "项目已归档" : "项目已恢复" };
 }
 
 export async function getProjectDetail(projectId: string) {
@@ -194,11 +268,13 @@ export async function getProjectDetail(projectId: string) {
     ...project,
     members: undefined,
     totalBudget: project.totalBudget.toNumber(),
+    archivedAt: project.archivedAt,
     canEdit: canWriteProject({
       userId: user.id,
       role: user.role,
       ownerId: project.ownerId,
       memberRole: project.members[0]?.role ?? null,
     }),
+    canManage: project.ownerId === user.id,
   };
 }

@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.production}
+    volumes:
+      - shadowpm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  migrator:
+    build:
+      context: .
+      target: migrator
+    env_file:
+      - .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["tools"]
+
+  bootstrap-admin:
+    build:
+      context: .
+      target: bootstrap-admin
+    env_file:
+      - .env.production
+    environment:
+      TEAM_ADMIN_NAME: ${TEAM_ADMIN_NAME:-}
+      TEAM_ADMIN_EMAIL: ${TEAM_ADMIN_EMAIL:-}
+      TEAM_ADMIN_PASSWORD: ${TEAM_ADMIN_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["tools"]
+
+  create-member:
+    build:
+      context: .
+      target: create-member
+    env_file:
+      - .env.production
+    environment:
+      TEAM_MEMBER_NAME: ${TEAM_MEMBER_NAME:-}
+      TEAM_MEMBER_EMAIL: ${TEAM_MEMBER_EMAIL:-}
+      TEAM_MEMBER_PASSWORD: ${TEAM_MEMBER_PASSWORD:-}
+      TEAM_MEMBER_ROLE: ${TEAM_MEMBER_ROLE:-MEMBER}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["tools"]
+
+volumes:
+  shadowpm_postgres_data:

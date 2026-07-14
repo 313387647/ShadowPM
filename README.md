@@ -96,10 +96,11 @@ The current Alpha test should answer five questions:
 4. Do progress changes, budget changes, and calendar changes feel traceable?
 5. Are permission boundaries understandable: owner can edit, explicit collaborators can edit, managers can inspect but not automatically edit?
 
-## Reviewer Entry Points
+## Team Documentation
 
-- [External tester quickstart](./project-docs/EXTERNAL_TESTER_QUICKSTART.md)
 - [Beginner tutorial](./project-docs/BEGINNER_TUTORIAL.md)
+- [Tencent Cloud CVM deployment guide](./project-docs/TENCENT_CVM_DEPLOYMENT.md)
+- [Team pilot runbook](./project-docs/TEAM_PILOT_DEPLOYMENT.md)
 - [Current roadmap](./project-docs/TASKS.md)
 - [Product principles](./PRODUCT_PRINCIPLES.md)
 - [Canonical project schema](./CANONICAL_PROJECT_SCHEMA.md)
@@ -111,7 +112,7 @@ The current Alpha test should answer five questions:
 npm install
 npx prisma dev
 npx prisma db push
-npx prisma db seed
+npm run db:seed:demo
 npm test
 npm run lint
 npm run build
@@ -124,6 +125,8 @@ Required environment variables:
 - `DEEPSEEK_API_KEY`
 - `SHADOWPM_SESSION_SECRET` for shared or production deployment
 - `NEXT_PUBLIC_APP_URL` for generated share and calendar-subscription URLs
+
+For shared or production databases, use `npm run db:migrate:deploy`; never use `db push --force-reset` or the demo seed. See [team pilot deployment](./project-docs/TEAM_PILOT_DEPLOYMENT.md).
 
 Quality gate for every substantial module:
 
