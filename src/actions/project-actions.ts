@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertCanManageProject, assertCanReadProject, requireCurrentUser } from "@/lib/permissions";
+import { getProjectBudgetSummary } from "@/lib/budget-summary";
 import { canWriteProject } from "@/lib/permission-rules";
 import type { ActionResult } from "@/actions/types";
 
@@ -13,59 +14,145 @@ function parseDateSafe(dateRaw: string | null): Date | null {
   return new Date(dateRaw + "T00:00:00.000Z");
 }
 
+type InitialBudgetItem = {
+  title: string;
+  plannedAmount: Prisma.Decimal;
+  category: string | null;
+  description: string | null;
+};
+
+function parseInitialBudgetItems(raw: string | null): InitialBudgetItem[] | null {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const items: InitialBudgetItem[] = [];
+    for (const value of parsed) {
+      if (!value || typeof value !== "object") return null;
+      const item = value as { title?: unknown; plannedAmount?: unknown; category?: unknown; description?: unknown };
+      const title = typeof item.title === "string" ? item.title.trim() : "";
+      const plannedAmount = new Prisma.Decimal(String(item.plannedAmount ?? ""));
+      if (!title || plannedAmount.isNaN() || plannedAmount.lte(0)) return null;
+      items.push({
+        title,
+        plannedAmount,
+        category: typeof item.category === "string" && item.category.trim() ? item.category.trim() : null,
+        description: typeof item.description === "string" && item.description.trim() ? item.description.trim() : null,
+      });
+    }
+    return items;
+  } catch {
+    return null;
+  }
+}
+
 export async function createProject(formData: FormData): Promise<ActionResult<{ projectId: string }>> {
   const user = await requireCurrentUser();
 
   const name = formData.get("name") as string;
   const budgetRaw = formData.get("totalBudget") as string;
+  const budgetModeRaw = String(formData.get("budgetMode") ?? "");
+  const budgetMode = ["CONFIRMED", "PENDING", "NOT_MANAGED"].includes(budgetModeRaw)
+    ? budgetModeRaw as "CONFIRMED" | "PENDING" | "NOT_MANAGED"
+    : budgetRaw?.trim() ? "CONFIRMED" : "PENDING";
+  const initialBudgetItems = parseInitialBudgetItems(formData.get("budgetItemsJson") as string | null);
 
   if (!name?.trim()) {
     return { success: false, message: "项目名称为必填项" };
   }
+  if (!initialBudgetItems) return { success: false, message: "预算项格式无效，请检查名称和金额。" };
 
-  const totalBudget = budgetRaw
+  const proposedTotalBudget = budgetRaw
     ? new Prisma.Decimal(budgetRaw)
     : new Prisma.Decimal(0);
-  if (totalBudget.isNaN() || totalBudget.lt(0)) {
+  if (proposedTotalBudget.isNaN() || proposedTotalBudget.lt(0)) {
     return { success: false, message: "预算不能为负数" };
   }
-
-  const project = await prisma.project.create({
-    data: {
-      name,
-      totalBudget,
-      budgetStatus: totalBudget.gt(0) ? "CONFIRMED" : "UNCONFIRMED",
-      ownerId: user.id,
-      startDate: parseDateSafe(formData.get("startDate") as string),
-      endDate: parseDateSafe(formData.get("endDate") as string),
-    },
-  });
-
-  // 项目预算池是项目级数据，不再伪装成“项目统筹”事项的一笔预算。
-  if (totalBudget.gt(0)) {
-    await prisma.$transaction([
-      prisma.budgetFlow.create({
-        data: {
-          projectId: project.id,
-          flowType: "ALLOCATE",
-          operation: "CONFIRM_POOL",
-          amount: totalBudget,
-          description: "创建项目时确认预算池",
-          createdBy: user.name,
-        },
-      }),
-      prisma.activityLog.create({
-        data: {
-          projectId: project.id,
-          targetType: "BUDGET_POOL",
-          changeType: "CREATE",
-          summary: `创建项目时确认预算池：¥${totalBudget.toNumber().toLocaleString("zh-CN")}`,
-          source: "HUMAN",
-          createdBy: user.name,
-        },
-      }),
-    ]);
+  if (budgetMode === "CONFIRMED" && proposedTotalBudget.lte(0)) {
+    return { success: false, message: "选择“已有明确预算”时，项目总预算必须大于 0。" };
   }
+  if (budgetMode === "NOT_MANAGED" && initialBudgetItems.length > 0) {
+    return { success: false, message: "本项目不管理预算，不能同时创建预算项。" };
+  }
+  if (budgetMode === "PENDING" && initialBudgetItems.length > 0) {
+    return { success: false, message: "预算待确认时请先创建项目，确认总预算后再编排预算项。" };
+  }
+  const totalBudget = budgetMode === "CONFIRMED" ? proposedTotalBudget : new Prisma.Decimal(0);
+  const plannedBudget = initialBudgetItems.reduce((sum, item) => sum.add(item.plannedAmount), new Prisma.Decimal(0));
+  if (budgetMode === "CONFIRMED" && plannedBudget.gt(totalBudget)) {
+    return { success: false, message: `预算项合计超出项目总预算 ¥${plannedBudget.sub(totalBudget).toNumber().toLocaleString("zh-CN")}。` };
+  }
+
+  const startDate = parseDateSafe(formData.get("startDate") as string);
+  const endDate = parseDateSafe(formData.get("endDate") as string);
+  if (startDate && endDate && startDate > endDate) {
+    return { success: false, message: "结束日期不能早于开始日期。" };
+  }
+
+  const project = await prisma.$transaction(async (tx) => {
+    const created = await tx.project.create({
+      data: {
+        name: name.trim(),
+        totalBudget,
+        budgetMode,
+        budgetConfirmedAt: budgetMode === "CONFIRMED" ? new Date() : null,
+        // Compatibility only. New budget paths use budgetMode.
+        budgetStatus: budgetMode === "CONFIRMED" ? "CONFIRMED" : "UNCONFIRMED",
+        ownerId: user.id,
+        startDate,
+        endDate,
+      },
+    });
+    const poolFlow = budgetMode === "CONFIRMED"
+      ? await tx.budgetFlow.create({
+          data: {
+            projectId: created.id,
+            flowType: "ALLOCATE",
+            operation: "CONFIRM_POOL",
+            action: "POOL_CONFIRMED",
+            amount: totalBudget,
+            description: "创建项目时确认项目总预算",
+            createdBy: user.name,
+          },
+        })
+      : null;
+    const createdBudgetItems = initialBudgetItems.length
+      ? await Promise.all(initialBudgetItems.map((item) => tx.budgetItem.create({
+          data: {
+            projectId: created.id,
+            title: item.title,
+            plannedAmount: item.plannedAmount,
+            category: item.category,
+            description: item.description,
+            status: "DRAFT",
+            source: "MANUAL",
+            createdBy: user.name,
+          },
+        })))
+      : [];
+    await tx.activityLog.create({
+      data: {
+        projectId: created.id,
+        targetType: "PROJECT",
+        targetId: created.id,
+        changeType: "CREATE",
+        source: "HUMAN",
+        createdBy: user.name,
+        summary: [
+          `创建项目：${created.name}`,
+          budgetMode === "CONFIRMED" ? `确认项目总预算：¥${totalBudget.toNumber().toLocaleString("zh-CN")}` : budgetMode === "PENDING" ? "预算待确认" : "本项目不管理预算",
+          createdBudgetItems.length > 0 ? `初始预算草稿：${createdBudgetItems.length} 条` : null,
+        ].filter(Boolean).join("\n"),
+        afterState: {
+          budgetMode,
+          totalBudget: totalBudget.toString(),
+          budgetPoolFlowId: poolFlow?.id ?? null,
+          budgetItemIds: createdBudgetItems.map((item) => item.id),
+        },
+      },
+    });
+    return created;
+  });
 
   revalidatePath("/workspace");
   return { success: true, message: `项目「${name}」创建成功`, data: { projectId: project.id } };
@@ -83,7 +170,8 @@ export async function getUserProjects() {
     },
     include: {
       _count: { select: { tasks: true } },
-      tasks: { select: { budgetAmount: true, budgetStatus: true } },
+      budgetItems: { select: { plannedAmount: true, status: true } },
+      budgetFlows: { select: { amount: true, action: true, flowType: true } },
       activityLogs: {
         where: { changeType: "IMPORT" },
         select: { afterState: true },
@@ -97,10 +185,11 @@ export async function getUserProjects() {
   // 将 Decimal 转为 number 以便序列化
   return projects.map((p) => ({
     ...p,
-    tasks: undefined,
+    budgetItems: undefined,
+    budgetFlows: undefined,
     activityLogs: undefined,
     totalBudget: p.totalBudget.toNumber(),
-    confirmedBudget: p.budgetStatus === "CONFIRMED" ? p.totalBudget.toNumber() : 0,
+    confirmedBudget: getProjectBudgetSummary(p).confirmedBudget,
     pendingBudgetSignal: extractPendingBudgetSignal(p.activityLogs.map((log) => log.afterState)),
   }));
 }

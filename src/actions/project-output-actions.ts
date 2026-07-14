@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { assertCanReadProject, assertCanWriteProject } from "@/lib/permissions";
 import { normalizeShareExpiryDays } from "@/lib/p2-rules";
+import { getProjectBudgetSummary } from "@/lib/budget-summary";
 import type { ActionResult } from "@/actions/types";
 
 export type ProjectReportPeriod = "WEEKLY" | "MONTHLY";
@@ -78,18 +79,14 @@ export async function generateProjectReport(
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         take: 30,
       },
+      budgetItems: { select: { plannedAmount: true, status: true } },
+      budgetFlows: { select: { amount: true, action: true, flowType: true } },
       sources: { orderBy: { createdAt: "desc" }, take: 3 },
     },
   });
   if (!project) return { success: false, message: "项目不存在" };
 
-  const confirmed = project.budgetStatus === "CONFIRMED" ? project.totalBudget.toNumber() : 0;
-  const allocated = project.tasks
-    .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
-    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-  const disbursed = project.tasks
-    .filter((task) => task.budgetStatus === "DISBURSED")
-    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+  const budget = getProjectBudgetSummary(project);
   const facts = {
     project: {
       name: project.name,
@@ -108,12 +105,11 @@ export async function generateProjectReport(
       periodUpdates: task.logs.map((log) => ({ content: log.content, createdAt: log.createdAt })),
     })),
     budget: {
-      planned: project.totalBudget.toNumber(),
-      confirmed,
-      allocated,
-      disbursed,
-      balance: confirmed - allocated,
-      usagePercent: confirmed > 0 ? Math.round((allocated / confirmed) * 100) : 0,
+      planned: budget.planned,
+      confirmed: budget.confirmedBudget,
+      consumed: budget.actualSpend,
+      balance: budget.spendRemaining,
+      usagePercent: budget.usagePercent,
     },
     calendar: project.calendarEntries.map((entry) => ({
       date: entry.date,

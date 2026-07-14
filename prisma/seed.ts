@@ -687,7 +687,7 @@ async function assertDemoDataComplete() {
   const [incompleteTasks, incompleteCalendarEntries, unconfirmedBudgetProjects] = await Promise.all([
     prisma.task.count({ where: { OR: [{ needsConfirmation: true }, { assignee: null }, { deadline: null }] } }),
     prisma.executionCalendarEntry.count({ where: { OR: [{ date: null }, { owner: null }, { channel: null }] } }),
-    prisma.project.count({ where: { budgetStatus: { not: "CONFIRMED" } } }),
+    prisma.project.count({ where: { budgetMode: { not: "CONFIRMED" } } }),
   ]);
 
   if (incompleteTasks || incompleteCalendarEntries || unconfirmedBudgetProjects) {
@@ -705,6 +705,9 @@ async function resetDemoData() {
   await prisma.activityLog.deleteMany();
   await prisma.executionCalendarEntry.deleteMany();
   await prisma.budgetFlow.deleteMany();
+  await prisma.budgetItemTaskRelation.deleteMany();
+  await prisma.budgetMigrationIssue.deleteMany();
+  await prisma.budgetItem.deleteMany();
   await prisma.progressLog.deleteMany();
   await prisma.task.deleteMany();
   await prisma.phase.deleteMany();
@@ -747,6 +750,8 @@ async function main() {
         ownerId: owner.id,
         totalBudget: new Prisma.Decimal(scenario.budget),
         budgetStatus: "CONFIRMED",
+        budgetMode: "CONFIRMED",
+        budgetConfirmedAt: activityTimestamp(scenarioIndex, 30),
         startDate: projectStartDate,
         endDate: projectEndDate,
       },
@@ -824,6 +829,32 @@ async function main() {
     }
 
     const transferGroups = new Map<string, string>();
+    const budgetItemByTask = new Map<string, string>();
+    const plannedAmountByTask = new Map<string, number>();
+    for (const flow of budgetFlows) {
+      const isPoolFlow = flow.task === "__PROJECT_POOL__" || flow.task === "项目统筹预算池";
+      if (isPoolFlow) continue;
+      const current = plannedAmountByTask.get(flow.task) ?? 0;
+      plannedAmountByTask.set(flow.task, Math.max(current, Math.abs(flow.amount)));
+    }
+    for (const [taskName, plannedAmount] of Array.from(plannedAmountByTask.entries())) {
+      const task = taskByName.get(taskName);
+      if (!task) throw new Error(`Missing budget task: ${scenario.name} / ${taskName}`);
+      const item = await prisma.budgetItem.create({
+        data: {
+          projectId: project.id,
+          title: `${taskName}预算`,
+          category: taskName.includes("媒体") ? "媒体合作" : taskName.includes("制作") ? "内容制作" : "执行",
+          plannedAmount: new Prisma.Decimal(plannedAmount),
+          status: lifecycle === "COMPLETED" ? "SETTLED" : "IN_PROGRESS",
+          description: `模拟案例预算项，关联管控事项「${taskName}」。`,
+          source: "MANUAL",
+          createdBy: owner.name,
+          taskRelations: { create: { taskId: task.id } },
+        },
+      });
+      budgetItemByTask.set(taskName, item.id);
+    }
     for (const flow of budgetFlows) {
       const task = taskByName.get(flow.task);
       const groupId = flow.operation === "TRANSFER"
@@ -833,31 +864,29 @@ async function main() {
       const isPoolFlow = flow.task === "__PROJECT_POOL__" || flow.task === "项目统筹预算池";
       if (!task && !isPoolFlow) throw new Error(`Missing budget task: ${scenario.name} / ${flow.task}`);
       const amount = new Prisma.Decimal(flow.amount).abs();
+      const action = isPoolFlow
+        ? "POOL_CONFIRMED"
+        : flow.flowType === "EXPENSE"
+          ? "EXPENSE_RECORDED"
+          : flow.flowType === "REFUND"
+            ? "REFUND_RECORDED"
+            : flow.operation === "TRANSFER"
+              ? "TRANSFER_RECORDED"
+              : "ITEM_CONFIRMED";
       await prisma.budgetFlow.create({
         data: {
           projectId: project.id,
-          taskId: task?.id,
+          budgetItemId: isPoolFlow ? null : budgetItemByTask.get(flow.task),
           groupId,
           operation: isPoolFlow ? "CONFIRM_POOL" : flow.flowType === "EXPENSE" ? "DISBURSE" : flow.operation,
           flowType: flow.flowType,
+          action,
           amount,
           counterparty: flow.flowType === "EXPENSE" ? "模拟合作方" : null,
           description: flow.description,
           createdBy: flow.createdBy,
         },
       });
-      if (task && flow.flowType === "EXPENSE") {
-        await prisma.task.update({
-          where: { id: task.id },
-          data: {
-            budgetAmount: amount,
-            budgetStatus: lifecycle === "COMPLETED" ? "ACCEPTED" : "DISBURSED",
-            budgetRecipient: lifecycle === "COMPLETED" ? null : "模拟合作方",
-          },
-        });
-      } else if (task && flow.flowType === "ALLOCATE" && amount.gt(0)) {
-        await prisma.task.update({ where: { id: task.id }, data: { budgetAmount: amount, budgetStatus: "ALLOCATED" } });
-      }
     }
 
     await prisma.activityLog.createMany({
@@ -897,7 +926,7 @@ async function main() {
         ...budgetFlows.map((flow, flowIndex) => ({
           projectId: project.id,
           targetType: "BUDGET_ITEM",
-          targetId: taskByName.get(flow.task)?.id,
+          targetId: budgetItemByTask.get(flow.task),
           changeType: "UPDATE",
           source: "HUMAN",
           createdBy: flow.createdBy,

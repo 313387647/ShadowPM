@@ -1,4 +1,4 @@
-import { shouldCreateConfirmedBudgetFlow } from "@/lib/ai-import-rules";
+import { shouldDefaultSelectAIBudgetItem } from "@/lib/ai-import-rules";
 
 type ImportTask = {
   name: string;
@@ -18,6 +18,7 @@ type ImportBudgetItem = {
   confidence?: "high" | "medium" | "low" | null;
   missingFields?: string[];
   conflicts?: string[];
+  selected?: boolean;
 };
 
 type ImportCalendarEntry = {
@@ -39,7 +40,7 @@ export type AIImportPlanInput = {
   calendarEntries?: ImportCalendarEntry[];
   missingFields?: string[];
   conflicts?: string[];
-  createBudgetFlow?: boolean;
+  budgetMode?: "CONFIRMED" | "PENDING" | "NOT_MANAGED";
 };
 
 export function buildAIImportPlan(draft: AIImportPlanInput) {
@@ -47,8 +48,9 @@ export function buildAIImportPlan(draft: AIImportPlanInput) {
   const validBudgetItems = (draft.budgetItems ?? []).filter(
     (item) => item.title?.trim() && typeof item.amount === "number" && item.amount > 0
   );
-  const confirmedBudgetItems = validBudgetItems.filter(shouldCreateConfirmedBudgetFlow);
-  const deferredBudgetItems = validBudgetItems.filter((item) => !shouldCreateConfirmedBudgetFlow(item));
+  const selectedBudgetItems = validBudgetItems.filter((item) => item.selected ?? shouldDefaultSelectAIBudgetItem(item));
+  const deferredBudgetItems = validBudgetItems.filter((item) => !selectedBudgetItems.includes(item));
+  const selectedBudgetTotal = selectedBudgetItems.reduce((sum, item) => sum + (item.amount ?? 0), 0);
   const calendarEntries = (draft.calendarEntries ?? []).filter((entry) => entry.content?.trim());
   const lowConfidenceTasks = namedTasks.filter((task) => task.confidence === "low").length;
   const rowsWithDiagnostics = [
@@ -59,10 +61,11 @@ export function buildAIImportPlan(draft: AIImportPlanInput) {
 
   const requiredGaps: string[] = [];
   if (!draft.projectName.trim()) requiredGaps.push("项目名称");
-  if (namedTasks.length === 0) requiredGaps.push("至少一条管控事项");
+  if (draft.budgetMode === "CONFIRMED" && (!draft.totalBudget || draft.totalBudget <= 0)) requiredGaps.push("已确认项目总预算");
+  if (draft.budgetMode === "CONFIRMED" && draft.totalBudget && selectedBudgetTotal > draft.totalBudget) requiredGaps.push("预算项合计不能超过项目总预算");
 
   const optionalGaps: string[] = [];
-  if (!draft.totalBudget || draft.totalBudget <= 0) optionalGaps.push("预算池待确认");
+  if (draft.budgetMode !== "CONFIRMED") optionalGaps.push("预算池待确认");
   if (!draft.startDate || !draft.endDate) optionalGaps.push("项目周期不完整");
 
   const missingAssignee = namedTasks.filter((task) => !task.assignee?.trim()).length;
@@ -79,8 +82,6 @@ export function buildAIImportPlan(draft: AIImportPlanInput) {
     ...optionalGaps.slice(0, requiredGaps.length > 0 ? 1 : 3).map((gap) => `可稍后补齐：${gap}`),
   ].slice(0, 3);
 
-  const initialBudgetFlowCount = draft.createBudgetFlow && draft.totalBudget && draft.totalBudget > 0 ? 1 : 0;
-
   return {
     canCreateNow: requiredGaps.length === 0,
     requiredGaps,
@@ -89,7 +90,9 @@ export function buildAIImportPlan(draft: AIImportPlanInput) {
     controlItemCount: namedTasks.length,
     lowConfidenceTasks,
     rowsWithDiagnostics,
-    confirmedBudgetFlowCount: confirmedBudgetItems.length + initialBudgetFlowCount,
+    confirmedBudgetFlowCount: draft.budgetMode === "CONFIRMED" && draft.totalBudget && draft.totalBudget > 0 ? 1 : 0,
+    selectedBudgetItemCount: selectedBudgetItems.length,
+    selectedBudgetTotal,
     deferredBudgetCandidateCount: deferredBudgetItems.length,
     calendarEntryCount: calendarEntries.length,
     calendarNeedsConfirmationCount: calendarEntries.filter(

@@ -54,7 +54,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           <Metric icon={<AlertTriangle />} label="需优先处理" value={String(urgentTasks.length)} detail={urgentTasks.length ? "逾期或 7 天内待启动事项" : "当前没有紧急事项"} warning={urgentTasks.length > 0} />
           <Metric icon={<FolderKanban />} label="项目运行状态" value={`${activeProjects} 进行中`} detail={`待启动 ${upcomingProjects} · 已归档 ${archivedProjects}`} border />
           <Metric icon={<CalendarClock />} label="未来 7 天节点" value={String(upcomingCalendar.length)} detail="已排期的正式执行节点" border />
-          <Metric icon={<CircleDollarSign />} label="确认预算结余" value={formatWan(stats.totalPool - stats.totalExpense + stats.totalRefund)} detail={`确认预算 ${formatWan(stats.totalPool)}`} warning={stats.totalExpense > stats.totalPool} border />
+          <Metric icon={<CircleDollarSign />} label="确认预算结余" value={formatWan(stats.totalPool - stats.totalExpense)} detail={`确认预算 ${formatWan(stats.totalPool)}`} warning={stats.totalExpense > stats.totalPool} border />
         </section>
         <OverviewCharts projects={health} stats={stats} />
         <AttentionList tasks={urgentTasks} />
@@ -80,7 +80,7 @@ function DashboardViewNav({ activeView }: { activeView: DashboardView }) {
 }
 
 function BudgetManagement({ projects, stats, budgetWatch }: { projects: Awaited<ReturnType<typeof getProjectsHealth>>; stats: Awaited<ReturnType<typeof getGlobalDashboardStats>>; budgetWatch: ReturnType<typeof buildBudgetWatch> }) {
-  const balance = stats.totalPool - stats.totalExpense + stats.totalRefund;
+  const balance = stats.totalPool - stats.totalExpense;
   const orderedProjects = [...projects].sort((left, right) => right.budgetUsage - left.budgetUsage || left.balance - right.balance);
   return <div className="space-y-5">
     <section className="grid overflow-hidden rounded-lg border bg-card sm:grid-cols-3">

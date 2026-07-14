@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/permissions";
 import { buildWeeklyHealthSummary } from "@/lib/weekly-health-summary";
+import { getProjectBudgetSummary } from "@/lib/budget-summary";
 
 export async function generateDashboardSummary(): Promise<string | null> {
   const user = await requireCurrentUser();
@@ -13,9 +14,11 @@ export async function generateDashboardSummary(): Promise<string | null> {
   const [projects, taskAgg, overdueCount, missingOwnerCount, calendarEntries] = await Promise.all([
       prisma.project.findMany({
         select: {
-          id: true, name: true, totalBudget: true, budgetStatus: true,
+          id: true, name: true, totalBudget: true, budgetMode: true,
           _count: { select: { tasks: true } },
-          tasks: { select: { status: true, deadline: true, assignee: true, budgetAmount: true, budgetStatus: true } },
+          tasks: { select: { status: true, deadline: true, assignee: true } },
+          budgetItems: { select: { plannedAmount: true, status: true } },
+          budgetFlows: { select: { amount: true, action: true, flowType: true } },
         },
         orderBy: { createdAt: "asc" },
       }),
@@ -37,11 +40,10 @@ export async function generateDashboardSummary(): Promise<string | null> {
     missingOwnerCount: 0, plannedBudget: 0, allocatedBudget: 0, consumedBudget: 0, projects: [],
   });
 
-  const plannedBudget = projects.reduce((sum, project) => sum + project.totalBudget.toNumber(), 0);
-  const totalAllocated = projects.reduce((sum, project) => sum + (project.budgetStatus === "CONFIRMED" ? project.totalBudget.toNumber() : 0), 0);
-  const consumed = projects.reduce((sum, project) => sum + project.tasks
-    .filter((task) => task.budgetStatus === "DISBURSED")
-    .reduce((taskSum, task) => taskSum + task.budgetAmount.toNumber(), 0), 0);
+  const budgetSummaries = projects.map(getProjectBudgetSummary);
+  const plannedBudget = budgetSummaries.reduce((sum, budget) => sum + budget.planned, 0);
+  const totalAllocated = budgetSummaries.reduce((sum, budget) => sum + budget.confirmedBudget, 0);
+  const consumed = budgetSummaries.reduce((sum, budget) => sum + budget.actualSpend, 0);
 
   const pending = taskAgg.find((g) => g.status === "PENDING")?._count.id ?? 0;
   const inProgress = taskAgg.find((g) => g.status === "IN_PROGRESS")?._count.id ?? 0;

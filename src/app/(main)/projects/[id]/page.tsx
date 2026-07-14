@@ -4,14 +4,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { getProjectDetail } from "@/actions/project-actions";
 import { getProjectTasks } from "@/actions/task-actions";
-import { getProjectBudgetControl, getProjectTasksForSelect } from "@/actions/ledger-actions";
+import { getProjectBudgetPlanning, getProjectBudgetTaskOptions } from "@/actions/budget-queries";
 import { getProjectTimeline } from "@/actions/timeline-actions";
 import { getProjectPhases } from "@/actions/phase-actions";
 import { getProjectCalendarEntries } from "@/actions/calendar-actions";
 import { getProjectFeedback } from "@/actions/feedback-actions";
 import { getProjectMembers } from "@/actions/member-actions";
 import { getProjectOutputs } from "@/actions/project-output-actions";
-import { LedgerTable } from "@/components/project/LedgerTable";
+import { BudgetWorkspace } from "@/components/project/budget/BudgetWorkspace";
 import { TimelineView } from "@/components/project/TimelineView";
 import { TaskViewToggle } from "@/components/project/TaskViewToggle";
 import { ExecutionCalendarView } from "@/components/project/ExecutionCalendarView";
@@ -44,8 +44,8 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
   ] = await Promise.all([
     getProjectDetail(params.id),
     getProjectTasks(params.id),
-    getProjectBudgetControl(params.id),
-    getProjectTasksForSelect(params.id),
+    getProjectBudgetPlanning(params.id),
+    getProjectBudgetTaskOptions(params.id),
     getProjectTimeline(params.id),
     getProjectPhases(params.id),
     getProjectCalendarEntries(params.id),
@@ -57,7 +57,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
   if (!project) notFound();
 
   if (!budgetData) notFound();
-  const budgetIsConfirmed = budgetData.pool.status === "CONFIRMED";
+  const budgetIsConfirmed = budgetData.pool.mode === "CONFIRMED";
   const inProgressCount = tasks.filter((task) => task.status === "IN_PROGRESS").length;
   const overdueCount = tasks.filter((task) => task.status !== "COMPLETED" && task.deadline && new Date(task.deadline) < new Date()).length;
   const completedCount = tasks.filter((task) => task.status === "COMPLETED").length;
@@ -88,7 +88,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
               </span>
               <span className="flex items-center gap-1.5">
                 <Coins className="size-3.5" />
-                <span className="font-mono font-medium text-foreground">¥{project.totalBudget.toLocaleString("zh-CN")}</span>
+                <span className="font-mono font-medium text-foreground">{budgetIsConfirmed ? `¥${budgetData.pool.totalBudget.toLocaleString("zh-CN")}` : budgetData.pool.mode === "NOT_MANAGED" ? "不管理预算" : "预算待确认"}</span>
               </span>
               <span className="flex items-center gap-1.5">
                 <Calendar className="size-3.5" />
@@ -106,19 +106,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
             />
             <ProjectOutputsPanel projectId={params.id} canEdit={project.canEdit} data={projectOutputs} />
             <div className="w-full rounded-xl border border-border bg-canvas/35 p-2 text-xs">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg bg-surface-1/85 px-3 py-2.5">
-                  <p className="text-muted-foreground">项目预算池</p>
-                  <p className="mt-1 font-mono font-medium">¥{budgetData.pool.confirmedAmount.toLocaleString("zh-CN")}</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">{budgetIsConfirmed ? "已确认，可分配到事项" : budgetData.pool.status === "CANCELED" ? "预算池已取消" : "尚未确认"}</p>
-                </div>
-                <div className="rounded-lg bg-surface-1/85 px-3 py-2.5">
-                  <p className="text-muted-foreground">可分配余额</p>
-                  <p className={budgetData.remaining < 0 ? "mt-1 font-mono font-medium text-destructive" : "mt-1 font-mono font-medium"}>¥{budgetData.remaining.toLocaleString("zh-CN")}</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">已分配 ¥{budgetData.allocated.toLocaleString("zh-CN")}</p>
-                </div>
-              </div>
-              <p className="px-1 pt-2 text-[10px] leading-4 text-muted-foreground">预算以项目预算池为上限；事项分配、报批、划拨和验收均在资金账本内完成，并同步记录到项目活动。</p>
+              {budgetIsConfirmed ? <div className="grid grid-cols-2 gap-2"><div className="rounded-lg bg-surface-1/85 px-3 py-2.5"><p className="text-muted-foreground">项目总预算</p><p className="mt-1 font-mono font-medium">¥{budgetData.pool.totalBudget.toLocaleString("zh-CN")}</p><p className="mt-1 text-[10px] text-muted-foreground">已确认的项目预算池</p></div><div className="rounded-lg bg-surface-1/85 px-3 py-2.5"><p className="text-muted-foreground">剩余可分配</p><p className={budgetData.pool.remainingToAllocate < 0 ? "mt-1 font-mono font-medium text-destructive" : "mt-1 font-mono font-medium"}>¥{budgetData.pool.remainingToAllocate.toLocaleString("zh-CN")}</p><p className="mt-1 text-[10px] text-muted-foreground">已编排 ¥{budgetData.pool.planned.toLocaleString("zh-CN")}</p></div></div> : <p className="px-2 py-2 text-muted-foreground">{budgetData.pool.mode === "NOT_MANAGED" ? "本项目暂不管理预算" : "项目预算待确认"}</p>}
             </div>
           </div>
         </div>
@@ -155,7 +143,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
             value="ledger"
             className="shrink-0 gap-1.5 px-3"
           >
-            <WalletCards className="size-3.5" />资金账本
+            <WalletCards className="size-3.5" />预算管理
           </TabsTrigger>
           <TabsTrigger
             value="calendar"
@@ -179,10 +167,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         </TabsContent>
 
         <TabsContent value="ledger" className="mt-4">
-          <LedgerTable
-            data={budgetData}
-            canEdit={project.canEdit}
-          />
+          <BudgetWorkspace data={budgetData} tasks={taskOptions} canEdit={project.canEdit} canManage={project.canManage} />
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-4">

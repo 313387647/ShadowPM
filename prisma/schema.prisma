@@ -36,6 +36,15 @@ enum ProjectBudgetStatus {
   CANCELED
 }
 
+/// Defines whether a project participates in budget management. It intentionally
+/// does not infer intent from a zero amount: pending, unmanaged, and confirmed
+/// budgets have different business meaning.
+enum ProjectBudgetMode {
+  PENDING
+  CONFIRMED
+  NOT_MANAGED
+}
+
 /// The current budget position of one control item. Detailed historical
 /// movements are retained in BudgetFlow and surfaced through project activity.
 enum TaskBudgetStatus {
@@ -45,6 +54,47 @@ enum TaskBudgetStatus {
   DISBURSED
   ACCEPTED
   CANCELED
+}
+
+/// The planning lifecycle of an independent budget item. Approval, transfers,
+/// expenses, and refunds are append-only BudgetFlow actions rather than item
+/// states, so users never have to decode a mixed financial workflow status.
+enum BudgetItemStatus {
+  DRAFT
+  CONFIRMED
+  IN_PROGRESS
+  SETTLED
+  CANCELED
+}
+
+enum BudgetItemSource {
+  MANUAL
+  AI_IMPORT
+  MIGRATED
+}
+
+/// Canonical actions for newly created flows. The legacy string operation is
+/// retained through the compatibility window so historical audit rows remain
+/// unchanged and readable.
+enum BudgetFlowAction {
+  POOL_CONFIRMED
+  POOL_ADJUSTED
+  ITEM_CONFIRMED
+  ITEM_ADJUSTED
+  APPROVAL_RECORDED
+  TRANSFER_RECORDED
+  EXPENSE_RECORDED
+  REFUND_RECORDED
+  SETTLED
+  CANCELED
+  REVERSED
+  LEGACY_IMPORTED
+}
+
+enum BudgetMigrationIssueType {
+  OVER_POOL_LEGACY_ITEMS
+  UNMAPPED_LEGACY_FLOW
+  LEGACY_POOL_STATUS_AMBIGUOUS
 }
 
 enum ProjectMemberRole {
@@ -86,8 +136,10 @@ model Project {
   id          String    @id @default(cuid())
   name        String
   ownerId     String
-  totalBudget Decimal   @db.Decimal(14, 2) // 当前项目预算池（14位总精度，2位小数）
+  totalBudget Decimal   @db.Decimal(14, 2) // 项目级预算池；预算模式决定 0 的业务含义
   budgetStatus ProjectBudgetStatus @default(UNCONFIRMED)
+  budgetMode   ProjectBudgetMode @default(PENDING)
+  budgetConfirmedAt DateTime?
   startDate   DateTime?
   endDate     DateTime?
   archivedAt  DateTime?
@@ -106,10 +158,13 @@ model Project {
   shareLinks      ProjectShareLink[]
   focuses         ProjectFocus[]
   budgetFlows     BudgetFlow[]
+  budgetItems     BudgetItem[]
+  budgetMigrationIssues BudgetMigrationIssue[]
 
   @@index([ownerId])
   @@index([archivedAt])
   @@index([createdAt])
+  @@index([budgetMode])
 }
 
 /// A user-specific shortcut for projects that need sustained attention.
@@ -170,6 +225,8 @@ model Task {
   priority          String     @default("P2") // P0 | P1 | P2 | P3
   deadline          DateTime?
   status            TaskStatus @default(PENDING)
+  /// Legacy compatibility fields. New budget code must use BudgetItem and
+  /// BudgetItemTaskRelation; these remain temporarily for safe data migration.
   budgetAmount      Decimal    @default(0) @db.Decimal(14, 2)
   budgetStatus      TaskBudgetStatus @default(UNALLOCATED)
   budgetRecipient   String?
@@ -184,6 +241,7 @@ model Task {
   phase           Phase?                   @relation(fields: [phaseId], references: [id], onDelete: SetNull)
   logs            ProgressLog[]
   budgets         BudgetFlow[]
+  budgetItemRelations BudgetItemTaskRelation[]
   calendarEntries ExecutionCalendarEntry[]
 
   @@index([projectId])
@@ -192,6 +250,46 @@ model Task {
   @@index([deadline])
   @@index([assignee])
   @@index([projectId, status, deadline])
+}
+
+/// A budget plan belongs to the project first. It may be associated with zero
+/// or many control items, but a missing task must never prevent planning.
+model BudgetItem {
+  id            String           @id @default(cuid())
+  projectId     String
+  title         String
+  category      String?
+  plannedAmount Decimal          @db.Decimal(14, 2)
+  status        BudgetItemStatus @default(DRAFT)
+  description   String?
+  source        BudgetItemSource @default(MANUAL)
+  aiConfidence  String?
+  sourceRef     String?
+  createdBy     String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  project       Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskRelations BudgetItemTaskRelation[]
+  flows         BudgetFlow[]
+
+  @@index([projectId, status])
+  @@index([projectId, updatedAt])
+  @@index([source])
+}
+
+/// Joining is explicit so one budget item can support several related control
+/// items without making Task the financial source of truth.
+model BudgetItemTaskRelation {
+  budgetItemId String
+  taskId       String
+  createdAt    DateTime @default(now())
+
+  budgetItem BudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+  task       Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([budgetItemId, taskId])
+  @@index([taskId])
 }
 
 model ProgressLog {
@@ -231,11 +329,13 @@ model ActivityLog {
 model BudgetFlow {
   id                 String   @id @default(cuid())
   projectId          String
+  budgetItemId       String?
   taskId             String?
   counterpartyTaskId String?
   groupId            String?
   flowType           FlowType
   operation          String   @default("ALLOCATE") // CONFIRM_POOL | ADJUST_POOL | ALLOCATE | ADJUST | SPLIT_OUT | SPLIT_IN | APPROVE | DISBURSE | ACCEPT | CANCEL
+  action             BudgetFlowAction?
   amount             Decimal  @db.Decimal(14, 2) // 当前动作对应金额；历史审计不参与余额计算
   counterparty       String?
   description        String // 事由
@@ -243,14 +343,37 @@ model BudgetFlow {
   createdAt          DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  budgetItem BudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
   task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([projectId, createdAt])
   @@index([taskId])
+  @@index([budgetItemId, createdAt])
+  @@index([action])
   @@index([counterpartyTaskId])
   @@index([groupId])
   @@index([operation])
   @@index([createdAt])
+}
+
+/// Exceptional migration records are explicit rather than silently assigning
+/// legacy money to a wrong item. They are operational evidence, not a user
+/// workflow surface.
+model BudgetMigrationIssue {
+  id        String                   @id @default(cuid())
+  projectId String
+  flowId    String?
+  taskId    String?
+  type      BudgetMigrationIssueType
+  details   Json
+  resolvedAt DateTime?
+  createdAt DateTime                 @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, resolvedAt])
+  @@index([flowId])
+  @@index([taskId])
 }
 
 model ExecutionCalendarEntry {

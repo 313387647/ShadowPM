@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CalendarDays, CalendarPlus, Loader2, MessageSquarePlus, Pencil, Plus, Save, Trash2, WalletCards, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, CalendarPlus, Loader2, MessageSquarePlus, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,15 +26,13 @@ type Task = {
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   phaseId: string | null;
   priority: string;
-  budgetAmount: { toNumber?: () => number } | number;
-  budgetStatus: string;
   aiConfidence?: string | null;
   sourceRef?: string | null;
   logs: { id: string; content: string; createdBy: string; createdAt: Date | string }[];
-  _count: { logs: number; budgets: number; calendarEntries: number };
+  _count: { logs: number; calendarEntries: number };
 };
 
-type ControlFilter = "ALL" | "OVERDUE" | "WITH_BUDGET" | "WITH_LOGS" | "WITH_CALENDAR";
+type ControlFilter = "ALL" | "OVERDUE" | "WITH_LOGS" | "WITH_CALENDAR";
 type PhaseOption = { id: string; name: string };
 type CreateDraft = {
   template: string;
@@ -49,14 +47,9 @@ type CreateDraft = {
   notes: string;
 };
 
-function budgetAmount(task: Pick<Task, "budgetAmount">) {
-  return typeof task.budgetAmount === "number" ? task.budgetAmount : task.budgetAmount.toNumber?.() ?? 0;
-}
-
 const CONTROL_FILTERS: { value: ControlFilter; label: string }[] = [
   { value: "ALL", label: "全部事项" },
   { value: "OVERDUE", label: "已逾期" },
-  { value: "WITH_BUDGET", label: "有预算" },
   { value: "WITH_LOGS", label: "有日志" },
   { value: "WITH_CALENDAR", label: "有日历" },
 ];
@@ -178,7 +171,6 @@ const STATUS_STYLE: Record<Task["status"], string> = {
 function matchesControlFilter(task: Task, filter: ControlFilter) {
   if (filter === "ALL") return true;
   if (filter === "OVERDUE") return isOverdue(task);
-  if (filter === "WITH_BUDGET") return budgetAmount(task) > 0;
   if (filter === "WITH_LOGS") return task._count.logs > 0;
   if (filter === "WITH_CALENDAR") return task._count.calendarEntries > 0;
   return true;
@@ -438,7 +430,6 @@ function ControlTableRow({
       <td className="w-[120px] px-3 py-3">
         <div className="flex items-center gap-1">
           <Button type="button" size="icon" variant={historyOpen ? "secondary" : "ghost"} className="size-7" title="查看进度历史" onClick={() => setHistoryOpen((value) => !value)}><MessageSquarePlus className="size-3.5" /><span className="sr-only">日志 {task._count.logs}</span></Button>
-          {budgetAmount(task) > 0 && <Button type="button" size="icon" variant="ghost" className="size-7" title={`编辑事项预算：¥${budgetAmount(task).toLocaleString("zh-CN")}`} onClick={() => router.push(`/projects/${task.projectId}?tab=ledger&ledgerTask=${task.id}`)}><WalletCards className="size-3.5" /></Button>}
           {task._count.calendarEntries > 0 ? <Button type="button" size="icon" variant="ghost" className="size-7" title={`${task._count.calendarEntries} 个执行日历节点`} onClick={() => router.push(`/projects/${task.projectId}?tab=calendar&calendarTask=${task.id}`)}><CalendarDays className="size-3.5" /></Button> : canEdit && <Button type="button" size="icon" variant="ghost" className="size-7" title="创建执行日历" onClick={() => setScheduleOpen(true)}><CalendarPlus className="size-3.5" /></Button>}
         </div>
       </td>
@@ -690,16 +681,9 @@ export function ProjectControlTable({
   const searchParams = useSearchParams();
 
   const overdueCount = tasks.filter(isOverdue).length;
-  const filterCounts = CONTROL_FILTERS.reduce<Record<ControlFilter, number>>((counts, item) => {
-    counts[item.value] = tasks.filter((task) => matchesControlFilter(task, item.value)).length;
-    return counts;
-  }, {
-    ALL: 0,
-    OVERDUE: 0,
-    WITH_BUDGET: 0,
-    WITH_LOGS: 0,
-    WITH_CALENDAR: 0,
-  });
+  const filterCounts = Object.fromEntries(
+    CONTROL_FILTERS.map((item) => [item.value, tasks.filter((task) => matchesControlFilter(task, item.value)).length])
+  ) as Record<ControlFilter, number>;
   const visibleTasks = tasks.filter((task) => {
     return matchesControlFilter(task, filter) && matchesSearch(task, query);
   });

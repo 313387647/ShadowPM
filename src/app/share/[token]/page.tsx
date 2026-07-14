@@ -38,7 +38,7 @@ export default async function SharedProjectPage({ params }: { params: { token: s
             <Metric label="已确认预算" value={formatMoney(budget.confirmed)} />
             <Metric label="可用结余" value={formatMoney(budget.balance)} border />
             <div className="col-span-2 border-t px-3 py-2 text-xs text-muted-foreground">
-              已分配 {formatMoney(budget.allocated)} · 已划拨 {formatMoney(budget.consumed)} · 使用率 {budget.usagePercent}%
+              已编排 {formatMoney(budget.allocated)} · 实际支出 {formatMoney(budget.consumed)} · 使用率 {budget.usagePercent}%
             </div>
           </div>
         </section>
@@ -82,12 +82,12 @@ export default async function SharedProjectPage({ params }: { params: { token: s
 
         <div className="grid gap-6 xl:grid-cols-2">
           <section className="overflow-hidden rounded-lg border bg-card">
-            <div className="flex items-center gap-2 border-b px-4 py-3"><WalletCards className="size-4" /><h2 className="text-sm font-semibold">事项预算</h2></div>
+            <div className="flex items-center gap-2 border-b px-4 py-3"><WalletCards className="size-4" /><h2 className="text-sm font-semibold">预算规划</h2></div>
             <div className="divide-y">
-              {project.tasks.filter((task) => task.budgetAmount > 0 || task.budgetStatus !== "UNALLOCATED").slice(0, 20).map((task) => (
-                <div key={task.id} className="flex items-start justify-between gap-4 px-4 py-3 text-sm">
-                  <div><p className="font-medium">{task.name}</p><p className="mt-1 text-xs text-muted-foreground">{task.budgetStatus}{task.budgetRecipient ? ` · ${task.budgetRecipient}` : ""}</p></div>
-                  <span className="shrink-0 font-mono tabular-nums">{formatMoney(task.budgetAmount)}</span>
+              {project.budgetItems.slice(0, 20).map((item) => (
+                <div key={item.id} className="flex items-start justify-between gap-4 px-4 py-3 text-sm">
+                  <div><p className="font-medium">{item.title}</p><p className="mt-1 text-xs text-muted-foreground">{item.status}{item.taskNames.length ? ` · ${item.taskNames.join("、")}` : ""}</p></div>
+                  <span className="shrink-0 font-mono tabular-nums">{formatMoney(item.plannedAmount)}</span>
                 </div>
               ))}
             </div>

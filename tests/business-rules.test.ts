@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { Prisma } from "../src/generated/prisma/client";
-import { calculateBudgetSnapshot } from "../src/lib/budget";
+import {
+  calculateBudgetPlanningSnapshot,
+  canConfirmBudgetItem,
+  getBudgetItemRemaining,
+  getTaskDeletionBudgetEffect,
+  mapLegacyTaskBudgetStatus,
+  normalizeBudgetItemTaskIds,
+  requiresBudgetChangeReason,
+} from "../src/lib/budget-rules";
 import { getBudgetSignal } from "../src/lib/budget-signals";
 import { buildAIImportPlan } from "../src/lib/ai-import-plan";
-import { shouldCreateConfirmedBudgetFlow } from "../src/lib/ai-import-rules";
+import { requiresTotalBudgetConfirmation, resolveAIBudgetTaskId, shouldCreateConfirmedBudgetFlow, shouldDefaultSelectAIBudgetItem } from "../src/lib/ai-import-rules";
 import { canReadProject, canWriteProject } from "../src/lib/permission-rules";
 import { buildWeeklyHealthSummary } from "../src/lib/weekly-health-summary";
 import { isCommandCenterWriteRequest, isProjectHealthQuery, isProjectListQuery } from "../src/lib/command-center-query";
@@ -12,65 +19,137 @@ import { buildCalendarFeed, isValidShareToken, normalizeShareExpiryDays } from "
 import { getWorkspaceHealth } from "../src/lib/workspace-health";
 import { getProjectLifecycle } from "../src/lib/project-lifecycle";
 import { hashPassword, validatePassword, verifyPassword } from "../src/lib/password";
+import { parseBudgetPaste } from "../src/lib/budget-import";
+import { getProjectBudgetSummary } from "../src/lib/budget-summary";
 
 describe("budget business rules", () => {
-  it("treats BudgetFlow allocation as the financial source of truth", () => {
-    const snapshot = calculateBudgetSnapshot({
-      plannedBudget: new Prisma.Decimal(5000000),
-      allocated: new Prisma.Decimal(1200000),
-      expense: new Prisma.Decimal(-300000),
-      refund: new Prisma.Decimal(50000),
-    });
+  it("parses a lightweight tabular budget paste without requiring tasks", () => {
+    const result = parseBudgetPaste("媒体投放\t1500000\n内容制作  800000\n发布会执行\t活动\t1200000");
 
-    assert.equal(snapshot.plannedBudget.toNumber(), 5000000);
-    assert.equal(snapshot.allocated.toNumber(), 1200000);
-    assert.equal(snapshot.expense.toNumber(), 300000);
-    assert.equal(snapshot.refund.toNumber(), 50000);
-    assert.equal(snapshot.consumed.toNumber(), 250000);
-    assert.equal(snapshot.balance.toNumber(), 950000);
-    assert.equal(snapshot.usagePercent, 21);
+    assert.deepEqual(result.items, [
+      { title: "媒体投放", plannedAmount: 1500000, category: null },
+      { title: "内容制作", plannedAmount: 800000, category: null },
+      { title: "发布会执行", plannedAmount: 1200000, category: "活动" },
+    ]);
+    assert.deepEqual(result.invalidLines, []);
   });
 
-  it("does not double-count planned budget as available budget", () => {
-    const snapshot = calculateBudgetSnapshot({
-      plannedBudget: 5000000,
-      allocated: 0,
-      expense: 0,
-      refund: 0,
-    });
+  it("flags malformed pasted budget rows before they reach the database", () => {
+    const result = parseBudgetPaste("正确项目\t1200\n没有金额\n错误金额\t-20");
 
-    assert.equal(snapshot.allocated.toNumber(), 0);
-    assert.equal(snapshot.balance.toNumber(), 0);
-    assert.equal(snapshot.usagePercent, 0);
-    assert.equal(snapshot.plannedVariance.toNumber(), -5000000);
+    assert.equal(result.items.length, 1);
+    assert.deepEqual(result.invalidLines, [2, 3]);
   });
 
-  it("keeps refunds from making consumed budget negative", () => {
-    const snapshot = calculateBudgetSnapshot({
-      plannedBudget: 100000,
-      allocated: 100000,
-      expense: -20000,
-      refund: 50000,
+  it("does not confirm an item before the project total budget is confirmed", () => {
+    const result = canConfirmBudgetItem({
+      budgetMode: "PENDING",
+      totalBudget: 100000,
+      otherActivePlannedAmount: 0,
+      proposedPlannedAmount: 10000,
     });
 
-    assert.equal(snapshot.consumed.toNumber(), 0);
-    assert.equal(snapshot.balance.toNumber(), 100000);
+    assert.equal(result.allowed, false);
   });
 
-  it("keeps budget reductions and expenses from double-counting planned budget", () => {
-    const snapshot = calculateBudgetSnapshot({
-      plannedBudget: 500000,
-      allocated: 300000,
-      expense: -120000,
-      refund: 20000,
+  it("does not allow planned budget items to exceed the project budget pool", () => {
+    const result = canConfirmBudgetItem({
+      budgetMode: "CONFIRMED",
+      totalBudget: 100000,
+      otherActivePlannedAmount: 80000,
+      proposedPlannedAmount: 30000,
     });
 
-    assert.equal(snapshot.plannedBudget.toNumber(), 500000);
-    assert.equal(snapshot.allocated.toNumber(), 300000);
-    assert.equal(snapshot.consumed.toNumber(), 100000);
-    assert.equal(snapshot.balance.toNumber(), 200000);
-    assert.equal(snapshot.plannedVariance.toNumber(), -200000);
-    assert.equal(snapshot.usagePercent, 33);
+    assert.equal(result.allowed, false);
+    assert.match(result.message ?? "", /超出项目总预算/);
+  });
+
+  it("allows a draft budget item without any task relation", () => {
+    assert.deepEqual(normalizeBudgetItemTaskIds([]), []);
+  });
+
+  it("releases allocation capacity when a budget item is cancelled", () => {
+    const snapshot = calculateBudgetPlanningSnapshot({
+      budgetMode: "CONFIRMED",
+      totalBudget: 100000,
+      items: [
+        { plannedAmount: 60000, status: "CONFIRMED" },
+        { plannedAmount: 20000, status: "CANCELED" },
+      ],
+      flows: [],
+    });
+
+    assert.equal(snapshot.planned.toNumber(), 60000);
+    assert.equal(snapshot.remainingToAllocate.toNumber(), 40000);
+  });
+
+  it("does not let recorded expenses increase allocation capacity", () => {
+    const snapshot = calculateBudgetPlanningSnapshot({
+      budgetMode: "CONFIRMED",
+      totalBudget: 100000,
+      items: [{ plannedAmount: 80000, status: "CONFIRMED" }],
+      flows: [{ action: "EXPENSE_RECORDED", amount: 20000 }],
+    });
+
+    assert.equal(snapshot.remainingToAllocate.toNumber(), 20000);
+    assert.equal(snapshot.actualSpend.toNumber(), 20000);
+  });
+
+  it("correctly accounts for refunds in actual spend and item remaining", () => {
+    const flows = [
+      { action: "EXPENSE_RECORDED", amount: 45000 },
+      { action: "REFUND_RECORDED", amount: 12000 },
+    ];
+    const snapshot = calculateBudgetPlanningSnapshot({
+      budgetMode: "CONFIRMED",
+      totalBudget: 100000,
+      items: [{ plannedAmount: 60000, status: "CONFIRMED" }],
+      flows,
+    });
+
+    assert.equal(snapshot.actualSpend.toNumber(), 33000);
+    assert.equal(getBudgetItemRemaining(60000, flows).toNumber(), 27000);
+  });
+
+  it("uses the same independent budget summary across every product surface", () => {
+    const summary = getProjectBudgetSummary({
+      budgetMode: "CONFIRMED",
+      totalBudget: 100000,
+      budgetItems: [{ plannedAmount: 80000, status: "CONFIRMED" }],
+      budgetFlows: [{ action: "EXPENSE_RECORDED", amount: 30000 }, { action: "REFUND_RECORDED", amount: 5000 }],
+    });
+
+    assert.equal(summary.planned, 80000);
+    assert.equal(summary.actualSpend, 25000);
+    assert.equal(summary.remainingToAllocate, 20000);
+    assert.equal(summary.spendRemaining, 75000);
+  });
+
+  it("requires an audit reason only after an item leaves draft", () => {
+    assert.equal(requiresBudgetChangeReason({ previousStatus: "DRAFT", nextStatus: "DRAFT", amountChanged: true }), false);
+    assert.equal(requiresBudgetChangeReason({ previousStatus: "CONFIRMED", nextStatus: "CONFIRMED", amountChanged: true }), true);
+    assert.equal(requiresBudgetChangeReason({ previousStatus: "CONFIRMED", nextStatus: "PENDING", amountChanged: false, isProjectPool: true, poolWasConfirmed: true }), true);
+  });
+
+  it("maps legacy task budget states without losing their financial lifecycle", () => {
+    assert.equal(mapLegacyTaskBudgetStatus("ALLOCATED"), "CONFIRMED");
+    assert.equal(mapLegacyTaskBudgetStatus("DISBURSED"), "IN_PROGRESS");
+    assert.equal(mapLegacyTaskBudgetStatus("ACCEPTED"), "SETTLED");
+  });
+
+  it("keeps a budget item when its optional linked task is deleted", () => {
+    assert.deepEqual(getTaskDeletionBudgetEffect(), { deleteBudgetItem: false, deleteTaskRelation: true });
+  });
+
+  it("flags a reduced pool that falls below active planned items", () => {
+    const snapshot = calculateBudgetPlanningSnapshot({
+      budgetMode: "CONFIRMED",
+      totalBudget: 70000,
+      items: [{ plannedAmount: 80000, status: "CONFIRMED" }],
+      flows: [],
+    });
+
+    assert.equal(snapshot.overPlanned, true);
   });
 
   it("flags spending without a confirmed budget as high risk before a planned-budget reminder", () => {
@@ -103,7 +182,7 @@ describe("budget business rules", () => {
 });
 
 describe("AI import safety rules", () => {
-  it("does not turn estimates or low-confidence budget signals into confirmed allocations", () => {
+  it("never turns AI budget signals into confirmed financial allocations", () => {
     assert.equal(shouldCreateConfirmedBudgetFlow({
       amount: 200000,
       type: "ESTIMATE",
@@ -117,22 +196,41 @@ describe("AI import safety rules", () => {
       status: "APPROVED",
       confidence: "low",
     }), false);
-  });
 
-  it("allows only approved or explicit allocation budget signals into the ledger", () => {
     assert.equal(shouldCreateConfirmedBudgetFlow({
       amount: 200000,
       type: "ALLOCATE",
       status: "APPROVED",
-      confidence: "medium",
+      confidence: "high",
+    }), false);
+  });
+
+  it("selects only high-confidence, conflict-free items for draft creation", () => {
+    assert.equal(shouldDefaultSelectAIBudgetItem({
+      amount: 200000,
+      type: "ALLOCATE",
+      status: "APPROVED",
+      confidence: "high",
     }), true);
 
-    assert.equal(shouldCreateConfirmedBudgetFlow({
+    assert.equal(shouldDefaultSelectAIBudgetItem({
       amount: 200000,
       type: "REFUND",
       status: "SETTLED",
-      confidence: "high",
+      confidence: "medium",
     }), false);
+  });
+
+  it("does not bind an unmatched AI budget item to the first task", () => {
+    const taskId = resolveAIBudgetTaskId({
+      title: "海外媒体采购",
+      tasks: [{ id: "first-task", name: "发布会执行", workstream: "活动" }],
+    });
+    assert.equal(taskId, null);
+  });
+
+  it("requires an explicit choice when AI finds multiple total-budget candidates", () => {
+    assert.equal(requiresTotalBudgetConfirmation([100000, 120000], 100000), true);
   });
 });
 
@@ -174,11 +272,12 @@ describe("AI import confirmation plan", () => {
     assert.equal(plan.canCreateNow, true);
     assert.deepEqual(plan.requiredGaps, []);
     assert.equal(plan.confirmedBudgetFlowCount, 0);
-    assert.equal(plan.deferredBudgetCandidateCount, 1);
+    assert.equal(plan.selectedBudgetItemCount, 1);
+    assert.equal(plan.deferredBudgetCandidateCount, 0);
     assert.equal(plan.calendarNeedsConfirmationCount, 1);
   });
 
-  it("blocks only missing project name or missing control table rows", () => {
+  it("blocks only missing project identity; a control table may be added later", () => {
     const plan = buildAIImportPlan({
       projectName: "",
       totalBudget: 100000,
@@ -187,11 +286,45 @@ describe("AI import confirmation plan", () => {
       tasks: [],
       budgetItems: [],
       calendarEntries: [],
-      createBudgetFlow: true,
+      budgetMode: "PENDING",
     });
 
     assert.equal(plan.canCreateNow, false);
-    assert.deepEqual(plan.requiredGaps, ["项目名称", "至少一条管控事项"]);
+    assert.deepEqual(plan.requiredGaps, ["项目名称"]);
+  });
+
+  it("allows a budget-pending project without a synthetic control item", () => {
+    const plan = buildAIImportPlan({
+      projectName: "预算待确认项目",
+      totalBudget: null,
+      startDate: null,
+      endDate: null,
+      tasks: [],
+      budgetItems: [],
+      calendarEntries: [],
+      budgetMode: "PENDING",
+    });
+
+    assert.equal(plan.canCreateNow, true);
+  });
+
+  it("blocks confirmed AI budget items that exceed the user-confirmed pool", () => {
+    const plan = buildAIImportPlan({
+      projectName: "海外发布项目",
+      totalBudget: 100000,
+      startDate: null,
+      endDate: null,
+      tasks: [],
+      budgetItems: [
+        { title: "媒体投放", amount: 80000, confidence: "high", selected: true },
+        { title: "内容制作", amount: 50000, confidence: "high", selected: true },
+      ],
+      calendarEntries: [],
+      budgetMode: "CONFIRMED",
+    });
+
+    assert.equal(plan.canCreateNow, false);
+    assert.ok(plan.requiredGaps.includes("预算项合计不能超过项目总预算"));
   });
 
   it("explains confirmed writes before AI-created projects are persisted", () => {
@@ -211,12 +344,13 @@ describe("AI import confirmation plan", () => {
         },
       ],
       calendarEntries: [{ content: "首轮传播上线", date: "2026-07-20", owner: "林小夏", confidence: "high" }],
-      createBudgetFlow: true,
+      budgetMode: "CONFIRMED",
     });
 
     assert.equal(plan.canCreateNow, true);
-    // One project-level pool confirmation plus one safe item allocation.
-    assert.equal(plan.confirmedBudgetFlowCount, 2);
+    // AI evidence may create a project pool only after confirmation; its item
+    // remains a draft rather than a confirmed financial allocation.
+    assert.equal(plan.confirmedBudgetFlowCount, 1);
     assert.equal(plan.calendarEntryCount, 1);
     assert.equal(plan.rowsWithDiagnostics, 0);
   });

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertCanReadProject, assertCanWriteProject, assertCanWriteTask } from "@/lib/permissions";
+import { getProjectBudgetSummary } from "@/lib/budget-summary";
 import type { ActionResult } from "@/actions/types";
 
 type ProjectAIInsight = {
@@ -134,9 +135,11 @@ export async function generateProjectActivitySummary(projectId: string): Promise
     select: {
       name: true,
       totalBudget: true,
-      budgetStatus: true,
+      budgetMode: true,
       startDate: true,
       endDate: true,
+      budgetItems: { select: { plannedAmount: true, status: true } },
+      budgetFlows: { select: { amount: true, action: true, flowType: true } },
       tasks: {
         select: {
           name: true,
@@ -146,8 +149,6 @@ export async function generateProjectActivitySummary(projectId: string): Promise
           status: true,
           priority: true,
           notes: true,
-          budgetAmount: true,
-          budgetStatus: true,
         },
         orderBy: [{ priority: "asc" }, { deadline: "asc" }],
         take: 80,
@@ -203,14 +204,7 @@ export async function generateProjectActivitySummary(projectId: string): Promise
     missingOwner: project.tasks.filter((task) => !task.assignee?.trim()).length,
     p0: project.tasks.filter((task) => task.priority === "P0").length,
   };
-  const confirmed = project.budgetStatus === "CONFIRMED" ? project.totalBudget.toNumber() : 0;
-  const allocated = project.tasks
-    .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
-    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-  const disbursed = project.tasks
-    .filter((task) => task.budgetStatus === "DISBURSED")
-    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-  const balance = confirmed - allocated;
+  const budget = getProjectBudgetSummary(project);
 
   const prompt = `你是 ShadowPM 的项目状态分析助手。ShadowPM 不是任务管理工具，而是 AI Native Project Management Platform。
 
@@ -241,10 +235,10 @@ JSON 结构：
 - 名称：${project.name}
 - 周期：${formatDate(project.startDate)} 至 ${formatDate(project.endDate)}
 - 项目预算池：${formatMoney(project.totalBudget)}
-- 已确认预算池：${formatMoney(confirmed)}
-- 已分配到事项：${formatMoney(allocated)}
-- 已划拨给第三方：${formatMoney(disbursed)}
-- 可分配余额：${formatMoney(balance)}
+- 已确认预算池：${formatMoney(budget.confirmedBudget)}
+- 已编排预算项：${formatMoney(budget.planned)}
+- 实际支出：${formatMoney(budget.actualSpend)}
+- 可用结余：${formatMoney(budget.spendRemaining)}
 
 管控总表：
 - 总事项：${taskStats.total}
@@ -304,11 +298,11 @@ ${recentProgressLogs.slice(0, 8).map((log) => `- ${formatDate(log.createdAt)}｜
           ...insight,
           taskStats,
           budget: {
-            planned: project.totalBudget.toString(),
-            confirmed: confirmed.toString(),
-            allocated: allocated.toString(),
-            disbursed: disbursed.toString(),
-            balance: balance.toString(),
+            planned: budget.planned.toString(),
+            confirmed: budget.confirmedBudget.toString(),
+            allocated: budget.planned.toString(),
+            disbursed: budget.actualSpend.toString(),
+            balance: budget.spendRemaining.toString(),
           },
           generatedAt: new Date().toISOString(),
         },

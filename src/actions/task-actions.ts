@@ -81,11 +81,11 @@ export async function getProjectTasks(projectId: string) {
         orderBy: { createdAt: "desc" },
         take: 3,
       },
-      _count: { select: { logs: true, budgets: true, calendarEntries: true } },
+      _count: { select: { logs: true, calendarEntries: true } },
     },
     orderBy: [{ priority: "asc" }, { status: "asc" }, { name: "asc" }],
   });
-  return tasks.map((task) => ({ ...task, budgetAmount: task.budgetAmount.toNumber() }));
+  return tasks;
 }
 
 // ── 新增 ──

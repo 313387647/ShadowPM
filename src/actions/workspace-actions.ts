@@ -5,6 +5,7 @@ import { requireCurrentUser } from "@/lib/permissions";
 import { getWorkspaceHealth, type WorkspaceHealthLevel } from "@/lib/workspace-health";
 import { getProjectLifecycle } from "@/lib/project-lifecycle";
 import { Prisma } from "@/generated/prisma/client";
+import { getProjectBudgetSummary } from "@/lib/budget-summary";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -68,7 +69,7 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
       id: true,
       name: true,
       totalBudget: true,
-      budgetStatus: true,
+      budgetMode: true,
       startDate: true,
       tasks: {
         select: {
@@ -79,10 +80,10 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
           priority: true,
           deadline: true,
           needsConfirmation: true,
-          budgetAmount: true,
-          budgetStatus: true,
         },
       },
+      budgetItems: { select: { plannedAmount: true, status: true } },
+      budgetFlows: { select: { amount: true, action: true, flowType: true } },
       calendarEntries: {
         where: { status: { notIn: ["DONE", "CANCELED"] }, date: { gte: now, lte: nextSevenDays } },
         select: { id: true, date: true, startTime: true, content: true, channel: true, owner: true },
@@ -120,15 +121,9 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
     });
     const overdueCount = project.tasks.filter((task) => task.status !== "COMPLETED" && task.deadline && task.deadline < now).length;
     const missingInfoCount = project.tasks.filter((task) => task.needsConfirmation || !task.assignee?.trim() || !task.deadline).length;
-    const confirmedPool = project.budgetStatus === "CONFIRMED" ? project.totalBudget.toNumber() : 0;
-    const allocated = project.tasks
-      .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
-      .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-    const disbursed = project.tasks
-      .filter((task) => task.budgetStatus === "DISBURSED")
-      .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-    const balance = confirmedPool - allocated;
-    const budgetUsage = confirmedPool > 0 ? Math.round((allocated / confirmedPool) * 100) : 0;
+    const budget = getProjectBudgetSummary(project);
+    const balance = budget.spendRemaining;
+    const budgetUsage = budget.usagePercent;
     const level = getWorkspaceHealth({
       overdueCount,
       missingInfoCount,
@@ -142,7 +137,7 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
     if (lifecycle === "UPCOMING") upcomingProjects += 1;
     if (lifecycle === "COMPLETED") completedProjects += 1;
     confirmedBalance += balance;
-    periodExpense += disbursed;
+    periodExpense += budget.actualSpend;
 
     for (const task of project.tasks) {
       if (task.assignee === user.name && task.status !== "COMPLETED") {

@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/permissions";
 import { isCommandCenterWriteRequest, isProjectHealthQuery, isProjectListQuery } from "@/lib/command-center-query";
+import { getProjectBudgetSummary } from "@/lib/budget-summary";
 
 export type CopilotResponse = {
   message: string;
@@ -101,7 +102,9 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
           id: true,
           name: true,
           totalBudget: true,
-          budgetStatus: true,
+          budgetMode: true,
+          budgetItems: { select: { plannedAmount: true, status: true } },
+          budgetFlows: { select: { amount: true, action: true, flowType: true } },
           tasks: {
             select: {
               id: true,
@@ -109,8 +112,6 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
               status: true,
               assignee: true,
               deadline: true,
-              budgetAmount: true,
-              budgetStatus: true,
             },
           },
         },
@@ -152,25 +153,18 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
     });
 
     const budgetSummaries = userProjects.map((project) => {
-      const confirmedPool = project.budgetStatus === "CONFIRMED" ? project.totalBudget.toNumber() : 0;
-      const allocated = project.tasks
-        .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
-        .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-      const disbursed = project.tasks
-        .filter((task) => task.budgetStatus === "DISBURSED")
-        .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-      const balance = confirmedPool - allocated;
+      const budget = getProjectBudgetSummary(project);
 
       return {
         id: project.id,
         name: project.name,
-        plannedBudget: project.totalBudget.toNumber(),
-        allocatedBudget: confirmedPool,
-        balance,
-        used: allocated,
-        expense: disbursed,
-        refund: 0,
-        flowCount: project.tasks.filter((task) => task.budgetAmount.gt(0)).length,
+        plannedBudget: budget.planned,
+        allocatedBudget: budget.confirmedBudget,
+        balance: budget.spendRemaining,
+        used: budget.actualSpend,
+        expense: budget.expense,
+        refund: budget.refund,
+        flowCount: project.budgetFlows.length,
       };
     });
 

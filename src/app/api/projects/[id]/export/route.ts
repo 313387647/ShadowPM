@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { assertCanReadProject } from "@/lib/permissions";
 import { BUDGET_OPERATION_MAP, TASK_STATUS_MAP } from "@/lib/constants";
+import { getProjectBudgetSummary } from "@/lib/budget-summary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,19 +24,24 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
           orderBy: [{ phaseId: "asc" }, { deadline: "asc" }],
         },
         calendarEntries: { orderBy: [{ date: "asc" }, { createdAt: "asc" }] },
-        budgetFlows: { include: { task: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+        budgetItems: { include: { taskRelations: { include: { task: { select: { name: true } } } } }, orderBy: { updatedAt: "desc" } },
+        budgetFlows: { include: { task: { select: { name: true } }, budgetItem: { select: { title: true } } }, orderBy: { createdAt: "asc" } },
         activityLogs: { orderBy: { createdAt: "desc" }, take: 200 },
         sources: { orderBy: { createdAt: "desc" } },
       },
     });
     if (!project) return NextResponse.json({ error: "项目不存在" }, { status: 404 });
 
+    const budget = getProjectBudgetSummary(project);
+
     const workbook = XLSX.utils.book_new();
     appendSheet(workbook, "项目信息", [{
       项目名称: project.name,
       主负责人: project.owner.name,
       项目预算池: project.totalBudget.toNumber(),
-      预算池状态: project.budgetStatus,
+      预算池状态: project.budgetMode,
+      已编排预算: budget.planned,
+      实际支出: budget.actualSpend,
       开始日期: formatDate(project.startDate),
       结束日期: formatDate(project.endDate),
       管控事项数: project.tasks.length,
@@ -56,16 +62,19 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       来源定位: task.sourceRef ?? "",
     })), [16, 30, 42, 14, 16, 14, 12, 10, 42, 12, 32]);
 
-    appendSheet(workbook, "预算管控表", project.tasks.map((task) => ({
-      管控事项: task.name,
-      当前预算: task.budgetAmount.toNumber(),
-      预算状态: task.budgetStatus,
-      划拨对象: task.budgetRecipient ?? "",
-    })), [30, 16, 16, 24]);
+    appendSheet(workbook, "预算规划", project.budgetItems.map((item) => ({
+      预算项: item.title,
+      计划金额: item.plannedAmount.toNumber(),
+      分类: item.category ?? "",
+      关联事项: item.taskRelations.map((relation) => relation.task.name).join("、"),
+      预算状态: item.status,
+      说明: item.description ?? "",
+      来源: item.source,
+    })), [30, 16, 16, 28, 16, 42, 14]);
 
     appendSheet(workbook, "预算变更记录", project.budgetFlows.map((flow) => ({
-      管控事项: flow.task?.name ?? "项目预算池",
-      业务动作: BUDGET_OPERATION_MAP[flow.operation as keyof typeof BUDGET_OPERATION_MAP] ?? flow.operation,
+      预算项: flow.budgetItem?.title ?? flow.task?.name ?? "项目预算池",
+      业务动作: flow.action ?? BUDGET_OPERATION_MAP[flow.operation as keyof typeof BUDGET_OPERATION_MAP] ?? flow.operation,
       流水类型: flow.flowType,
       金额: flow.amount.toNumber(),
       对方: flow.counterparty ?? "",

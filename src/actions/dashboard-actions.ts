@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/permissions";
 import { getProjectLifecycle } from "@/lib/project-lifecycle";
+import { getProjectBudgetSummary } from "@/lib/budget-summary";
 
 // ── 全局大盘聚合（全部压力交给 PostgreSQL） ──
 
@@ -12,32 +13,14 @@ export async function getGlobalDashboardStats() {
 
   const now = new Date();
 
-  // ════════════════════════════════════════
-  // 全部使用 DB 层面聚合，禁止 findMany 拉到内存
-  // ════════════════════════════════════════
-
   const [
-    poolAgg,
-    allocationAgg,
-    disbursementAgg,
+    budgetProjects,
     taskStatusGroups,
     activeProjectResult,
     overdueCount,
     projectCount,
   ] = await Promise.all([
-    // Current budget state is held on projects and control items, not by replaying flows.
-    prisma.project.aggregate({
-      _sum: { totalBudget: true },
-      where: { budgetStatus: "CONFIRMED" },
-    }),
-    prisma.task.aggregate({
-      _sum: { budgetAmount: true },
-      where: { budgetStatus: { in: ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"] } },
-    }),
-    prisma.task.aggregate({
-      _sum: { budgetAmount: true },
-      where: { budgetStatus: "DISBURSED" },
-    }),
+    prisma.project.findMany({ select: { budgetMode: true, totalBudget: true, budgetItems: { select: { plannedAmount: true, status: true } }, budgetFlows: { select: { amount: true, action: true, flowType: true } } } }),
 
     // 任务按状态 groupBy —— PostgreSQL 层面完成聚合
     prisma.task.groupBy({
@@ -64,9 +47,11 @@ export async function getGlobalDashboardStats() {
     prisma.project.count(),
   ]);
 
-  const totalPool = poolAgg._sum.totalBudget?.toNumber() ?? 0;
-  const totalAllocated = allocationAgg._sum.budgetAmount?.toNumber() ?? 0;
-  const totalExpense = disbursementAgg._sum.budgetAmount?.toNumber() ?? 0;
+  const summaries = budgetProjects.map(getProjectBudgetSummary);
+  const totalPool = summaries.reduce((sum, item) => sum + item.confirmedBudget, 0);
+  const totalAllocated = summaries.reduce((sum, item) => sum + item.planned, 0);
+  const totalExpense = summaries.reduce((sum, item) => sum + item.actualSpend, 0);
+  const totalRefund = summaries.reduce((sum, item) => sum + item.refund, 0);
 
   // 从 groupBy 结果中提取各状态计数
   const byStatus = { PENDING: 0, IN_PROGRESS: 0, COMPLETED: 0 };
@@ -80,7 +65,7 @@ export async function getGlobalDashboardStats() {
     totalPool,
     totalAllocated,
     totalExpense,
-    totalRefund: 0,
+    totalRefund,
     projectCount,
     activeProjectCount: activeProjectResult.length || projectCount,
     overdueTaskCount: overdueCount,
@@ -100,7 +85,9 @@ export async function getProjectsHealth() {
   const projects = await prisma.project.findMany({
     include: {
       owner: { select: { name: true } },
-      tasks: { select: { id: true, status: true, deadline: true, assignee: true, budgetAmount: true, budgetStatus: true } },
+      tasks: { select: { id: true, status: true, deadline: true, assignee: true } },
+      budgetItems: { select: { plannedAmount: true, status: true } },
+      budgetFlows: { select: { amount: true, action: true, flowType: true } },
       _count: { select: { tasks: true } },
     },
     orderBy: { createdAt: "asc" },
@@ -108,15 +95,9 @@ export async function getProjectsHealth() {
 
   // Each project is computed from its current pool and current item budgets.
   return projects.map((p) => {
-    const confirmedPool = p.budgetStatus === "CONFIRMED" ? p.totalBudget.toNumber() : 0;
-    const allocated = p.tasks
-      .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
-      .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-    const disbursed = p.tasks
-      .filter((task) => task.budgetStatus === "DISBURSED")
-      .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-    const balance = confirmedPool - allocated;
-    const usagePercent = confirmedPool > 0 ? Math.round((allocated / confirmedPool) * 100) : 0;
+    const budget = getProjectBudgetSummary(p);
+    const balance = budget.spendRemaining;
+    const usagePercent = budget.usagePercent;
 
     const completedTasks = p.tasks.filter((t) => t.status === "COMPLETED").length;
     const totalTasks = p._count.tasks;
@@ -138,9 +119,9 @@ export async function getProjectsHealth() {
       id: p.id,
       name: p.name,
       ownerName: p.owner.name,
-      dynamicTotal: confirmedPool,
-      plannedBudget: p.totalBudget.toNumber(),
-      consumed: disbursed,
+      dynamicTotal: budget.confirmedBudget,
+      plannedBudget: budget.planned,
+      consumed: budget.actualSpend,
       balance,
       budgetUsage: usagePercent,
       totalTasks,

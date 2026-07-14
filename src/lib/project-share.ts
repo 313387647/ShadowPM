@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { isValidShareToken } from "@/lib/p2-rules";
+import { getProjectBudgetSummary } from "@/lib/budget-summary";
 
 export async function getSharedProject(token: string) {
   if (!isValidShareToken(token)) return null;
@@ -19,7 +20,7 @@ export async function getSharedProject(token: string) {
           id: true,
           name: true,
           totalBudget: true,
-          budgetStatus: true,
+          budgetMode: true,
           startDate: true,
           endDate: true,
           owner: { select: { name: true } },
@@ -34,13 +35,12 @@ export async function getSharedProject(token: string) {
               deadline: true,
               status: true,
               priority: true,
-              budgetAmount: true,
-              budgetStatus: true,
-              budgetRecipient: true,
               phase: { select: { name: true } },
             },
             orderBy: [{ status: "asc" }, { deadline: "asc" }],
           },
+          budgetItems: { select: { id: true, title: true, category: true, plannedAmount: true, status: true, taskRelations: { select: { task: { select: { name: true } } } } }, orderBy: { updatedAt: "desc" } },
+          budgetFlows: { select: { amount: true, action: true, flowType: true } },
           calendarEntries: {
             select: {
               id: true,
@@ -63,31 +63,23 @@ export async function getSharedProject(token: string) {
   });
   if (!link) return null;
 
-  const confirmed = link.project.budgetStatus === "CONFIRMED" ? link.project.totalBudget.toNumber() : 0;
-  const allocated = link.project.tasks
-    .filter((task) => ["ALLOCATED", "APPROVED", "DISBURSED", "ACCEPTED"].includes(task.budgetStatus))
-    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
-  const disbursed = link.project.tasks
-    .filter((task) => task.budgetStatus === "DISBURSED")
-    .reduce((sum, task) => sum + task.budgetAmount.toNumber(), 0);
+  const summary = getProjectBudgetSummary(link.project);
 
   return {
     expiresAt: link.expiresAt,
     project: {
       ...link.project,
       totalBudget: link.project.totalBudget.toNumber(),
-      tasks: link.project.tasks.map((task) => ({
-        ...task,
-        budgetAmount: task.budgetAmount.toNumber(),
-      })),
+      budgetFlows: undefined,
+      budgetItems: link.project.budgetItems.map((item) => ({ ...item, plannedAmount: item.plannedAmount.toNumber(), taskNames: item.taskRelations.map((relation) => relation.task.name) })),
     },
     budget: {
-      planned: link.project.totalBudget.toNumber(),
-      confirmed,
-      allocated,
-      consumed: disbursed,
-      balance: confirmed - allocated,
-      usagePercent: confirmed > 0 ? Math.round((allocated / confirmed) * 100) : 0,
+      planned: summary.planned,
+      confirmed: summary.confirmedBudget,
+      allocated: summary.planned,
+      consumed: summary.actualSpend,
+      balance: summary.spendRemaining,
+      usagePercent: summary.usagePercent,
     },
   };
 }
