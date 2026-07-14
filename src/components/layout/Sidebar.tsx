@@ -23,12 +23,12 @@ export function Sidebar({ userRole, userName, projects }: SidebarProps) {
         </div>
         <div>
           <span className="block text-sm font-semibold tracking-tight">ShadowPM</span>
-          <span className="block text-[10px] tracking-[0.16em] text-muted-foreground">CONTROL SYSTEM</span>
+          <span className="block text-[10px] text-muted-foreground">项目协作空间</span>
         </div>
       </div>
 
-      <nav className="shrink-0 px-3 py-5">
-        <NavigationSections userRole={userRole} />
+      <nav className="shrink-0 px-3 py-4">
+        <NavigationSections userRole={userRole} variant="primary" />
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-3 py-4">
@@ -37,6 +37,7 @@ export function Sidebar({ userRole, userName, projects }: SidebarProps) {
 
       {/* 底部用户区 */}
       <div className="border-t border-border p-3">
+        <NavigationSections userRole={userRole} variant="utility" />
         <div className="flex items-center justify-between rounded-xl border border-transparent px-3 py-2.5 transition-colors hover:border-border hover:bg-surface-2/70">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{userName}</p>

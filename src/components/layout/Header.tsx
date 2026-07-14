@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { LogOut, Menu, Search, X } from "lucide-react";
-import { NAV_ITEMS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/actions/auth-actions";
 import { ProjectNavList } from "@/components/layout/ProjectNavList";
@@ -15,12 +14,18 @@ export function Header({ userRole, userName, projects }: { userRole: string; use
   const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const currentNav = NAV_ITEMS.find(
-    (item) =>
-      pathname === item.href || pathname.startsWith(item.href + "/")
-  );
   const dashboardTitles: Record<string, string> = { projects: "项目看板", budget: "预算管理", calendar: "执行日历" };
-  const title = pathname === "/dashboard" ? dashboardTitles[searchParams.get("view") ?? ""] ?? "全局大盘" : currentNav?.label ?? (pathname.startsWith("/projects/") ? "项目" : "ShadowPM");
+  const title = pathname === "/dashboard"
+    ? dashboardTitles[searchParams.get("view") ?? ""] ?? "管理总览"
+    : pathname === "/workspace"
+      ? "工作台"
+      : pathname === "/projects"
+        ? "项目"
+        : pathname === "/team"
+          ? "团队与权限"
+          : pathname === "/guide"
+            ? "帮助与反馈"
+            : pathname.startsWith("/projects/") ? "项目" : "ShadowPM";
 
   return (
     <>
@@ -36,7 +41,6 @@ export function Header({ userRole, userName, projects }: { userRole: string; use
             <Menu className="size-4" />
           </Button>
           <div className="min-w-0">
-            <p className="hidden text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground md:block">项目控制空间</p>
             <h2 className="truncate text-base font-semibold text-foreground md:text-lg">{title}</h2>
           </div>
         </div>

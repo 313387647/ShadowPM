@@ -49,9 +49,6 @@
     min-width: 320px;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     text-rendering: optimizeLegibility;
-    background-image:
-      radial-gradient(circle at 82% -10%, hsl(var(--primary) / 0.12), transparent 30rem),
-      radial-gradient(circle at 18% 100%, hsl(var(--success) / 0.045), transparent 28rem);
   }
 
   ::selection {
@@ -90,43 +87,6 @@
   .focus-surface {
     @apply border border-primary/35 bg-primary/[0.075];
     box-shadow: 0 0 0 1px hsl(var(--primary) / 0.05), 0 14px 32px rgba(0, 15, 40, 0.18);
-  }
-
-  .hero-atmosphere {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
-    background:
-      linear-gradient(180deg, hsl(var(--primary) / 0.10), transparent 72%),
-      radial-gradient(ellipse at 78% 2%, hsl(var(--info) / 0.20), transparent 42%);
-  }
-
-  .hero-atmosphere::before,
-  .hero-atmosphere::after {
-    position: absolute;
-    right: -6%;
-    bottom: -42%;
-    width: 74%;
-    height: 105%;
-    content: "";
-    border: 1px solid hsl(var(--primary) / 0.16);
-    border-radius: 52% 52% 0 0;
-    transform: rotate(-9deg);
-    box-shadow: 0 -36px 0 -1px hsl(var(--primary) / 0.035), 0 -78px 0 -2px hsl(var(--primary) / 0.025);
-  }
-
-  .hero-atmosphere::after {
-    right: 15%;
-    bottom: -51%;
-    width: 54%;
-    height: 82%;
-    border-color: hsl(var(--success) / 0.11);
-    transform: rotate(6deg);
-  }
-
-  .section-kicker {
-    @apply text-[11px] font-medium uppercase tracking-[0.16em] text-primary/80;
   }
 
   .table-shell {

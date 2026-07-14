@@ -347,17 +347,29 @@ export async function getProjectDetail(projectId: string) {
       owner: { select: { id: true, name: true, role: true } },
       members: { where: { userId: user.id }, select: { role: true }, take: 1 },
       _count: { select: { tasks: true } },
+      tasks: { select: { status: true, deadline: true } },
+      calendarEntries: {
+        where: { status: { notIn: ["DONE", "CANCELED"] }, date: { not: null } },
+        orderBy: [{ date: "asc" }, { startTime: "asc" }],
+        take: 1,
+        select: { date: true, content: true },
+      },
+      budgetItems: { select: { plannedAmount: true, status: true } },
+      budgetFlows: { select: { amount: true, action: true, flowType: true } },
     },
   });
 
   if (!project) return null;
 
   // 将 Decimal 转为 number 以便序列化
+  const budgetSummary = getProjectBudgetSummary(project);
   return {
     ...project,
     members: undefined,
     totalBudget: project.totalBudget.toNumber(),
     archivedAt: project.archivedAt,
+    budgetSummary,
+    viewerName: user.name,
     canEdit: canWriteProject({
       userId: user.id,
       role: user.role,

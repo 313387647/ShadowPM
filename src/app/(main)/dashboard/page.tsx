@@ -22,18 +22,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   if (!user || user.role !== "LEADER") redirect("/workspace");
   const view = isDashboardView(searchParams?.view) ? searchParams!.view : "overview";
 
-  const [stats, health, attention, calendar] = await Promise.all([
-    getGlobalDashboardStats(),
-    getProjectsHealth(),
-    getLeaderDashboardAttention(),
-    getLeaderDashboardCalendar(searchParams?.month),
-  ]);
-  const urgentTasks = attention.attentionTasks.slice(0, 6);
-  const upcomingCalendar = attention.upcomingCalendarEntries.slice(0, 6);
-  const budgetWatch = buildBudgetWatch(health).slice(0, 6);
-  const activeProjects = health.filter((project) => project.lifecycle === "ACTIVE").length;
-  const upcomingProjects = health.filter((project) => project.lifecycle === "UPCOMING").length;
-  const archivedProjects = health.filter((project) => project.lifecycle === "COMPLETED").length;
   const viewMeta = DASHBOARD_VIEWS[view];
 
   return (
@@ -49,24 +37,45 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
 
       <DashboardViewNav activeView={view} />
 
-      {view === "overview" && <>
-        <section className="grid overflow-hidden rounded-lg border bg-card sm:grid-cols-2 xl:grid-cols-4">
-          <Metric icon={<AlertTriangle />} label="需优先处理" value={String(urgentTasks.length)} detail={urgentTasks.length ? "逾期或 7 天内待启动事项" : "当前没有紧急事项"} warning={urgentTasks.length > 0} />
-          <Metric icon={<FolderKanban />} label="项目运行状态" value={`${activeProjects} 进行中`} detail={`待启动 ${upcomingProjects} · 已归档 ${archivedProjects}`} border />
-          <Metric icon={<CalendarClock />} label="未来 7 天节点" value={String(upcomingCalendar.length)} detail="已排期的正式执行节点" border />
-          <Metric icon={<CircleDollarSign />} label="确认预算结余" value={formatWan(stats.totalPool - stats.totalExpense)} detail={`确认预算 ${formatWan(stats.totalPool)}`} warning={stats.totalExpense > stats.totalPool} border />
-        </section>
-        <OverviewCharts projects={health} stats={stats} />
-        <AttentionList tasks={urgentTasks} />
-      </>}
-
-      {view === "projects" && <PortfolioTable projects={health} />}
-
-      {view === "budget" && <BudgetManagement projects={health} stats={stats} budgetWatch={budgetWatch} />}
-
-      {view === "calendar" && <GlobalExecutionCalendar {...calendar} />}
+      {view === "overview" && <OverviewDashboard />}
+      {view === "projects" && <ProjectsDashboard />}
+      {view === "budget" && <BudgetDashboard />}
+      {view === "calendar" && <CalendarDashboard month={searchParams?.month} />}
     </div>
   );
+}
+
+async function OverviewDashboard() {
+  const [stats, health, attention] = await Promise.all([getGlobalDashboardStats(), getProjectsHealth(), getLeaderDashboardAttention()]);
+  const urgentTasks = attention.attentionTasks.slice(0, 6);
+  const upcomingCalendar = attention.upcomingCalendarEntries.slice(0, 6);
+  const activeProjects = health.filter((project) => project.lifecycle === "ACTIVE").length;
+  const upcomingProjects = health.filter((project) => project.lifecycle === "UPCOMING").length;
+  const archivedProjects = health.filter((project) => project.lifecycle === "COMPLETED").length;
+
+  return <>
+    <AttentionList tasks={urgentTasks} />
+    <section className="grid overflow-hidden rounded-lg border bg-card sm:grid-cols-2 xl:grid-cols-4">
+      <Metric icon={<AlertTriangle />} label="需要介入" value={String(urgentTasks.length)} detail={urgentTasks.length ? "逾期或 7 天内仍未启动" : "当前没有紧急事项"} warning={urgentTasks.length > 0} />
+      <Metric icon={<FolderKanban />} label="项目组合" value={`${activeProjects} 进行中`} detail={`待启动 ${upcomingProjects} · 已归档 ${archivedProjects}`} border />
+      <Metric icon={<CalendarClock />} label="未来 7 天节点" value={String(upcomingCalendar.length)} detail="跨项目的正式执行节点" border />
+      <Metric icon={<CircleDollarSign />} label="预算可用结余" value={formatWan(stats.totalPool - stats.totalExpense)} detail={`确认预算 ${formatWan(stats.totalPool)}`} warning={stats.totalExpense > stats.totalPool} border />
+    </section>
+    <OverviewCharts projects={health} stats={stats} />
+  </>;
+}
+
+async function ProjectsDashboard() {
+  return <PortfolioTable projects={await getProjectsHealth()} />;
+}
+
+async function BudgetDashboard() {
+  const [stats, health] = await Promise.all([getGlobalDashboardStats(), getProjectsHealth()]);
+  return <BudgetManagement projects={health} stats={stats} budgetWatch={buildBudgetWatch(health).slice(0, 6)} />;
+}
+
+async function CalendarDashboard({ month }: { month?: string }) {
+  return <GlobalExecutionCalendar {...await getLeaderDashboardCalendar(month)} />;
 }
 
 function DashboardViewNav({ activeView }: { activeView: DashboardView }) {

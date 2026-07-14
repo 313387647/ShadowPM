@@ -13,6 +13,7 @@ export type SidebarProject = {
   relationship: "OWNED" | "MEMBER";
   lifecycle: ProjectLifecycle;
   archivedAt: Date | null;
+  updatedAt: Date;
   isFocused: boolean;
 };
 
@@ -51,6 +52,7 @@ export async function getSidebarProjects(): Promise<SidebarProject[]> {
       startDate: true,
       archivedAt: true,
       createdAt: true,
+      updatedAt: true,
       owner: { select: { name: true } },
       tasks: { select: { status: true } },
       focuses: { where: { userId: user.id }, select: { id: true } },
@@ -66,9 +68,10 @@ export async function getSidebarProjects(): Promise<SidebarProject[]> {
       relationship: getProjectRelationship(project.ownerId, user.id),
       lifecycle: getProjectLifecycle({ startDate: project.startDate, taskStatuses: project.tasks.map((task) => task.status) }),
       archivedAt: project.archivedAt,
+      updatedAt: project.updatedAt,
       isFocused: project.focuses.length > 0,
     }))
-    .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+    .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
 }
 
 export async function toggleProjectFocus(projectId: string) {

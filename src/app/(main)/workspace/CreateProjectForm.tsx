@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, PenLine, Plus, Sparkles, Trash2 } from "lucide-reac
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import Link from "next/link";
 import { createProject } from "@/actions/project-actions";
 import { AIProjectCreator } from "@/components/project/AIProjectPreview";
 
@@ -14,9 +15,9 @@ type InitialBudgetItem = { title: string; plannedAmount: string; category: strin
 
 const EMPTY_ITEM = (): InitialBudgetItem => ({ title: "", plannedAmount: "", category: "", description: "" });
 
-export function CreateProjectForm() {
+export function CreateProjectForm({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [step, setStep] = useState<1 | 2>(1);
@@ -98,11 +99,13 @@ export function CreateProjectForm() {
 
   return (
     <>
-      <Button onClick={() => setOpen(true)} className="gap-2">
+      {!embedded && <Button asChild className="gap-2">
+        <Link href="/projects/new">
         <Plus className="size-4" />新建项目
-      </Button>
+        </Link>
+      </Button>}
 
-      <Dialog open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) resetManual(); }}>
+      <Dialog open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) { resetManual(); if (embedded) router.push("/workspace"); } }}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>新建项目</DialogTitle>

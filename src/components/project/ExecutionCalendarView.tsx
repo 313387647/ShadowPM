@@ -29,7 +29,7 @@ type CalendarEntry = {
   task: { id: string; name: string; status: string } | null;
 };
 type CalendarFilter = "ALL" | "UNSCHEDULED" | "PLANNED" | "CONFIRMED" | "DONE" | "CANCELED";
-type CalendarMode = "WEEK" | "MONTH";
+type CalendarMode = "AGENDA" | "WEEK" | "MONTH";
 type TaskOption = { id: string; name: string; status: string };
 
 const CALENDAR_FILTERS: { value: CalendarFilter; label: string }[] = [
@@ -156,6 +156,7 @@ function ExecutionCalendarRow({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const isEditing = canEdit && editMode;
 
   const dirty =
     date !== toDateInputValue(entry.date) ||
@@ -238,144 +239,36 @@ function ExecutionCalendarRow({
           ) : (
             <CircleDashed className="size-3 text-amber-700" />
           )}
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            onInput={(event) => setDate(event.currentTarget.value)}
-            onKeyDown={saveOnEnter}
-            readOnly={!canEdit || !editMode}
-            title={date ? formatDate(date) : "日期待确认"}
-            className={`w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background ${
-              date ? "" : "font-medium text-warning"
-            }`}
-          />
+          {isEditing ? <input
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              onInput={(event) => setDate(event.currentTarget.value)}
+              onKeyDown={saveOnEnter}
+              className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
+            /> : <span className={cn("truncate", !date && "font-medium text-warning")}>{date ? formatDate(date) : "日期待确认"}</span>}
         </div>
       </td>
       <td className="px-3 py-2 font-mono text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <input
-            type="time"
-            value={startTime}
-            onChange={(event) => setStartTime(event.target.value)}
-            onKeyDown={saveOnEnter}
-            readOnly={!canEdit || !editMode}
-            className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
-          />
-          <span className="text-muted-foreground/50">-</span>
-          <input
-            type="time"
-            value={endTime}
-            onChange={(event) => setEndTime(event.target.value)}
-            onKeyDown={saveOnEnter}
-            readOnly={!canEdit || !editMode}
-            className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
-          />
-        </div>
+        {isEditing ? <div className="flex items-center gap-1"><input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} onKeyDown={saveOnEnter} className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background" /><span className="text-muted-foreground/50">-</span><input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} onKeyDown={saveOnEnter} className="w-20 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background" /></div> : <span>{formatTime(entry) || "未填时间"}</span>}
       </td>
       <td className="px-3 py-2">
-        <input
-          value={workstream}
-          onChange={(event) => setWorkstream(event.target.value)}
-          onKeyDown={saveOnEnter}
-          readOnly={!canEdit || !editMode}
-          placeholder="未分组"
-          className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-        />
+        {isEditing ? <input value={workstream} onChange={(event) => setWorkstream(event.target.value)} onKeyDown={saveOnEnter} placeholder="未分组" className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background" /> : <span className="text-muted-foreground">{entry.workstream || "未分组"}</span>}
       </td>
       <td className="px-3 py-2">
-        <input
-          value={channel}
-          onChange={(event) => setChannel(event.target.value)}
-          onKeyDown={saveOnEnter}
-          readOnly={!canEdit || !editMode}
-          placeholder="渠道待确认"
-          className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-        />
+        {isEditing ? <input value={channel} onChange={(event) => setChannel(event.target.value)} onKeyDown={saveOnEnter} placeholder="渠道待确认" className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background" /> : <span className="text-muted-foreground">{entry.channel || "渠道待确认"}</span>}
       </td>
       <td className="px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <select
-            value={taskId}
-            onChange={(event) => setTaskId(event.target.value)}
-            disabled={!canEdit || !editMode}
-            className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
-          >
-            <option value="">未关联</option>
-            {tasks.map((task) => (
-              <option key={task.id} value={task.id}>{task.name}</option>
-            ))}
-          </select>
-          {entry.taskId && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-6 shrink-0 px-1.5 text-[10px]"
-              onClick={() => router.push(`/projects/${projectId}?tab=tasks&focusTask=${entry.taskId}`)}
-            >
-              查看
-            </Button>
-          )}
-        </div>
+        {isEditing ? <select value={taskId} onChange={(event) => setTaskId(event.target.value)} className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"><option value="">未关联</option>{tasks.map((task) => <option key={task.id} value={task.id}>{task.name}</option>)}</select> : entry.taskId ? <button type="button" className="max-w-full truncate text-left text-primary hover:underline" onClick={() => router.push(`/projects/${projectId}?tab=tasks&focusTask=${entry.taskId}`)}>{entry.task?.name ?? "已关联事项"}</button> : <span className="text-muted-foreground">未关联</span>}
       </td>
       <td className="px-3 py-2">
-        <div className="space-y-0.5">
-          <textarea
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            readOnly={!canEdit || !editMode}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                event.preventDefault();
-                save();
-              }
-            }}
-            rows={2}
-            className="w-full resize-none rounded border border-transparent bg-transparent px-1 py-1 font-medium leading-5 outline-none transition-colors focus:border-primary focus:bg-background"
-          />
-          <input
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            onKeyDown={saveOnEnter}
-            readOnly={!canEdit || !editMode}
-            placeholder="备注"
-            className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-          />
-        </div>
+        {isEditing ? <div className="space-y-0.5"><textarea value={content} onChange={(event) => setContent(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); save(); } }} rows={2} className="w-full resize-none rounded border border-transparent bg-transparent px-1 py-1 font-medium leading-5 outline-none transition-colors focus:border-primary focus:bg-background" /><input value={notes} onChange={(event) => setNotes(event.target.value)} onKeyDown={saveOnEnter} placeholder="备注" className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background" /></div> : <div><p className="font-medium leading-5">{entry.content}</p>{entry.notes && <p className="mt-0.5 text-[11px] text-muted-foreground">{entry.notes}</p>}</div>}
       </td>
       <td className="px-3 py-2">
-        <div className="space-y-1">
-          <input
-            value={owner}
-            onChange={(event) => setOwner(event.target.value)}
-            onKeyDown={saveOnEnter}
-            readOnly={!canEdit || !editMode}
-            placeholder="负责人"
-            className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-          />
-          <input
-            value={department}
-            onChange={(event) => setDepartment(event.target.value)}
-            onKeyDown={saveOnEnter}
-            readOnly={!canEdit || !editMode}
-            placeholder="部门"
-            className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background"
-          />
-        </div>
+        {isEditing ? <div className="space-y-1"><input value={owner} onChange={(event) => setOwner(event.target.value)} onKeyDown={saveOnEnter} placeholder="负责人" className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background" /><input value={department} onChange={(event) => setDepartment(event.target.value)} onKeyDown={saveOnEnter} placeholder="部门" className="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[11px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:bg-background" /></div> : <div><p>{entry.owner || "负责人待确认"}</p>{entry.department && <p className="mt-0.5 text-[11px] text-muted-foreground">{entry.department}</p>}</div>}
       </td>
       <td className="px-3 py-2">
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-          disabled={!canEdit || !editMode}
-          className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"
-        >
-          <option value="PLANNED">计划中</option>
-          <option value="CONFIRMED">已确认</option>
-          <option value="DONE">已完成</option>
-          <option value="CANCELED">已取消</option>
-        </select>
+        {isEditing ? <select value={status} onChange={(event) => setStatus(event.target.value)} className="w-full rounded border border-transparent bg-transparent px-1 py-1 outline-none transition-colors focus:border-primary focus:bg-background"><option value="PLANNED">计划中</option><option value="CONFIRMED">已确认</option><option value="DONE">已完成</option><option value="CANCELED">已取消</option></select> : <Badge variant={entry.status === "DONE" ? "secondary" : entry.status === "CANCELED" ? "outline" : entry.status === "CONFIRMED" ? "default" : "secondary"}>{STATUS_LABEL[entry.status] ?? entry.status}</Badge>}
       </td>
       <td className="px-3 py-2 text-muted-foreground">
         <div className="flex items-center justify-between gap-2">
@@ -453,7 +346,7 @@ export function ExecutionCalendarView({
   tasks: TaskOption[];
   canEdit: boolean;
 }) {
-  const [mode, setMode] = useState<CalendarMode>("WEEK");
+  const [mode, setMode] = useState<CalendarMode>("AGENDA");
   const [filter, setFilter] = useState<CalendarFilter>("ALL");
   const [query, setQuery] = useState("");
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
@@ -552,14 +445,14 @@ export function ExecutionCalendarView({
       <div className="rounded-lg border bg-background p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-medium">{mode === "WEEK" ? "未来 7 天" : "本月排期"}</p>
+            <p className="text-sm font-medium">{mode === "AGENDA" ? "近期议程" : "本月排期"}</p>
             <p className="text-xs text-muted-foreground">
-              {mode === "WEEK" ? "快速查看近期排期密度和待执行节点" : "按月浏览执行节奏，点击日期可过滤到当天"}
+              {mode === "AGENDA" ? "下方按日期列出近期执行节点；点击一行查看或编辑详情。" : "按月浏览执行节奏，点击日期可过滤到当天。"}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-full border bg-muted/20 p-0.5">
-              {(["WEEK", "MONTH"] as const).map((item) => (
+              {(["AGENDA", "MONTH"] as const).map((item) => (
                 <Button
                   key={item}
                   type="button"
@@ -568,7 +461,7 @@ export function ExecutionCalendarView({
                   className="h-6 rounded-full px-2 text-xs"
                   onClick={() => setMode(item)}
                 >
-                  {item === "WEEK" ? "周" : "月"}
+                  {item === "AGENDA" ? "议程" : "月历"}
                 </Button>
               ))}
             </div>
@@ -585,7 +478,9 @@ export function ExecutionCalendarView({
             )}
           </div>
         </div>
-        {mode === "WEEK" ? (
+        {mode === "AGENDA" ? (
+          <div className="rounded-md border border-dashed border-border px-3 py-5 text-center text-xs leading-5 text-muted-foreground">近期执行节点已在下方议程表中按日期展示。需要通盘浏览时，可切换到月历。</div>
+        ) : mode === "WEEK" ? (
           <div className="grid gap-2 md:grid-cols-7">
             {entriesByDay.map(({ day, key, entries: dayEntries }) => {
             const doneCount = dayEntries.filter((entry) => entry.status === "DONE").length;

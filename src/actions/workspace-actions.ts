@@ -11,15 +11,10 @@ const DAY = 24 * 60 * 60 * 1000;
 
 export type WorkspaceCockpitData = {
   metrics: {
-    activeProjects: number;
-    upcomingProjects: number;
-    completedProjects: number;
     myOpenTasks: number;
     overdueTasks: number;
-    confirmedBalance: number;
-    periodExpense: number;
+    upcomingCalendar: number;
   };
-  health: Record<WorkspaceHealthLevel, number>;
   myTasks: Array<{
     id: string;
     projectId: string;
@@ -29,6 +24,18 @@ export type WorkspaceCockpitData = {
     status: string;
     deadline: Date | null;
     isOverdue: boolean;
+  }>;
+  myProjects: Array<{
+    id: string;
+    name: string;
+    lifecycle: "UPCOMING" | "ACTIVE" | "COMPLETED";
+    health: WorkspaceHealthLevel;
+    needsMyAttention: number;
+    nextNode: { date: Date; content: string } | null;
+    budgetSignal: string;
+    budgetTone: "default" | "warning" | "danger";
+    updatedAt: Date;
+    archivedAt: Date | null;
   }>;
   activities: Array<{
     id: string;
@@ -54,14 +61,13 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
   const user = await requireCurrentUser();
   const now = new Date();
   const nextSevenDays = new Date(now.getTime() + 7 * DAY);
-  const scope: Prisma.ProjectWhereInput = user.role === "LEADER"
-    ? {}
-    : {
-        OR: [
-          { ownerId: user.id },
-          { members: { some: { userId: user.id } } },
-        ],
-      };
+  // 工作台永远是个人视角；跨项目全局判断只由管理总览承担。
+  const scope: Prisma.ProjectWhereInput = {
+    OR: [
+      { ownerId: user.id },
+      { members: { some: { userId: user.id } } },
+    ],
+  };
 
   const projects = await prisma.project.findMany({
     where: scope,
@@ -71,6 +77,8 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
       totalBudget: true,
       budgetMode: true,
       startDate: true,
+      archivedAt: true,
+      updatedAt: true,
       tasks: {
         select: {
           id: true,
@@ -86,6 +94,7 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
       budgetFlows: { select: { amount: true, action: true, flowType: true } },
       calendarEntries: {
         where: { status: { notIn: ["DONE", "CANCELED"] }, date: { gte: now, lte: nextSevenDays } },
+        orderBy: [{ date: "asc" }, { startTime: "asc" }],
         select: { id: true, date: true, startTime: true, content: true, channel: true, owner: true },
       },
     },
@@ -104,14 +113,9 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
       ])
     : [[]];
 
-  const health: Record<WorkspaceHealthLevel, number> = { HEALTHY: 0, WATCH: 0, RISK: 0 };
   const allMyTasks: WorkspaceCockpitData["myTasks"] = [];
   const upcomingCalendar: WorkspaceCockpitData["upcomingCalendar"] = [];
-  let activeProjects = 0;
-  let upcomingProjects = 0;
-  let completedProjects = 0;
-  let confirmedBalance = 0;
-  let periodExpense = 0;
+  const myProjects: WorkspaceCockpitData["myProjects"] = [];
 
   for (const project of projects) {
     const lifecycle = getProjectLifecycle({
@@ -132,12 +136,21 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
       hasUnconfirmedSpend: false,
     });
 
-    health[level] += 1;
-    if (lifecycle === "ACTIVE") activeProjects += 1;
-    if (lifecycle === "UPCOMING") upcomingProjects += 1;
-    if (lifecycle === "COMPLETED") completedProjects += 1;
-    confirmedBalance += balance;
-    periodExpense += budget.actualSpend;
+    const myOpenTaskCount = project.tasks.filter((task) => task.assignee === user.name && task.status !== "COMPLETED").length;
+    const nextNode = project.calendarEntries[0];
+    const budgetSignal = getBudgetSignal(project.budgetMode, budget);
+    myProjects.push({
+      id: project.id,
+      name: project.name,
+      lifecycle,
+      health: level,
+      needsMyAttention: myOpenTaskCount,
+      nextNode: nextNode?.date ? { date: nextNode.date, content: nextNode.content } : null,
+      budgetSignal: budgetSignal.label,
+      budgetTone: budgetSignal.tone,
+      updatedAt: project.updatedAt,
+      archivedAt: project.archivedAt,
+    });
 
     for (const task of project.tasks) {
       if (task.assignee === user.name && task.status !== "COMPLETED") {
@@ -167,17 +180,25 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
 
   return {
     metrics: {
-      activeProjects,
-      upcomingProjects,
-      completedProjects,
       myOpenTasks: allMyTasks.length,
       overdueTasks: allMyTasks.filter((task) => task.isOverdue).length,
-      confirmedBalance,
-      periodExpense,
+      upcomingCalendar: upcomingCalendar.length,
     },
-    health,
     myTasks: allMyTasks.slice(0, 6),
+    myProjects: myProjects.sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime()),
     activities: activities.map((activity) => ({ ...activity, projectName: activity.project.name })),
     upcomingCalendar: upcomingCalendar.slice(0, 6),
   };
+}
+
+function getBudgetSignal(mode: string, budget: ReturnType<typeof getProjectBudgetSummary>) {
+  if (mode === "NOT_MANAGED") return { label: "未启用预算", tone: "default" as const };
+  if (mode !== "CONFIRMED") return { label: "预算待确认", tone: "warning" as const };
+  if (budget.spendRemaining < 0) return { label: "预算超支", tone: "danger" as const };
+  if (budget.usagePercent >= 90) return { label: `已用 ${budget.usagePercent}%`, tone: "warning" as const };
+  return { label: `剩余 ${formatMoney(budget.spendRemaining)}`, tone: "default" as const };
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 0 }).format(value);
 }

@@ -12,7 +12,7 @@ import { shouldDefaultSelectAIBudgetItem } from "@/lib/ai-import-rules";
 
 type Step = "upload" | "loading" | "clarify" | "preview" | "creating";
 
-const IMPORT_STEPS = ["上传来源", "AI 解析", "必要确认", "结构预览", "创建项目"];
+const IMPORT_STEPS = ["提供资料", "检查结果", "创建项目"];
 
 const IMPORT_LOADING_STAGES = [
   {
@@ -43,10 +43,9 @@ const IMPORT_LOADING_PROGRESS = [28, 62, 86] as const;
 
 function getStepIndex(step: Step) {
   if (step === "upload") return 0;
-  if (step === "loading") return 1;
-  if (step === "clarify") return 2;
-  if (step === "preview") return 3;
-  return 4;
+  if (step === "loading") return 0;
+  if (step === "clarify" || step === "preview") return 1;
+  return 2;
 }
 
 interface Props {
@@ -259,7 +258,7 @@ export function AIProjectCreator({ onClose }: Props) {
 
   return (
     <div className="space-y-5">
-      <ol className="grid grid-cols-5 gap-1 rounded-xl border border-border bg-secondary/55 p-2">
+      <ol className="grid grid-cols-3 gap-1 rounded-xl border border-border bg-secondary/55 p-2">
         {IMPORT_STEPS.map((label, index) => {
           const current = getStepIndex(step);
           const complete = index < current;
