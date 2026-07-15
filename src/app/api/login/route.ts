@@ -4,6 +4,12 @@ import { createSession, getSessionCookieOptions, SESSION_COOKIE } from "@/lib/au
 import { verifyPassword } from "@/lib/password";
 
 function getPublicOrigin(request: Request) {
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  if (forwardedHost) {
+    return `${forwardedProto === "https" ? "https" : "http"}://${forwardedHost}`;
+  }
+
   const configured = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
   return configured || new URL(request.url).origin;
 }
