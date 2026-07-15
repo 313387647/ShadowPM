@@ -4,20 +4,20 @@
 
 @layer base {
   :root {
-    --canvas: 212 64% 7%;
-    --sidebar: 216 61% 7%;
-    --surface-1: 213 57% 10%;
-    --surface-2: 215 55% 12%;
-    --surface-3: 213 52% 15%;
-    --elevated: 213 53% 17%;
+    --canvas: 216 38% 6%;
+    --sidebar: 216 38% 6%;
+    --surface-1: 218 33% 10%;
+    --surface-2: 216 31% 13%;
+    --surface-3: 215 32% 15%;
+    --elevated: 216 31% 13%;
     --background: var(--canvas);
     --foreground: 216 100% 98%;
     --card: var(--surface-1);
     --card-foreground: var(--foreground);
     --popover: var(--elevated);
     --popover-foreground: var(--foreground);
-    --primary: 211 100% 65%;
-    --primary-foreground: 214 61% 8%;
+    --primary: 214 100% 65%;
+    --primary-foreground: 216 38% 6%;
     --secondary: var(--surface-2);
     --secondary-foreground: 216 83% 94%;
     --muted: var(--surface-2);
@@ -29,10 +29,10 @@
     --success: 161 58% 54%;
     --warning: 38 84% 65%;
     --info: 211 100% 69%;
-    --border: 213 33% 23%;
-    --input: 213 33% 25%;
-    --ring: 211 100% 65%;
-    --radius: 0.75rem;
+    --border: 0 0% 100% / 0.08;
+    --input: 0 0% 100% / 0.12;
+    --ring: 214 100% 65%;
+    --radius: 0.5rem;
   }
 
   * {
@@ -77,7 +77,6 @@
 @layer components {
   .surface-panel {
     @apply border border-border bg-card;
-    box-shadow: 0 18px 40px rgba(0, 8, 20, 0.12);
   }
 
   .surface-subtle {
@@ -86,11 +85,10 @@
 
   .focus-surface {
     @apply border border-primary/35 bg-primary/[0.075];
-    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.05), 0 14px 32px rgba(0, 15, 40, 0.18);
   }
 
   .table-shell {
-    @apply surface-panel overflow-hidden rounded-xl;
+    @apply overflow-hidden rounded-lg border border-border bg-card;
   }
 
   .data-table thead {

@@ -214,7 +214,6 @@ export function AIProjectCreator({ onClose }: Props) {
       const result = await createProjectFromAI(edited);
       if (result.success && result.data) {
         toast.success(result.message!);
-        onClose();
         router.push(`/projects/${result.data.projectId}`);
       } else {
         toast.error(result.message ?? "创建失败");

@@ -18,7 +18,7 @@ export function Sidebar({ userRole, userName, projects }: SidebarProps) {
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col border-r border-border bg-sidebar text-foreground md:flex">
       {/* Logo */}
       <div className="flex h-16 items-center gap-2.5 border-b border-border px-5">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary via-sky-300 to-cyan-300 text-xs font-bold text-primary-foreground shadow-[0_8px_24px_hsl(var(--primary)/0.24)]">
+        <div className="flex size-8 items-center justify-center rounded-lg border border-primary/35 bg-primary/15 text-xs font-bold text-primary">
           S
         </div>
         <div>
@@ -38,7 +38,7 @@ export function Sidebar({ userRole, userName, projects }: SidebarProps) {
       {/* 底部用户区 */}
       <div className="border-t border-border p-3">
         <NavigationSections userRole={userRole} variant="utility" />
-        <div className="flex items-center justify-between rounded-xl border border-transparent px-3 py-2.5 transition-colors hover:border-border hover:bg-surface-2/70">
+        <div className="flex items-center justify-between rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:border-border hover:bg-surface-2/70">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{userName}</p>
             <p className="text-xs text-muted-foreground">

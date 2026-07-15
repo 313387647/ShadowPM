@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CalendarCheck, CircleDollarSign, ClipboardList, Clock, Loader2, MessageSquare, Plus, Search, Sparkles, X } from "lucide-react";
+import { ArrowRight, CalendarCheck, CircleDollarSign, ClipboardList, Clock, Loader2, MessageSquare, Search, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { TASK_STATUS_MAP } from "@/lib/constants";
-import { addProgressLog, adoptAIActionSuggestion, adoptAIBudgetSignal, generateProjectActivitySummary, scheduleAIActionSuggestion } from "@/actions/timeline-actions";
+import { adoptAIActionSuggestion, adoptAIBudgetSignal, generateProjectActivitySummary, scheduleAIActionSuggestion } from "@/actions/timeline-actions";
 import { cn } from "@/lib/utils";
 
 type Log = {
@@ -107,10 +107,7 @@ const ACTIVITY_BLUEPRINTS = [
 
 export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
   const router = useRouter();
-  const formRef = useRef<HTMLFormElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [adoptingAction, setAdoptingAction] = useState<string | null>(null);
   const [schedulingAction, setSchedulingAction] = useState<string | null>(null);
@@ -149,7 +146,7 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
       const target = event.target as HTMLElement | null;
       const isTyping = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
 
-      if (event.key === "/" && !isTyping && !open) {
+      if (event.key === "/" && !isTyping) {
         event.preventDefault();
         searchRef.current?.focus();
       }
@@ -162,27 +159,7 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, query]);
-
-  async function handleSubmit(formData: FormData) {
-    if (!canEdit) return;
-    setSubmitting(true);
-    try {
-      const result = await addProgressLog(formData);
-      if (result.success) {
-        toast.success(result.message!);
-        formRef.current?.reset();
-        setOpen(false);
-        router.refresh();
-      } else {
-        toast.error(result.message!);
-      }
-    } catch {
-      toast.error("提交失败，请重试");
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  }, [query]);
 
   async function handleGenerateSummary() {
     if (!canEdit) return;
@@ -275,19 +252,7 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold">项目活动流</h2>
-          <p className="text-sm text-muted-foreground">
-            共 {logs.length} 条记录，包含人工进度、预算流转、执行日历与 AI 导入确认
-          </p>
-        </div>
-        {canEdit ? (
-          <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
-            <Plus className="size-3.5" />追加进度
-          </Button>
-        ) : (
-          <Badge variant="outline">只读活动流</Badge>
-        )}
+        <p className="text-sm text-muted-foreground">共 {logs.length} 条已发生的项目变化</p>
       </div>
 
       {insight && (
@@ -434,7 +399,7 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
                   <div className={cn("absolute left-4 mt-1.5 flex size-5 -translate-x-1/2 items-center justify-center rounded-full border bg-background", meta.dotClass)}>
                     <meta.Icon className="size-3" />
                   </div>
-                  <div className="flex-1 space-y-1.5 rounded-lg border bg-card p-4 shadow-sm">
+                  <div className="flex-1 space-y-1.5 border-b border-border pb-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-medium">
                         {meta.title}
@@ -509,40 +474,6 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
           </div>
         </div>
       )}
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>追加进度记录</DialogTitle>
-          </DialogHeader>
-          <form ref={formRef} action={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5">
-                所属管控事项 <span className="text-red-500">*</span>
-              </label>
-              <select name="taskId" required className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-background">
-                <option value="">请选择管控事项</option>
-                {tasks.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name} [{TASK_STATUS_MAP[t.status as keyof typeof TASK_STATUS_MAP] ?? t.status}]</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5">
-                汇报内容 <span className="text-red-500">*</span>
-              </label>
-              <textarea name="content" required rows={4} placeholder="例如：新闻通稿 V1 已交付，等待客户反馈。" className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none" />
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>取消</Button>
-              <Button type="submit" disabled={submitting} className="gap-1.5">
-                {submitting && <Loader2 className="size-3.5 animate-spin" />}
-                追加记录
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={Boolean(pendingAdoption)} onOpenChange={(nextOpen) => !nextOpen && setPendingAdoption(null)}>
         <DialogContent>

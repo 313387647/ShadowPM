@@ -56,7 +56,7 @@ function TabsList({ className, children }: { className?: string; children: React
     <div
       role="tablist"
       className={cn(
-        "inline-flex h-10 w-full items-center justify-start gap-1 rounded-xl border bg-secondary/70 p-1 text-muted-foreground",
+        "inline-flex h-10 w-full items-center justify-start gap-1 rounded-lg border bg-secondary/70 p-1 text-muted-foreground",
         className
       )}
     >
@@ -91,7 +91,7 @@ function TabsTrigger({
         "hover:text-foreground",
         "disabled:pointer-events-none disabled:opacity-50",
         isActive
-          ? "border border-primary/20 bg-card text-foreground shadow-[0_5px_16px_rgba(0,8,20,0.2)]"
+          ? "border border-primary/20 bg-card text-foreground"
           : "text-muted-foreground",
         className
       )}

@@ -44,13 +44,12 @@ export function Header({ userRole, userName, projects }: { userRole: string; use
             <h2 className="truncate text-base font-semibold text-foreground md:text-lg">{title}</h2>
           </div>
         </div>
-        <button type="button" onClick={() => window.dispatchEvent(new Event("shadowpm:open-command"))} className="hidden h-10 items-center gap-2 rounded-xl border border-border bg-surface-1/85 px-3 text-left text-sm text-muted-foreground transition-colors hover:border-primary/35 hover:bg-surface-2 md:flex">
+        <button type="button" onClick={() => window.dispatchEvent(new Event("shadowpm:open-command"))} className="hidden h-10 items-center gap-2 rounded-lg border border-border bg-surface-1/85 px-3 text-left text-sm text-muted-foreground transition-colors hover:border-primary/35 hover:bg-surface-2 md:flex">
           <Search className="size-4 text-primary" />
           <span className="flex-1">搜索项目、事项，或输入命令...</span>
           <kbd className="rounded border border-border bg-canvas px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">⌘ K</kbd>
         </button>
         <div className="flex items-center justify-end gap-2">
-          <button type="button" onClick={() => window.dispatchEvent(new Event("shadowpm:open-command"))} className="rounded-md border border-border bg-surface-1 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/35 hover:text-foreground md:hidden">⌘ K</button>
           <span className="truncate text-xs text-muted-foreground md:hidden">{userName}</span>
         </div>
       </header>

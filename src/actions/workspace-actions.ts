@@ -37,14 +37,6 @@ export type WorkspaceCockpitData = {
     updatedAt: Date;
     archivedAt: Date | null;
   }>;
-  activities: Array<{
-    id: string;
-    projectId: string;
-    projectName: string;
-    summary: string;
-    source: string;
-    createdAt: Date;
-  }>;
   upcomingCalendar: Array<{
     id: string;
     projectId: string;
@@ -100,18 +92,6 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
     },
     orderBy: { createdAt: "desc" },
   });
-
-  const projectIds = projects.map((project) => project.id);
-  const [activities] = projectIds.length > 0
-    ? await Promise.all([
-        prisma.activityLog.findMany({
-          where: { projectId: { in: projectIds } },
-          select: { id: true, projectId: true, summary: true, source: true, createdAt: true, project: { select: { name: true } } },
-          orderBy: { createdAt: "desc" },
-          take: 5,
-        }),
-      ])
-    : [[]];
 
   const allMyTasks: WorkspaceCockpitData["myTasks"] = [];
   const upcomingCalendar: WorkspaceCockpitData["upcomingCalendar"] = [];
@@ -186,7 +166,6 @@ export async function getWorkspaceCockpit(): Promise<WorkspaceCockpitData> {
     },
     myTasks: allMyTasks.slice(0, 6),
     myProjects: myProjects.sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime()),
-    activities: activities.map((activity) => ({ ...activity, projectName: activity.project.name })),
     upcomingCalendar: upcomingCalendar.slice(0, 6),
   };
 }

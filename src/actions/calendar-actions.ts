@@ -235,6 +235,58 @@ export async function updateCalendarEntry(formData: FormData): Promise<ActionRes
   return { success: true, message: changes.length > 0 ? "日历已更新，变更已记录" : "日历无变化" };
 }
 
+export async function createCalendarEntry(formData: FormData): Promise<ActionResult<{ calendarEntryId: string }>> {
+  const projectId = (formData.get("projectId") as string | null)?.trim();
+  const content = (formData.get("content") as string | null)?.trim();
+  const taskId = normalizeText(formData.get("taskId") as string | null);
+  if (!projectId || !content) return { success: false, message: "执行内容为必填项" };
+
+  const user = await assertCanWriteProject(projectId);
+  const task = taskId
+    ? await prisma.task.findFirst({ where: { id: taskId, projectId }, select: { id: true, name: true } })
+    : null;
+  if (taskId && !task) return { success: false, message: "关联事项不存在" };
+
+  const statusRaw = (formData.get("status") as string | null) ?? "PLANNED";
+  const status = CALENDAR_STATUSES.includes(statusRaw as (typeof CALENDAR_STATUSES)[number]) ? statusRaw : "PLANNED";
+  const created = await prisma.$transaction(async (tx) => {
+    const entry = await tx.executionCalendarEntry.create({
+      data: {
+        projectId,
+        taskId,
+        date: parseDateSafe(formData.get("date") as string | null),
+        startTime: normalizeText(formData.get("startTime") as string | null),
+        endTime: normalizeText(formData.get("endTime") as string | null),
+        channel: normalizeText(formData.get("channel") as string | null),
+        workstream: normalizeText(formData.get("workstream") as string | null),
+        content: content.slice(0, 240),
+        owner: normalizeText(formData.get("owner") as string | null),
+        department: normalizeText(formData.get("department") as string | null),
+        notes: normalizeText(formData.get("notes") as string | null),
+        status,
+        source: "MANUAL",
+        createdBy: user.name,
+      },
+    });
+    await tx.activityLog.create({
+      data: {
+        projectId,
+        targetType: "CALENDAR_ENTRY",
+        targetId: entry.id,
+        changeType: "CREATE",
+        summary: `执行日历新增：${entry.content}`,
+        afterState: { calendarEntryId: entry.id, taskId, taskName: task?.name ?? null, date: entry.date?.toISOString() ?? null, status: entry.status },
+        source: "HUMAN",
+        createdBy: user.name,
+      },
+    });
+    return entry;
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  return { success: true, message: "执行节点已添加", data: { calendarEntryId: created.id } };
+}
+
 export async function createCalendarEntryFromTask(formData: FormData): Promise<ActionResult<{ calendarEntryId: string }>> {
   const taskId = formData.get("taskId") as string;
   const dateRaw = (formData.get("date") as string) || null;

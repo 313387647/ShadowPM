@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Archive, ArchiveRestore, Loader2, Settings2, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { deleteProject, setProjectArchived, updateProjectInfo } from "@/actions/project-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader } from "@/components/ui/sheet";
 
 type ProjectSummary = {
   id: string;
@@ -91,19 +92,13 @@ export function ProjectManageActions({ project, canManage }: { project: ProjectS
   return (
     <div className="flex w-full justify-end gap-2">
       <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => setSettingsOpen(true)}>
-        <Settings2 className="size-3.5" />项目设置
-      </Button>
-      <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => setArchiveOpen(true)}>
-        {project.archivedAt ? <ArchiveRestore className="size-3.5" /> : <Archive className="size-3.5" />}
-        {project.archivedAt ? "恢复" : "归档"}
-      </Button>
-      <Button type="button" size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" title="删除项目" onClick={() => setDeleteOpen(true)}>
-        <Trash2 className="size-3.5" /><span className="sr-only">删除项目</span>
+        <MoreHorizontal className="size-3.5" />更多
       </Button>
 
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>项目基本信息</DialogTitle></DialogHeader>
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent className="max-w-lg">
+          <SheetHeader title="项目设置" description="维护项目资料；成员和权限在此处集中管理。" />
+          <div className="flex-1 overflow-y-auto p-5">
           <form action={saveInfo} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium">项目名称</label>
@@ -120,10 +115,13 @@ export function ProjectManageActions({ project, canManage }: { project: ProjectS
               </div>
             </div>
             <p className="text-xs leading-5 text-muted-foreground">项目预算由资金账本的“总预算确认”维护，避免项目资料与账本出现两个口径。</p>
-            <DialogFooter><Button type="button" variant="ghost" onClick={() => setSettingsOpen(false)}>取消</Button><Button type="submit" disabled={submitting}>{submitting ? "保存中" : "保存"}</Button></DialogFooter>
+            <div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="ghost" onClick={() => setSettingsOpen(false)}>取消</Button><Button type="submit" disabled={submitting}>{submitting ? "保存中" : "保存"}</Button></div>
           </form>
-        </DialogContent>
-      </Dialog>
+          <section className="mt-8 border-t pt-5"><p className="text-sm font-medium">项目生命周期</p><p className="mt-1 text-xs text-muted-foreground">归档会移出日常工作区，历史数据保持可追溯。</p><Button type="button" size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => setArchiveOpen(true)}>{project.archivedAt ? <ArchiveRestore className="size-3.5" /> : <Archive className="size-3.5" />}{project.archivedAt ? "恢复项目" : "归档项目"}</Button></section>
+          <section className="mt-6 border-t border-destructive/20 pt-5"><p className="text-sm font-medium text-destructive">危险操作</p><p className="mt-1 text-xs text-muted-foreground">删除后无法恢复，项目活动会同时移除。</p><Button type="button" size="sm" variant="ghost" className="mt-3 gap-1.5 text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}><Trash2 className="size-3.5" />删除项目</Button></section>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
         <DialogContent>

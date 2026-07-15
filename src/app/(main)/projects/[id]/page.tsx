@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarDays, ClipboardList, Eye, History, WalletCards } from "lucide-react";
+import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { getProjectDetail } from "@/actions/project-actions";
 import { getProjectTasks } from "@/actions/task-actions";
@@ -18,11 +18,11 @@ import { ProjectManageActions } from "@/components/project/ProjectManageActions"
 import { getProjectLifecycle, PROJECT_LIFECYCLE_LABEL } from "@/lib/project-lifecycle";
 
 type ProjectTab = "tasks" | "ledger" | "calendar" | "timeline";
-const TABS: Array<{ value: ProjectTab; label: string; icon: React.ReactNode }> = [
-  { value: "tasks", label: "管控事项", icon: <ClipboardList className="size-3.5" /> },
-  { value: "ledger", label: "预算", icon: <WalletCards className="size-3.5" /> },
-  { value: "calendar", label: "执行日历", icon: <CalendarDays className="size-3.5" /> },
-  { value: "timeline", label: "变更记录", icon: <History className="size-3.5" /> },
+const TABS: Array<{ value: ProjectTab; label: string }> = [
+  { value: "tasks", label: "管控事项" },
+  { value: "ledger", label: "预算" },
+  { value: "calendar", label: "执行日历" },
+  { value: "timeline", label: "变更记录" },
 ];
 
 export default async function ProjectDetailPage({ params, searchParams }: { params: { id: string }; searchParams?: { tab?: string } }) {
@@ -47,12 +47,10 @@ export default async function ProjectDetailPage({ params, searchParams }: { para
         </div>
         <div className="flex flex-wrap items-center gap-2"><ProjectOutputsPanel projectId={params.id} canEdit={project.canEdit} data={outputs} /><ProjectManageActions project={{ id: project.id, name: project.name, startDate: project.startDate, endDate: project.endDate, archivedAt: project.archivedAt }} canManage={project.canManage} /></div>
       </div>
-      <section className="mt-4 grid overflow-hidden rounded-lg border border-border bg-surface-1 sm:grid-cols-4" aria-label="项目脉搏"><PulseMetric label="待处理事项" value={openCount} detail="未完成" /><PulseMetric label="已逾期" value={overdueCount} detail={overdueCount ? "需要优先处理" : "当前无逾期"} danger /><PulseMetric label="下一节点" value={nextNode?.date ? formatDate(nextNode.date) : "待排期"} detail={nextNode?.content ?? "尚未安排正式执行节点"} /><PulseMetric label={project.budgetSummary.mode === "CONFIRMED" ? "剩余预算" : "预算状态"} value={budgetLabel} detail={project.budgetSummary.mode === "CONFIRMED" ? `已编排 ¥${project.budgetSummary.planned.toLocaleString("zh-CN")}` : "可在预算页启用或确认"} /></section>
+      <section className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-y border-border py-3 text-sm" aria-label="项目脉搏"><PulseMetric label="待处理" value={openCount} /><PulseMetric label="已逾期" value={overdueCount} danger={overdueCount > 0} /><PulseMetric label="下一节点" value={nextNode?.date ? `${formatDate(nextNode.date)} ${nextNode.content}` : "待排期"} /><PulseMetric label={project.budgetSummary.mode === "CONFIRMED" ? "剩余预算" : "预算状态"} value={budgetLabel} /></section>
     </header>
 
-    {!project.canEdit && <p className="border-l-2 border-warning px-3 py-1.5 text-sm text-muted-foreground">当前为只读视角。你可以查看所有正式记录，但不能修改项目数据。</p>}
-
-    <nav className="sticky top-16 z-20 flex overflow-x-auto border-b border-border bg-canvas/95 backdrop-blur" aria-label="项目模块">{TABS.map((tab) => <Link key={tab.value} href={tab.value === "tasks" ? `/projects/${params.id}` : `/projects/${params.id}?tab=${tab.value}`} className={activeTab === tab.value ? "flex shrink-0 items-center gap-1.5 border-b-2 border-primary px-3 py-3 text-sm font-medium text-foreground" : "flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground"}>{tab.icon}{tab.label}</Link>)}</nav>
+    <nav className="sticky top-16 z-20 flex overflow-x-auto border-b border-border bg-canvas/95 backdrop-blur" aria-label="项目模块">{TABS.map((tab) => <Link key={tab.value} href={tab.value === "tasks" ? `/projects/${params.id}` : `/projects/${params.id}?tab=${tab.value}`} className={activeTab === tab.value ? "shrink-0 border-b-2 border-primary px-3 py-3 text-sm font-medium text-foreground" : "shrink-0 border-b-2 border-transparent px-3 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground"}>{tab.label}</Link>)}</nav>
 
     {activeTab === "tasks" && <TasksSurface projectId={params.id} canEdit={project.canEdit} viewerName={project.viewerName} />}
     {activeTab === "ledger" && <BudgetSurface projectId={params.id} canEdit={project.canEdit} canManage={project.canManage} />}
@@ -65,7 +63,7 @@ async function TasksSurface({ projectId, canEdit, viewerName }: { projectId: str
 async function BudgetSurface({ projectId, canEdit, canManage }: { projectId: string; canEdit: boolean; canManage: boolean }) { const [data, tasks] = await Promise.all([getProjectBudgetPlanning(projectId), getProjectBudgetTaskOptions(projectId)]); if (!data) notFound(); return <BudgetWorkspace data={data} tasks={tasks} canEdit={canEdit} canManage={canManage} />; }
 async function CalendarSurface({ projectId, canEdit }: { projectId: string; canEdit: boolean }) { const [entries, tasks] = await Promise.all([getProjectCalendarEntries(projectId), getProjectBudgetTaskOptions(projectId)]); return <ExecutionCalendarView projectId={projectId} entries={entries} tasks={tasks} canEdit={canEdit} />; }
 async function TimelineSurface({ projectId, canEdit }: { projectId: string; canEdit: boolean }) { const [logs, tasks] = await Promise.all([getProjectTimeline(projectId), getProjectBudgetTaskOptions(projectId)]); return <TimelineView projectId={projectId} logs={logs} tasks={tasks} canEdit={canEdit} />; }
-function PulseMetric({ label, value, detail, danger = false }: { label: string; value: string | number; detail: string; danger?: boolean }) { return <div className="border-t border-border px-4 py-3 first:border-t-0 sm:border-l sm:first:border-l-0 sm:even:border-t-0"><p className="text-[11px] text-muted-foreground">{label}</p><p className={danger ? "mt-1 text-lg font-semibold tabular-nums text-destructive" : "mt-1 text-lg font-semibold tabular-nums"}>{value}</p><p className="mt-1 truncate text-[11px] text-muted-foreground" title={detail}>{detail}</p></div>; }
+function PulseMetric({ label, value, danger = false }: { label: string; value: string | number; danger?: boolean }) { return <p className="flex min-w-0 items-baseline gap-2"><span className="text-xs text-muted-foreground">{label}</span><span className={danger ? "truncate font-medium tabular-nums text-destructive" : "truncate font-medium tabular-nums"}>{value}</span></p>; }
 function formatDate(value: Date) { return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(value); }
 function formatProjectPeriod(startDate: Date | null, endDate: Date | null) { const format = (value: Date | null) => value ? new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" }).format(value) : "未定"; return `${format(startDate)} 至 ${format(endDate)}`; }
 function isProjectTab(value: string | undefined): value is ProjectTab { return value === "tasks" || value === "ledger" || value === "calendar" || value === "timeline"; }

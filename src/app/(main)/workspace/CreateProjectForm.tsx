@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, PenLine, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Link from "next/link";
 import { createProject } from "@/actions/project-actions";
 import { AIProjectCreator } from "@/components/project/AIProjectPreview";
@@ -15,9 +14,12 @@ type InitialBudgetItem = { title: string; plannedAmount: string; category: strin
 
 const EMPTY_ITEM = (): InitialBudgetItem => ({ title: "", plannedAmount: "", category: "", description: "" });
 
-export function CreateProjectForm({ embedded = false }: { embedded?: boolean }) {
+export function NewProjectButton() {
+  return <Button asChild className="gap-2"><Link href="/projects/new"><Plus className="size-4" />新建项目</Link></Button>;
+}
+
+export function CreateProjectForm() {
   const router = useRouter();
-  const [open, setOpen] = useState(embedded);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"ai" | "manual">("ai");
   const [step, setStep] = useState<1 | 2>(1);
@@ -88,7 +90,6 @@ export function CreateProjectForm({ embedded = false }: { embedded?: boolean }) 
       }
       toast.success(result.message ?? "项目已创建");
       resetManual();
-      setOpen(false);
       router.push(`/projects/${result.data.projectId}`);
     } catch {
       toast.error("创建失败，请重试");
@@ -98,20 +99,17 @@ export function CreateProjectForm({ embedded = false }: { embedded?: boolean }) 
   }
 
   return (
-    <>
-      {!embedded && <Button asChild className="gap-2">
-        <Link href="/projects/new">
-        <Plus className="size-4" />新建项目
-        </Link>
-      </Button>}
+    <main className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <header className="flex items-end justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">新建项目</h1>
+          <p className="mt-1 text-sm text-muted-foreground">导入已有资料，或从一个清晰的项目骨架开始。</p>
+        </div>
+        <Button asChild variant="ghost" size="sm"><Link href="/projects">取消</Link></Button>
+      </header>
 
-      <Dialog open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) { resetManual(); if (embedded) router.push("/workspace"); } }}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>新建项目</DialogTitle>
-          </DialogHeader>
-
-          <div className="flex rounded-xl border border-border bg-secondary/70 p-1 -mx-1">
+      <div className="space-y-6">
+          <div className="flex border-b border-border" role="tablist" aria-label="项目创建方式">
             <button onClick={() => setMode("ai")} className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${mode === "ai" ? "border border-primary/20 bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               <Sparkles className="size-3.5" />AI 生成
             </button>
@@ -120,7 +118,7 @@ export function CreateProjectForm({ embedded = false }: { embedded?: boolean }) 
             </button>
           </div>
 
-          {mode === "ai" ? <AIProjectCreator onClose={() => setOpen(false)} /> : (
+          {mode === "ai" ? <AIProjectCreator onClose={() => router.push("/projects")} /> : (
             <div className="space-y-5">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className={step === 1 ? "rounded-full bg-primary px-2 py-0.5 text-primary-foreground" : "rounded-full bg-secondary px-2 py-0.5"}>1 基本信息</span>
@@ -179,8 +177,7 @@ export function CreateProjectForm({ embedded = false }: { embedded?: boolean }) 
               )}
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-    </>
+      </div>
+    </main>
   );
 }

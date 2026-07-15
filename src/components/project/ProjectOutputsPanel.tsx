@@ -110,7 +110,7 @@ export function ProjectOutputsPanel({
     <>
       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
         <Share2 className="size-3.5" />
-        输出与分享
+        分享
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto p-0">
