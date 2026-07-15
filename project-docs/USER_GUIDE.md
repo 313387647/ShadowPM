@@ -1,236 +1,67 @@
-# ShadowPM Alpha User Guide
+# ShadowPM 功能与规则参考
 
-This guide is for non-developer reviewers who will test ShadowPM through a shared website.
+更新日期：2026-07-15。面向项目主负责人、管理者和团队管理员。日常操作请先阅读 `BEGINNER_TUTORIAL.md`，站内地址为 `/guide`。
 
-The goal of the test is not to prove that every field is perfect. The goal is to see whether ShadowPM can turn a messy project spreadsheet into a useful project control workspace faster than manual Excel cleanup.
+## 产品结构
 
-## 1. What ShadowPM Is
+- `工作台`：个人行动层。查看待处理事项、逾期事项、未来 7 天执行节点和正在推进项目。
+- `项目详情`：项目执行层。包含管控事项、预算、执行日历和变更记录。
+- `管理总览`：跨项目管理判断层，仅管理者可见，包含总览、项目、预算和日历视图。
 
-ShadowPM is an AI Native Project Management Platform.
+## 关键数据关系
 
-It is designed to help internal teams:
+```text
+项目
+├─ 管控事项：工作、负责人、截止日期、状态、进展
+├─ 预算池：项目总预算与预算状态
+│  └─ 预算项：计划金额、状态、可选事项关联
+│     └─ 资金流水：报批、划拨、支出、退款、结算、调整
+├─ 执行日历：带明确时间的执行节点，可选关联事项
+└─ 变更记录：上述事实变化的审计时间线
+```
 
-- Upload or paste messy project information
-- Generate a project control table
-- Separate budget and execution calendar from messy source rows
-- Directly edit the generated control table, budget ledger, and execution calendar
-- Keep progress and budget changes traceable
+预算项不以管控事项为本体；删除事项不会删除预算项。日历只记录明确执行节点，不会因事项变为“进行中”而自动生成。
 
-ShadowPM is not a task board. Please evaluate whether it makes project control faster and clearer.
+## 权限规则
 
-## 2. Test Account
+- 项目主负责人：项目级管理、预算确认、归档和删除。
+- 编辑者：维护事项、预算项与日历，不自动拥有项目删除权。
+- 只读成员：仅查看。
+- 管理者：跨项目只读与管理总览；对其他项目的编辑能力仍取决于项目级授权。
+- 事项负责人：业务归属，不是权限授权；被指派事项不自动获得项目编辑权。
 
-Use the login cards on the `/login` page.
+## 预算规则
 
-Recommended reviewer account:
+- 项目预算状态为：已有明确预算、预算待确认或本项目不管理预算；不使用 0 元推断业务状态。
+- 已确认总预算是预算项计划金额合计的上限。
+- 预算项可不关联事项，也可以在后续再关联。
+- 草稿录入支持快速修改；影响正式财务口径的修改需要填写原因并保留审计记录。
+- AI 识别的金额和预算项先是线索/草稿。多总预算候选、低置信或冲突信息必须人工确认，不能静默入账。
 
-- `陈鹏` for leader/global dashboard review
-- `周予安` for project creation and project control testing
-- `许闻澜` for collaborator and read-only permission testing
+## 生命周期与归档
 
-If the site redirects you back to login, log in again. Session cookies are signed and may reset after deployment updates.
+- 待启动、进行中、已完成是项目生命周期。
+- 已归档项目从侧栏重点项目和最近访问中退出，但在项目列表归档筛选内保留。
+- 归档保留资料、预算、日历与审计；删除是不可恢复的危险操作，仅项目主负责人可执行。
 
-## 3. Recommended Test File
+## AI 导入安全边界
 
-Use the sample workbook:
+- AI 导入只经历提供资料、检查结果、创建项目三个用户阶段。
+- 高置信且无冲突信息可以默认折叠；低置信、冲突、缺失和多候选信息必须可见并由用户决定。
+- 无法匹配事项的预算项保持未关联，不会绑定到第一条事项。
+- AI 建议不会直接改写正式项目数据；用户主动采纳后才创建事项、预算草稿或日历节点。
 
-`project-docs/review-assets/one-million-project-control-sample.xlsx`
+## 需要审计的事实
 
-This file is intentionally messy and should not be treated as the ideal template.
+- 事项状态、负责人、截止日期与进展变化。
+- 预算池确认、预算项确认/取消、正式金额调整和资金动作。
+- 日历节点增删改。
+- 成员与项目权限变化。
+- AI 导入及用户采纳的 AI 建议。
 
-Known source problems:
+## 团队管理员运行建议
 
-- Budget-like information may be mixed into project control rows
-- Calendar cells may mix owner, channel, and content
-- Some fields are incomplete
-- Some rows are ambiguous
-
-Expected ShadowPM behavior:
-
-- Do not blindly copy the source structure
-- Create a usable project control table
-- Write identifiable budget rows into the budget ledger
-- Write identifiable calendar rows into the execution calendar
-- Keep blockers, open questions, and uncertain information in editable table notes or activity summaries
-- Allow missing budget or missing owners to be completed later
-
-## 4. Full Test Flow
-
-### Step 1: Log In
-
-1. Open the team site.
-2. Choose `周予安`.
-3. You should land on the AI workspace.
-
-### Step 2: Start AI Project Creation
-
-1. Click `新建项目`.
-2. Keep the `AI 生成` tab selected.
-3. Upload the sample workbook.
-4. Click `开始解析`.
-
-Expected result:
-
-- AI analyzes the workbook.
-- A preview or clarification screen appears.
-- If the budget is missing or uncertain, it should not block creation.
-
-### Step 3: Review The AI Preview
-
-Check:
-
-- Project name
-- Project dates
-- Project control table rows
-- Workstreams/modules
-- Owners
-- Departments
-- Deadlines
-- Budget candidates
-- Calendar candidates
-- Watch items or uncertain information in editable notes
-
-Important:
-
-- Budget and calendar rows should become official editable records when AI can identify them.
-- Budget candidates should not default to `支出` unless AI clearly identified an expense.
-- `预算池待确认` is acceptable. It means the project can be created first.
-
-### Step 4: Create The Project
-
-Click `创建项目与管控表`.
-
-Expected result:
-
-- The project detail page opens.
-- The project control table exists.
-- If no confirmed budget was entered, no initial `ALLOCATE` budget flow is created.
-- AI-generated budget rows and calendar rows appear in their official editable modules.
-
-### Step 5: Review The Project Control Table
-
-Open the `管控总表` tab.
-
-Check:
-
-- Are the main project control items understandable?
-- Are workstreams separated from item names?
-- Are owner and department fields placed in the right columns?
-- Are missing fields visible enough?
-- Is the table easier to work with than the original spreadsheet?
-
-### Step 6: Review Budget And Calendar
-
-Open the project detail page after creation.
-
-Check:
-
-1. `资金账本`: AI-generated budget rows should be visible and editable through normal budget operations.
-2. `执行日历`: AI-generated calendar rows should show date, channel, owner, content, and status.
-3. `项目活动`: creation and later edits should leave traceable records.
-4. Missing or uncertain fields should be fixed directly in the table.
-
-Expected result:
-
-- `ESTIMATE`, `TRANSFER`, or unclear budget candidates require manual flow type selection.
-- Confirmed candidates become official budget flows.
-- The budget ledger updates after refresh.
-
-### Step 7: Review Execution Calendar
-
-Check:
-
-- Date
-- Channel
-- Workstream
-- Content
-- Owner
-
-Expected result:
-
-- AI-generated calendar rows appear in `执行日历`.
-- Channel and owner should not be merged when AI can separate them.
-
-### Step 8: Review Uncertain Information
-
-Check whether uncertain or incomplete information stays editable instead of becoming a separate risk module.
-
-Expected result:
-
-- Blockers and open questions appear in control-table notes, activity summaries, or missing fields.
-- They should be easy to fix directly in the project table.
-
-### Step 9: Test Copilot Queries
-
-Try questions such as:
-
-- `这个项目预算还有多少`
-- `有哪些事项逾期或待确认`
-- `接下来有哪些执行日历`
-- `哪些事项缺负责人`
-
-Expected result:
-
-- Copilot should answer from official project data.
-- It should not invent missing budget, owners, or dates.
-
-### Step 10: Submit In-App Feedback
-
-On the project detail page, use the `使用反馈` panel.
-
-Please submit:
-
-- Overall rating
-- AI extraction quality
-- Upload/create outcome
-- Whether you would keep using the product
-- Budget/calendar/owner/missing-info issues
-- The step that felt confusing or risky
-
-Leader users can review all submitted feedback in `/feedback`.
-
-### Step 11: Export, Report, And Share
-
-On the project page, click `输出与分享`.
-
-You can:
-
-- Download a canonical Excel workbook containing project profile, control table, progress changes, budget flows, execution calendar, activity, and source metadata.
-- Generate a weekly or monthly report. Reports use official project data and retained upload evidence, then become traceable project activity.
-- Create a 30-day read-only external project link.
-- Copy an ICS subscription URL for Apple Calendar, Google Calendar, Outlook, or other compatible calendar clients.
-- Revoke an active external link immediately.
-
-Important:
-
-- Read-only project links do not allow editing.
-- The calendar feed projects formal execution-calendar entries only. It does not create events from every active control item.
-- The same share capability protects the read-only page and calendar feed, so revoking it disables both.
-- Import evidence is used for grounding and source traceability; ShadowPM does not restore a separate asset center.
-
-## 5. What Feedback To Provide
-
-Please submit feedback inside the app first. Use `project-docs/FEEDBACK_TEMPLATE.md` only when you need a longer written review.
-
-Useful feedback examples:
-
-- AI put budget into the control table instead of budget candidates
-- AI treated an estimate as an expense
-- AI mixed channel and owner in calendar entries
-- Important rows were missing from the control table
-- Too many low-value rows were created
-- The preview was hard to understand
-- The next action was unclear
-- The UI used task-manager language instead of project-control language
-
-## 6. Current Boundaries
-
-Current boundaries:
-
-- Calendar sync is a read-only ICS subscription; two-way Google/Microsoft write-back is not included.
-- Share links are project-level read-only capabilities, not guest accounts with comments.
-- Import evidence stores bounded extracted text, not the original binary file.
-- Reports can fall back to deterministic official-data summaries if the model is unavailable.
-- Enterprise SSO, tenant isolation, managed object storage, queues, and backup automation remain later deployment work.
-
-Please do not judge the product as a finished SaaS product. Judge whether the core workflow is promising and where it breaks.
+- 为每位成员使用独立账号，不共用登录身份。
+- 优先授予项目级编辑权，而非把所有人设为管理者。
+- 定期检查归档项目、预算待确认项目和逾期事项。
+- 出现问题时记录页面地址、账号身份、操作时间和截图，便于定位活动记录与服务日志。

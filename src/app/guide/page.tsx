@@ -141,11 +141,11 @@ export default function BeginnerGuidePage() {
     <main className="min-h-screen bg-background">
       <section className="border-b bg-muted/30">
         <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-12">
-          <Badge className="w-fit" variant="secondary">ShadowPM 测试说明书</Badge>
+          <Badge className="w-fit" variant="secondary">ShadowPM 团队使用说明</Badge>
           <div className="max-w-3xl space-y-3">
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
             <p className="text-base leading-7 text-muted-foreground">
-              这不是简单操作清单，而是完整说明书：包含登录、导航、工作台、项目详情、每个卡片、每张表、每个状态和当前测试要点。
+              从登录到日常推进的完整说明：工作台、项目、管控事项、预算、执行日历、变更记录、AI 导入和权限边界都在这里。
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -157,7 +157,7 @@ export default function BeginnerGuidePage() {
             </Button>
             <Button asChild variant="outline" className="gap-2">
               <Link href="/login">
-                直接开始测试
+                开始使用
                 <ExternalLink className="size-4" />
               </Link>
             </Button>
@@ -183,7 +183,7 @@ export default function BeginnerGuidePage() {
           </div>
         </aside>
 
-        <article className="min-w-0 rounded-xl border bg-card px-5 py-6 shadow-sm sm:px-8">
+        <article className="min-w-0 rounded-lg border bg-card px-5 py-6 sm:px-8">
           <div className="space-y-4">
             {blocks.map((block, index) => {
               if (block.type === "h1") return null;

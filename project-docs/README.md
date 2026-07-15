@@ -6,8 +6,8 @@ Start here:
 
 - `PROJECT_INTRO.md` - product introduction and product boundaries
 - `REVIEW_PACKAGE.md` - current Alpha review brief
-- `BEGINNER_TUTORIAL.md` - complete step-by-step guide for team members
-- `USER_GUIDE.md` - feature reference guide
+- `BEGINNER_TUTORIAL.md` - current complete step-by-step guide for team members, also served at `/guide`
+- `USER_GUIDE.md` - current feature, permission, budget, and audit-rule reference for project owners and administrators
 - `FEEDBACK_TEMPLATE.md` - structured feedback template
 - `TEAM_PILOT_DEPLOYMENT.md` - single-team production trial architecture and release runbook
 - `TENCENT_CVM_DEPLOYMENT.md` - hands-on Tencent Cloud CVM deployment guide
