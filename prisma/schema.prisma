@@ -223,6 +223,7 @@ model Task {
   assignee          String? // 执行人姓名
   department        String? // 负责部门（对标 Excel「负责部门」列）
   priority          String     @default("P2") // P0 | P1 | P2 | P3
+  sortOrder         Int        @default(0) // 项目内自定义排序；状态变化不影响此顺序
   deadline          DateTime?
   status            TaskStatus @default(PENDING)
   /// Legacy compatibility fields. New budget code must use BudgetItem and
@@ -249,6 +250,7 @@ model Task {
   @@index([status])
   @@index([deadline])
   @@index([assignee])
+  @@index([projectId, sortOrder])
   @@index([projectId, status, deadline])
 }
 

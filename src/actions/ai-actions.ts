@@ -454,6 +454,7 @@ export async function createProjectFromAI(
       const task = await tx.task.create({
         data: {
           projectId: createdProject.id,
+          sortOrder: i,
           phaseId: workstream ? phaseByWorkstream.get(workstream) ?? null : null,
           name: t.name.trim(),
           description: t.description?.trim() || null,

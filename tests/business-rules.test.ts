@@ -21,6 +21,25 @@ import { getProjectLifecycle } from "../src/lib/project-lifecycle";
 import { hashPassword, validatePassword, verifyPassword } from "../src/lib/password";
 import { parseBudgetPaste } from "../src/lib/budget-import";
 import { getProjectBudgetSummary } from "../src/lib/budget-summary";
+import { hasExactTaskOrder, moveTaskInList } from "../src/lib/task-order";
+
+describe("control-item ordering", () => {
+  it("keeps a manual order independent from task status or other display fields", () => {
+    const tasks = [
+      { id: "brief", status: "COMPLETED" },
+      { id: "launch", status: "IN_PROGRESS" },
+      { id: "review", status: "PENDING" },
+    ];
+
+    assert.deepEqual(moveTaskInList(tasks, "review", "brief").map((task) => task.id), ["review", "brief", "launch"]);
+  });
+
+  it("rejects stale, duplicated, or cross-project order payloads", () => {
+    assert.equal(hasExactTaskOrder(["a", "b", "c"], ["c", "a", "b"]), true);
+    assert.equal(hasExactTaskOrder(["a", "b", "c"], ["a", "a", "b"]), false);
+    assert.equal(hasExactTaskOrder(["a", "b", "c"], ["a", "b", "outside"]), false);
+  });
+});
 
 describe("budget business rules", () => {
   it("parses a lightweight tabular budget paste without requiring tasks", () => {

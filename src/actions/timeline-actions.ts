@@ -353,9 +353,11 @@ export async function adoptAIActionSuggestion(formData: FormData): Promise<Actio
   }
 
   const task = await prisma.$transaction(async (tx) => {
+    const sortOrder = await tx.task.count({ where: { projectId } });
     const createdTask = await tx.task.create({
       data: {
         projectId,
+        sortOrder,
         name: taskName.trim().slice(0, 120),
         description: `来自 AI 项目判断的行动建议：${action}`,
         notes: `采纳自活动流记录：${activityLogId}`,

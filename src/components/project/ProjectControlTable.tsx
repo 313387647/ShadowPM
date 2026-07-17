@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, FolderCog, Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader } from "@/components/ui/sheet";
-import { createTask, deleteTask, updateTask, updateTaskStatus } from "@/actions/task-actions";
+import { createTask, deleteTask, reorderProjectTasks, updateTask, updateTaskStatus } from "@/actions/task-actions";
 import { addProgressLog } from "@/actions/timeline-actions";
-import { PhaseManagerSheet } from "@/components/project/PhaseManagerSheet";
+import { moveTaskInList } from "@/lib/task-order";
 import { cn } from "@/lib/utils";
 
 type Task = {
@@ -54,7 +54,8 @@ export function ProjectControlTable({ projectId, tasks, phases, canEdit, viewerN
   const [showQuickAdd, setShowQuickAdd] = useState(tasks.length === 0);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
-  const [modulesOpen, setModulesOpen] = useState(false);
+  const [orderedTasks, setOrderedTasks] = useState(tasks);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     const focusedTask = searchParams.get("focusTask");
@@ -78,7 +79,9 @@ export function ProjectControlTable({ projectId, tasks, phases, canEdit, viewerN
     setAssigneeFilter(searchParams.get("taskAssignee") ?? "ALL");
   }, [searchParams]);
 
-  const visibleTasks = useMemo(() => tasks.filter((task) => matchesFilter(task, filter, viewerName) && matchesPhase(task, phaseFilter) && matchesAssignee(task, assigneeFilter) && matchesQuery(task, query)), [assigneeFilter, filter, phaseFilter, query, tasks, viewerName]);
+  useEffect(() => setOrderedTasks(tasks), [tasks]);
+
+  const visibleTasks = useMemo(() => orderedTasks.filter((task) => matchesFilter(task, filter, viewerName) && matchesPhase(task, phaseFilter) && matchesAssignee(task, assigneeFilter) && matchesQuery(task, query)), [assigneeFilter, filter, orderedTasks, phaseFilter, query, viewerName]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((item) => [item.value, tasks.filter((task) => matchesFilter(task, item.value, viewerName)).length])), [tasks, viewerName]) as Record<Filter, number>;
   const assignees = useMemo(() => Array.from(new Set(tasks.map((task) => task.assignee?.trim()).filter((value): value is string => Boolean(value)))).sort((left, right) => left.localeCompare(right, "zh-CN")), [tasks]);
 
@@ -95,22 +98,41 @@ export function ProjectControlTable({ projectId, tasks, phases, canEdit, viewerN
     router.replace(`/projects/${projectId}${params.size ? `?${params.toString()}` : ""}`, { scroll: false });
   }
 
+  const canReorder = canEdit && filter === "ALL" && phaseFilter === "ALL" && assigneeFilter === "ALL" && !query.trim();
+  async function persistOrder(nextTasks: Task[]) {
+    const previousTasks = orderedTasks;
+    setOrderedTasks(nextTasks);
+    const result = await reorderProjectTasks(projectId, nextTasks.map((task) => task.id));
+    if (!result.success) { setOrderedTasks(previousTasks); toast.error(result.message ?? "排序保存失败"); return; }
+    router.refresh();
+  }
+  function moveTask(taskId: string, targetId: string) {
+    if (!canReorder || taskId === targetId) return;
+    const nextTasks = moveTaskInList(orderedTasks, taskId, targetId);
+    if (nextTasks !== orderedTasks) void persistOrder(nextTasks);
+  }
+  function moveTaskByOffset(taskId: string, offset: -1 | 1) {
+    if (!canReorder) return;
+    const index = orderedTasks.findIndex((task) => task.id === taskId);
+    const target = orderedTasks[index + offset];
+    if (target) moveTask(taskId, target.id);
+  }
+
   return <div className="space-y-3">
-    <div className="flex justify-end gap-2">{canEdit && <><Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setModulesOpen(true)}><FolderCog className="size-3.5" />管理模块</Button><Button size="sm" className="h-8 gap-1.5" onClick={() => setShowQuickAdd((value) => !value)}><Plus className="size-3.5" />添加事项</Button></>}</div>
+    <div className="flex justify-end gap-2">{canEdit && <Button size="sm" className="h-8 gap-1.5" onClick={() => setShowQuickAdd((value) => !value)}><Plus className="size-3.5" />添加事项</Button>}</div>
     {canEdit && showQuickAdd && <ControlItemQuickAdd projectId={projectId} phases={phases} onComplete={() => { setShowQuickAdd(false); router.refresh(); }} />}
     <section className="table-shell">
       <ControlTableToolbar filter={filter} counts={counts} query={query} searchRef={searchRef} phases={phases} assignees={assignees} phaseFilter={phaseFilter} assigneeFilter={assigneeFilter} onFilter={selectFilter} onPhaseFilter={(value) => selectDimension("taskModule", value)} onAssigneeFilter={(value) => selectDimension("taskAssignee", value)} onQuery={setQuery} />
-      {visibleTasks.length === 0 ? <div className="px-4 py-14 text-center text-sm text-muted-foreground">当前筛选下暂无管控事项。</div> : <><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[860px] text-left text-sm"><thead className="border-b border-border bg-muted/25 text-xs text-muted-foreground"><tr><th className="min-w-[290px] px-4 py-2.5 font-medium">事项</th><th className="w-[110px] px-3 py-2.5 font-medium">状态</th><th className="w-[130px] px-3 py-2.5 font-medium">负责人</th><th className="w-[120px] px-3 py-2.5 font-medium">截止日期</th><th className="min-w-[210px] px-3 py-2.5 font-medium">最新进展</th><th className="min-w-[130px] px-3 py-2.5 font-medium">关注信号</th></tr></thead><tbody className="divide-y divide-border">{visibleTasks.map((task) => <ControlTableRow key={task.id} task={task} phases={phases} canEdit={canEdit} onOpen={() => setSelectedTask(task)} />)}</tbody></table></div><ControlMobileList tasks={visibleTasks} canEdit={canEdit} onOpen={setSelectedTask} /></>}
+      {visibleTasks.length === 0 ? <div className="px-4 py-14 text-center text-sm text-muted-foreground">当前筛选下暂无管控事项。</div> : <><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[900px] text-left text-sm"><thead className="border-b border-border bg-muted/25 text-xs text-muted-foreground"><tr><th className="w-9 px-2 py-2.5"><span className="sr-only">排序</span></th><th className="min-w-[290px] px-4 py-2.5 font-medium">事项</th><th className="w-[110px] px-3 py-2.5 font-medium">状态</th><th className="w-[130px] px-3 py-2.5 font-medium">负责人</th><th className="w-[120px] px-3 py-2.5 font-medium">截止日期</th><th className="min-w-[210px] px-3 py-2.5 font-medium">最新进展</th><th className="min-w-[130px] px-3 py-2.5 font-medium">关注信号</th></tr></thead><tbody className="divide-y divide-border">{visibleTasks.map((task) => <ControlTableRow key={task.id} task={task} phases={phases} canEdit={canEdit} canReorder={canReorder} isDragging={draggedTaskId === task.id} onDragStart={setDraggedTaskId} onDrop={moveTask} onDragEnd={() => setDraggedTaskId(null)} onOpen={() => setSelectedTask(task)} />)}</tbody></table></div><ControlMobileList tasks={visibleTasks} canEdit={canEdit} canReorder={canReorder} onMove={moveTaskByOffset} onOpen={setSelectedTask} /></>}
     </section>
     <ControlItemDetailSheet key={selectedTask?.id ?? "none"} task={selectedTask} phases={phases} canEdit={canEdit} onOpenChange={(open) => !open && setSelectedTask(null)} onDelete={() => { if (selectedTask) setDeleteTarget(selectedTask); }} />
     <DeleteTaskDialog task={deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} onDeleted={() => { setDeleteTarget(null); setSelectedTask(null); router.refresh(); }} />
-    {canEdit && <PhaseManagerSheet projectId={projectId} phases={phases} open={modulesOpen} onOpenChange={setModulesOpen} />}
   </div>;
 }
 
 function ControlTableToolbar({ filter, counts, query, searchRef, phases, assignees, phaseFilter, assigneeFilter, onFilter, onPhaseFilter, onAssigneeFilter, onQuery }: { filter: Filter; counts: Record<Filter, number>; query: string; searchRef: React.RefObject<HTMLInputElement>; phases: PhaseOption[]; assignees: string[]; phaseFilter: PhaseFilter; assigneeFilter: AssigneeFilter; onFilter: (filter: Filter) => void; onPhaseFilter: (value: string) => void; onAssigneeFilter: (value: string) => void; onQuery: (query: string) => void }) { return <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5"><div className="flex flex-wrap gap-1">{FILTERS.map((item) => <button key={item.value} type="button" onClick={() => onFilter(item.value)} className={filter === item.value ? "rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary" : "rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"}>{item.label}<span className="ml-1.5 tabular-nums opacity-70">{counts[item.value]}</span></button>)}</div><div className="flex w-full flex-wrap gap-2 sm:w-auto"><select aria-label="按模块筛选" value={phaseFilter} onChange={(event) => onPhaseFilter(event.target.value)} className="h-8 min-w-28 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary"><option value="ALL">全部模块</option><option value="__NONE__">未分模块</option>{phases.map((phase) => <option key={phase.id} value={phase.id}>{phase.name}</option>)}</select><select aria-label="按负责人筛选" value={assigneeFilter} onChange={(event) => onAssigneeFilter(event.target.value)} className="h-8 min-w-28 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary"><option value="ALL">全部负责人</option><option value="__NONE__">待补负责人</option>{assignees.map((assignee) => <option key={assignee} value={assignee}>{assignee}</option>)}</select><div className="relative min-w-48 flex-1 sm:w-60 sm:flex-none"><input ref={searchRef} value={query} onChange={(event) => onQuery(event.target.value)} placeholder="搜索事项、负责人" className="h-8 w-full rounded-md border border-border bg-background px-2.5 pr-8 text-xs outline-none focus:border-primary" /><span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">/</span></div></div></div>; }
 
-function ControlTableRow({ task, phases, canEdit, onOpen }: { task: Task; phases: PhaseOption[]; canEdit: boolean; onOpen: () => void }) {
+function ControlTableRow({ task, phases, canEdit, canReorder, isDragging, onDragStart, onDrop, onDragEnd, onOpen }: { task: Task; phases: PhaseOption[]; canEdit: boolean; canReorder: boolean; isDragging: boolean; onDragStart: (taskId: string) => void; onDrop: (taskId: string, targetId: string) => void; onDragEnd: () => void; onOpen: () => void }) {
   const router = useRouter();
   const [editing, setEditing] = useState<Field | null>(null);
   const [draft, setDraft] = useState("");
@@ -123,7 +145,8 @@ function ControlTableRow({ task, phases, canEdit, onOpen }: { task: Task; phases
   async function changeStatus(status: Task["status"]) { if (!canEdit || status === task.status) return; const result = await updateTaskStatus(task.id, status); if (!result.success) toast.error(result.message ?? "状态更新失败"); else router.refresh(); }
   function keyboardSave(event: React.KeyboardEvent<HTMLInputElement>) { if (event.key === "Enter") { event.preventDefault(); if (editing) saveField(editing); } if (event.key === "Escape") cancelEdit(); }
 
-  return <tr className="group cursor-pointer transition-colors hover:bg-primary/[0.04]" onClick={onOpen}>
+  return <tr className={cn("group cursor-pointer transition-colors hover:bg-primary/[0.04]", isDragging && "opacity-40")} onClick={onOpen} onDragOver={(event) => { if (canReorder) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); const taskId = event.dataTransfer.getData("text/plain"); if (taskId) onDrop(taskId, task.id); }}>
+    <td className="px-2 py-3" onClick={(event) => event.stopPropagation()}>{canReorder && <button type="button" draggable aria-label={`拖动排序：${task.name}`} title="拖动排序" onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); onDragStart(task.id); }} onDragEnd={onDragEnd} className="grid size-7 cursor-grab place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"><GripVertical className="size-4" /></button>}</td>
     <td className="px-4 py-3"><div className="min-w-0">{phaseName && <div className="mb-1"><span className="rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">{phaseName}</span></div>}<p className="truncate font-medium">{task.name}</p>{task.description && <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{task.description}</p>}</div></td>
     <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}><select aria-label="更新事项状态" disabled={!canEdit} value={task.status} onChange={(event) => changeStatus(event.target.value as Task["status"])} className={cn("h-7 rounded border px-1.5 text-xs font-medium outline-none", STATUS_STYLE[task.status], canEdit && "cursor-pointer")}><option value="PENDING">待启动</option><option value="IN_PROGRESS">进行中</option><option value="COMPLETED">已完成</option></select></td>
     <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>{editing === "assignee" ? <InlineInput value={draft} placeholder="负责人" saving={saving} onChange={setDraft} onKeyDown={keyboardSave} onBlur={() => saveField("assignee")} /> : <button type="button" onClick={() => beginEdit("assignee")} className={task.assignee ? "text-left text-sm hover:text-primary" : "text-left text-sm text-warning hover:text-primary"}>{task.assignee || "待补负责人"}</button>}</td>
@@ -133,10 +156,10 @@ function ControlTableRow({ task, phases, canEdit, onOpen }: { task: Task; phases
   </tr>;
 }
 
-function ControlMobileList({ tasks, canEdit, onOpen }: { tasks: Task[]; canEdit: boolean; onOpen: (task: Task) => void }) {
+function ControlMobileList({ tasks, canEdit, canReorder, onMove, onOpen }: { tasks: Task[]; canEdit: boolean; canReorder: boolean; onMove: (taskId: string, offset: -1 | 1) => void; onOpen: (task: Task) => void }) {
   const router = useRouter();
   async function changeStatus(task: Task, status: Task["status"]) { if (!canEdit || status === task.status) return; const result = await updateTaskStatus(task.id, status); if (!result.success) toast.error(result.message ?? "状态更新失败"); else router.refresh(); }
-  return <div className="divide-y divide-border md:hidden">{tasks.map((task) => <button key={task.id} type="button" onClick={() => onOpen(task)} className="block w-full px-4 py-4 text-left transition-colors hover:bg-primary/[0.04]"><div className="flex items-start justify-between gap-3"><p className="min-w-0 flex-1 truncate font-medium">{task.name}</p><select aria-label={`更新 ${task.name} 状态`} disabled={!canEdit} value={task.status} onClick={(event) => event.stopPropagation()} onChange={(event) => void changeStatus(task, event.target.value as Task["status"])} className={cn("h-7 shrink-0 rounded border px-1.5 text-xs font-medium outline-none", STATUS_STYLE[task.status], canEdit && "cursor-pointer")}><option value="PENDING">待启动</option><option value="IN_PROGRESS">进行中</option><option value="COMPLETED">已完成</option></select></div><p className="mt-1 text-xs text-muted-foreground">{task.assignee || "待补负责人"} · {task.deadline ? formatDate(task.deadline) : "待补日期"}</p><p className="mt-2 line-clamp-1 text-xs text-secondary-foreground">{task.notes || task.description || "暂无进展"}</p><div className="mt-2"><ControlItemSignals task={task} /></div></button>)}</div>;
+  return <div className="divide-y divide-border md:hidden">{tasks.map((task, index) => <div key={task.id} role="button" tabIndex={0} onClick={() => onOpen(task)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(task); } }} className="block w-full px-4 py-4 text-left transition-colors hover:bg-primary/[0.04]"><div className="flex items-start justify-between gap-3"><p className="min-w-0 flex-1 truncate font-medium">{task.name}</p><select aria-label={`更新 ${task.name} 状态`} disabled={!canEdit} value={task.status} onClick={(event) => event.stopPropagation()} onChange={(event) => void changeStatus(task, event.target.value as Task["status"])} className={cn("h-7 shrink-0 rounded border px-1.5 text-xs font-medium outline-none", STATUS_STYLE[task.status], canEdit && "cursor-pointer")}><option value="PENDING">待启动</option><option value="IN_PROGRESS">进行中</option><option value="COMPLETED">已完成</option></select></div><p className="mt-1 text-xs text-muted-foreground">{task.assignee || "待补负责人"} · {task.deadline ? formatDate(task.deadline) : "待补日期"}</p><p className="mt-2 line-clamp-1 text-xs text-secondary-foreground">{task.notes || task.description || "暂无进展"}</p><div className="mt-2 flex items-center justify-between gap-3"><ControlItemSignals task={task} />{canReorder && <div className="ml-auto flex items-center gap-1"><button type="button" aria-label={`上移 ${task.name}`} disabled={index === 0} onClick={(event) => { event.stopPropagation(); onMove(task.id, -1); }} className="grid size-7 place-items-center rounded border border-border text-muted-foreground disabled:opacity-30"><ChevronUp className="size-3.5" /></button><button type="button" aria-label={`下移 ${task.name}`} disabled={index === tasks.length - 1} onClick={(event) => { event.stopPropagation(); onMove(task.id, 1); }} className="grid size-7 place-items-center rounded border border-border text-muted-foreground disabled:opacity-30"><ChevronDown className="size-3.5" /></button></div>}</div></div>)}</div>;
 }
 
 function InlineInput({ value, type = "text", placeholder, saving, onChange, onKeyDown, onBlur }: { value: string; type?: string; placeholder?: string; saving: boolean; onChange: (value: string) => void; onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void; onBlur: () => void }) { return <input autoFocus type={type} value={value} placeholder={placeholder} disabled={saving} onChange={(event) => onChange(event.target.value)} onKeyDown={onKeyDown} onBlur={onBlur} className="h-7 w-full rounded border border-primary bg-background px-1.5 text-xs outline-none" />; }
@@ -151,19 +174,20 @@ function ControlItemDetailSheet({ task, phases, canEdit, onOpenChange, onDelete 
   const [savingProgress, setSavingProgress] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const [description, setDescription] = useState(task?.description ?? "");
-  const [phaseId, setPhaseId] = useState(task?.phaseId ?? "");
+  const [phaseNameInput, setPhaseNameInput] = useState(() => phases.find((phase) => phase.id === task?.phaseId)?.name ?? "");
   if (!task) return null;
 
   const currentTask = task;
   const phaseName = phases.find((phase) => phase.id === currentTask.phaseId)?.name ?? "未分模块";
-  const detailsChanged = description !== (currentTask.description ?? "") || phaseId !== (currentTask.phaseId ?? "");
+  const detailsChanged = description !== (currentTask.description ?? "") || phaseNameInput !== (phases.find((phase) => phase.id === currentTask.phaseId)?.name ?? "");
 
   async function saveDetails() {
     if (!canEdit || !detailsChanged || savingDetails) return;
     setSavingDetails(true);
     const formData = taskFormData(currentTask);
     formData.set("description", description);
-    formData.set("phaseId", phaseId);
+    formData.set("phaseId", "");
+    formData.set("phaseName", phaseNameInput);
     try {
       const result = await updateTask(formData);
       if (!result.success) toast.error(result.message ?? "保存失败");
@@ -200,7 +224,7 @@ function ControlItemDetailSheet({ task, phases, canEdit, onOpenChange, onDelete 
     else router.refresh();
   }
 
-  return <Sheet open onOpenChange={onOpenChange}><SheetContent><SheetHeader title={currentTask.name} description={phaseName} /><div className="border-b border-border px-5 py-3"><select aria-label="更新事项状态" disabled={!canEdit} value={currentTask.status} onChange={(event) => void changeStatus(event.target.value as Task["status"])} className={cn("h-8 rounded border px-2 text-xs font-medium outline-none", STATUS_STYLE[currentTask.status], canEdit && "cursor-pointer")}><option value="PENDING">待启动</option><option value="IN_PROGRESS">进行中</option><option value="COMPLETED">已完成</option></select></div><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5"><section className="space-y-3"><label className="block text-sm font-medium">模块<select value={phaseId} disabled={!canEdit || savingDetails} onChange={(event) => setPhaseId(event.target.value)} className="mt-1.5 h-9 w-full rounded-md border bg-background px-2.5 text-sm font-normal outline-none focus:border-primary"><option value="">未分模块</option>{phases.map((phase) => <option key={phase.id} value={phase.id}>{phase.name}</option>)}</select></label><label className="block text-sm font-medium">事项说明<textarea value={description} disabled={!canEdit || savingDetails} onChange={(event) => setDescription(event.target.value)} rows={4} className="mt-1.5 w-full resize-none rounded-md border bg-background px-3 py-2 text-sm font-normal leading-6 outline-none focus:border-primary" placeholder="补充事项背景、交付范围或执行要求" /></label>{canEdit && <div className="flex justify-end"><Button size="sm" disabled={!detailsChanged || savingDetails} onClick={saveDetails}>{savingDetails ? "保存中" : "保存事项资料"}</Button></div>}<DetailRow label="负责人" value={currentTask.assignee || "待补负责人"} /><DetailRow label="部门" value={currentTask.department || "待补部门"} /><DetailRow label="截止日期" value={currentTask.deadline ? formatDate(currentTask.deadline) : "待补日期"} /><DetailRow label="优先级" value={currentTask.priority} /><DetailRow label="当前结论" value={currentTask.notes || "暂无进展"} /></section><section className="border-t border-border pt-4"><h3 className="text-sm font-semibold">关联信息</h3><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-md bg-muted/50 px-3 py-2"><p className="text-muted-foreground">执行日历</p><p className="mt-1 font-medium">{currentTask._count.calendarEntries} 个节点</p></div><div className="rounded-md bg-muted/50 px-3 py-2"><p className="text-muted-foreground">进展记录</p><p className="mt-1 font-medium">{currentTask._count.logs} 条</p></div></div></section><section className="border-t border-border pt-4"><h3 className="text-sm font-semibold">最近进展</h3><div className="mt-3 space-y-2">{currentTask.logs.length ? currentTask.logs.map((log) => <div key={log.id} className="border-l-2 border-border pl-3"><p className="text-xs leading-5">{log.content}</p><p className="mt-1 text-[11px] text-muted-foreground">{log.createdBy} · {formatDateTime(log.createdAt)}</p></div>) : <p className="text-xs text-muted-foreground">尚无进展记录。</p>}</div>{canEdit && <div className="mt-4 space-y-2"><textarea value={progress} onChange={(event) => setProgress(event.target.value)} placeholder="补充一次进展，自动写入活动记录和最新进展" rows={3} className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary" /><div className="flex justify-end"><Button size="sm" disabled={savingProgress || !progress.trim()} onClick={recordProgress}>{savingProgress ? "记录中" : "记录进展"}</Button></div></div>}</section>{canEdit && <section className="border-t border-border pt-4"><Button variant="ghost" size="sm" className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}><Trash2 className="size-3.5" />删除事项</Button></section>}</div></SheetContent></Sheet>;
+  return <Sheet open onOpenChange={onOpenChange}><SheetContent><SheetHeader title={currentTask.name} description={phaseName} /><div className="border-b border-border px-5 py-3"><select aria-label="更新事项状态" disabled={!canEdit} value={currentTask.status} onChange={(event) => void changeStatus(event.target.value as Task["status"])} className={cn("h-8 rounded border px-2 text-xs font-medium outline-none", STATUS_STYLE[currentTask.status], canEdit && "cursor-pointer")}><option value="PENDING">待启动</option><option value="IN_PROGRESS">进行中</option><option value="COMPLETED">已完成</option></select></div><div className="flex-1 space-y-5 overflow-y-auto px-5 py-5"><section className="space-y-3"><label className="block text-sm font-medium">模块<input list="task-phase-options" value={phaseNameInput} disabled={!canEdit || savingDetails} onChange={(event) => setPhaseNameInput(event.target.value)} placeholder="留空表示未分模块" className="mt-1.5 h-9 w-full rounded-md border bg-background px-2.5 text-sm font-normal outline-none focus:border-primary" /><datalist id="task-phase-options">{phases.map((phase) => <option key={phase.id} value={phase.name} />)}</datalist></label><label className="block text-sm font-medium">事项说明<textarea value={description} disabled={!canEdit || savingDetails} onChange={(event) => setDescription(event.target.value)} rows={4} className="mt-1.5 w-full resize-none rounded-md border bg-background px-3 py-2 text-sm font-normal leading-6 outline-none focus:border-primary" placeholder="补充事项背景、交付范围或执行要求" /></label>{canEdit && <div className="flex justify-end"><Button size="sm" disabled={!detailsChanged || savingDetails} onClick={saveDetails}>{savingDetails ? "保存中" : "保存事项资料"}</Button></div>}<DetailRow label="负责人" value={currentTask.assignee || "待补负责人"} /><DetailRow label="部门" value={currentTask.department || "待补部门"} /><DetailRow label="截止日期" value={currentTask.deadline ? formatDate(currentTask.deadline) : "待补日期"} /><DetailRow label="优先级" value={currentTask.priority} /><DetailRow label="当前结论" value={currentTask.notes || "暂无进展"} /></section><section className="border-t border-border pt-4"><h3 className="text-sm font-semibold">关联信息</h3><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-md bg-muted/50 px-3 py-2"><p className="text-muted-foreground">执行日历</p><p className="mt-1 font-medium">{currentTask._count.calendarEntries} 个节点</p></div><div className="rounded-md bg-muted/50 px-3 py-2"><p className="text-muted-foreground">进展记录</p><p className="mt-1 font-medium">{currentTask._count.logs} 条</p></div></div></section><section className="border-t border-border pt-4"><h3 className="text-sm font-semibold">最近进展</h3><div className="mt-3 space-y-2">{currentTask.logs.length ? currentTask.logs.map((log) => <div key={log.id} className="border-l-2 border-border pl-3"><p className="text-xs leading-5">{log.content}</p><p className="mt-1 text-[11px] text-muted-foreground">{log.createdBy} · {formatDateTime(log.createdAt)}</p></div>) : <p className="text-xs text-muted-foreground">尚无进展记录。</p>}</div>{canEdit && <div className="mt-4 space-y-2"><textarea value={progress} onChange={(event) => setProgress(event.target.value)} placeholder="补充一次进展，自动写入活动记录和最新进展" rows={3} className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary" /><div className="flex justify-end"><Button size="sm" disabled={savingProgress || !progress.trim()} onClick={recordProgress}>{savingProgress ? "记录中" : "记录进展"}</Button></div></div>}</section>{canEdit && <section className="border-t border-border pt-4"><Button variant="ghost" size="sm" className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}><Trash2 className="size-3.5" />删除事项</Button></section>}</div></SheetContent></Sheet>;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) { return <div><p className="text-[11px] text-muted-foreground">{label}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6">{value}</p></div>; }

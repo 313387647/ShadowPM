@@ -784,6 +784,7 @@ async function main() {
           department: item.department,
           deadline,
           priority: item.priority,
+          sortOrder: itemIndex,
           status,
           needsConfirmation: false,
           missingFields: [],

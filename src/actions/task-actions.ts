@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { assertCanReadProject, assertCanWriteProject, assertCanWriteTask } from "@/lib/permissions";
+import { hasExactTaskOrder } from "@/lib/task-order";
 import type { ActionResult } from "@/actions/types";
 
 /** 安全解析 HTML date input（"YYYY-MM-DD"），强制 UTC 午夜，杜绝时区偏移 */
@@ -83,11 +84,37 @@ export async function getProjectTasks(projectId: string) {
       },
       _count: { select: { logs: true, calendarEntries: true } },
     },
-    // A status change is an operational update, not an instruction to reshuffle
-    // the control table. Keep the table stable by module, then priority/name.
-    orderBy: [{ phase: { sortOrder: "asc" } }, { priority: "asc" }, { name: "asc" }],
+    // Status is operational data, never an instruction to reshuffle work.
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
   });
   return tasks;
+}
+
+export async function reorderProjectTasks(projectId: string, orderedTaskIds: string[]): Promise<ActionResult> {
+  const user = await assertCanWriteProject(projectId);
+  const existing = await prisma.task.findMany({ where: { projectId }, select: { id: true } });
+  if (!hasExactTaskOrder(existing.map((task) => task.id), orderedTaskIds)) {
+    return { success: false, message: "排序数据已过期，请刷新后重试" };
+  }
+
+  await prisma.$transaction([
+    ...orderedTaskIds.map((id, sortOrder) => prisma.task.update({ where: { id }, data: { sortOrder } })),
+    prisma.activityLog.create({
+      data: {
+        projectId,
+        targetType: "PROJECT",
+        targetId: projectId,
+        changeType: "UPDATE",
+        summary: "调整管控事项自定义顺序",
+        afterState: { orderedTaskIds },
+        source: "HUMAN",
+        createdBy: user.name,
+      },
+    }),
+  ]);
+
+  revalidatePath(`/projects/${projectId}`);
+  return { success: true, message: "事项顺序已更新" };
 }
 
 // ── 新增 ──
@@ -139,7 +166,8 @@ export async function createTask(formData: FormData): Promise<ActionResult> {
   };
 
   await prisma.$transaction(async (tx) => {
-    const task = await tx.task.create({ data: taskData });
+    const sortOrder = await tx.task.count({ where: { projectId } });
+    const task = await tx.task.create({ data: { ...taskData, sortOrder } });
 
     await tx.activityLog.create({
       data: {
@@ -213,6 +241,8 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
   const notes = (formData.get("notes") as string) || null;
   const department = (formData.get("department") as string) || null;
   const phaseId = (formData.get("phaseId") as string) || null;
+  const hasPhaseName = formData.has("phaseName");
+  const phaseName = normalizeText((formData.get("phaseName") as string) || null);
   const priority = normalizePriority((formData.get("priority") as string) || null);
   const status = normalizeStatus((formData.get("status") as string) || null);
 
@@ -237,10 +267,31 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
   });
   if (!task) return { success: false, message: "任务不存在" };
 
-  const nextPhase = phaseId
+  let nextPhaseId = phaseId;
+  let nextPhase = phaseId
     ? await prisma.phase.findFirst({ where: { id: phaseId, projectId: task.projectId }, select: { id: true, name: true } })
     : null;
   if (phaseId && !nextPhase) return { success: false, message: "模块不存在或不属于当前项目" };
+
+  if (hasPhaseName) {
+    if (!phaseName) {
+      nextPhaseId = null;
+      nextPhase = null;
+    } else {
+      nextPhase = await prisma.phase.findFirst({
+        where: { projectId: task.projectId, name: phaseName },
+        select: { id: true, name: true },
+      }) ?? await prisma.phase.create({
+        data: {
+          projectId: task.projectId,
+          name: phaseName,
+          sortOrder: await prisma.phase.count({ where: { projectId: task.projectId } }),
+        },
+        select: { id: true, name: true },
+      });
+      nextPhaseId = nextPhase.id;
+    }
+  }
 
   const nextTask = {
     name: name.trim(),
@@ -251,10 +302,10 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
     department: normalizeText(department),
     priority,
     status,
-    phaseId,
+    phaseId: nextPhaseId,
   };
   const changes = buildTaskChangeLog(task, nextTask);
-  if (task.phaseId !== phaseId) {
+  if (task.phaseId !== nextPhaseId) {
     const previousPhase = task.phaseId
       ? await prisma.phase.findUnique({ where: { id: task.phaseId }, select: { name: true } })
       : null;
