@@ -83,7 +83,9 @@ export async function getProjectTasks(projectId: string) {
       },
       _count: { select: { logs: true, calendarEntries: true } },
     },
-    orderBy: [{ priority: "asc" }, { status: "asc" }, { name: "asc" }],
+    // A status change is an operational update, not an instruction to reshuffle
+    // the control table. Keep the table stable by module, then priority/name.
+    orderBy: [{ phase: { sortOrder: "asc" } }, { priority: "asc" }, { name: "asc" }],
   });
   return tasks;
 }
