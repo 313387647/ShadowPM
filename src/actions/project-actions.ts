@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { assertCanManageProject, assertCanReadProject, requireCurrentUser } from "@/lib/permissions";
+import { assertCanManageProject, assertCanReadProject, assertCanWriteProject, requireCurrentUser } from "@/lib/permissions";
 import { getProjectBudgetSummary } from "@/lib/budget-summary";
 import { canWriteProject } from "@/lib/permission-rules";
 import type { ActionResult } from "@/actions/types";
@@ -223,7 +223,7 @@ function extractPendingBudgetSignal(states: unknown[]) {
 }
 
 export async function deleteProject(projectId: string): Promise<ActionResult> {
-  const user = await assertCanManageProject(projectId);
+  const user = await assertCanWriteProject(projectId);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },

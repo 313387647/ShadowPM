@@ -22,14 +22,14 @@ function dateValue(value: Date | string | null) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
-export function ProjectManageActions({ project, canManage }: { project: ProjectSummary; canManage: boolean }) {
+export function ProjectManageActions({ project, canEdit, canManage }: { project: ProjectSummary; canEdit: boolean; canManage: boolean }) {
   const router = useRouter();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  if (!canManage) return null;
+  if (!canEdit) return null;
 
   async function saveInfo(formData: FormData) {
     if (submitting) return;
@@ -117,8 +117,7 @@ export function ProjectManageActions({ project, canManage }: { project: ProjectS
             <p className="text-xs leading-5 text-muted-foreground">项目预算由资金账本的“总预算确认”维护，避免项目资料与账本出现两个口径。</p>
             <div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="ghost" onClick={() => setSettingsOpen(false)}>取消</Button><Button type="submit" disabled={submitting}>{submitting ? "保存中" : "保存"}</Button></div>
           </form>
-          <section className="mt-8 border-t pt-5"><p className="text-sm font-medium">项目生命周期</p><p className="mt-1 text-xs text-muted-foreground">归档会移出日常工作区，历史数据保持可追溯。</p><Button type="button" size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => setArchiveOpen(true)}>{project.archivedAt ? <ArchiveRestore className="size-3.5" /> : <Archive className="size-3.5" />}{project.archivedAt ? "恢复项目" : "归档项目"}</Button></section>
-          <section className="mt-6 border-t border-destructive/20 pt-5"><p className="text-sm font-medium text-destructive">危险操作</p><p className="mt-1 text-xs text-muted-foreground">删除后无法恢复，项目活动会同时移除。</p><Button type="button" size="sm" variant="ghost" className="mt-3 gap-1.5 text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}><Trash2 className="size-3.5" />删除项目</Button></section>
+          {canManage && <><section className="mt-8 border-t pt-5"><p className="text-sm font-medium">项目生命周期</p><p className="mt-1 text-xs text-muted-foreground">归档会移出日常工作区，历史数据保持可追溯。</p><Button type="button" size="sm" variant="outline" className="mt-3 gap-1.5" onClick={() => setArchiveOpen(true)}>{project.archivedAt ? <ArchiveRestore className="size-3.5" /> : <Archive className="size-3.5" />}{project.archivedAt ? "恢复项目" : "归档项目"}</Button></section><section className="mt-6 border-t border-destructive/20 pt-5"><p className="text-sm font-medium text-destructive">危险操作</p><p className="mt-1 text-xs text-muted-foreground">删除后无法恢复，项目活动会同时移除。</p><Button type="button" size="sm" variant="ghost" className="mt-3 gap-1.5 text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}><Trash2 className="size-3.5" />删除项目</Button></section></>}
           </div>
         </SheetContent>
       </Sheet>

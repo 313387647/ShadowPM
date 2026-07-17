@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, FolderCog, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader } from "@/components/ui/sheet";
 import { createTask, deleteTask, updateTask, updateTaskStatus } from "@/actions/task-actions";
 import { addProgressLog } from "@/actions/timeline-actions";
+import { PhaseManagerSheet } from "@/components/project/PhaseManagerSheet";
 import { cn } from "@/lib/utils";
 
 type Task = {
@@ -53,6 +54,7 @@ export function ProjectControlTable({ projectId, tasks, phases, canEdit, viewerN
   const [showQuickAdd, setShowQuickAdd] = useState(tasks.length === 0);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
+  const [modulesOpen, setModulesOpen] = useState(false);
 
   useEffect(() => {
     const focusedTask = searchParams.get("focusTask");
@@ -94,7 +96,7 @@ export function ProjectControlTable({ projectId, tasks, phases, canEdit, viewerN
   }
 
   return <div className="space-y-3">
-    <div className="flex justify-end">{canEdit && <Button size="sm" className="h-8 gap-1.5" onClick={() => setShowQuickAdd((value) => !value)}><Plus className="size-3.5" />添加事项</Button>}</div>
+    <div className="flex justify-end gap-2">{canEdit && <><Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setModulesOpen(true)}><FolderCog className="size-3.5" />管理模块</Button><Button size="sm" className="h-8 gap-1.5" onClick={() => setShowQuickAdd((value) => !value)}><Plus className="size-3.5" />添加事项</Button></>}</div>
     {canEdit && showQuickAdd && <ControlItemQuickAdd projectId={projectId} phases={phases} onComplete={() => { setShowQuickAdd(false); router.refresh(); }} />}
     <section className="table-shell">
       <ControlTableToolbar filter={filter} counts={counts} query={query} searchRef={searchRef} phases={phases} assignees={assignees} phaseFilter={phaseFilter} assigneeFilter={assigneeFilter} onFilter={selectFilter} onPhaseFilter={(value) => selectDimension("taskModule", value)} onAssigneeFilter={(value) => selectDimension("taskAssignee", value)} onQuery={setQuery} />
@@ -102,6 +104,7 @@ export function ProjectControlTable({ projectId, tasks, phases, canEdit, viewerN
     </section>
     <ControlItemDetailSheet task={selectedTask} phases={phases} canEdit={canEdit} onOpenChange={(open) => !open && setSelectedTask(null)} onDelete={() => { if (selectedTask) setDeleteTarget(selectedTask); }} />
     <DeleteTaskDialog task={deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} onDeleted={() => { setDeleteTarget(null); setSelectedTask(null); router.refresh(); }} />
+    {canEdit && <PhaseManagerSheet projectId={projectId} phases={phases} open={modulesOpen} onOpenChange={setModulesOpen} />}
   </div>;
 }
 
