@@ -87,9 +87,10 @@ openssl rand -base64 48
 docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres
 ```
 
-执行正式 migration。不要运行 demo seed：
+构建最新的迁移镜像并执行正式 migration。`migrator` 是独立 Docker target，不能只重建 `app`；否则应用代码与数据库 schema 可能不一致。不要运行 demo seed：
 
 ```bash
+docker compose --profile tools --env-file .env.production -f docker-compose.production.yml build migrator
 docker compose --profile tools --env-file .env.production -f docker-compose.production.yml run --rm migrator
 ```
 
@@ -201,9 +202,10 @@ docker compose --env-file .env.production -f docker-compose.production.yml logs 
 cd ~/ShadowPM
 git pull
 docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres
+docker compose --profile tools --env-file .env.production -f docker-compose.production.yml build migrator
 docker compose --profile tools --env-file .env.production -f docker-compose.production.yml run --rm migrator
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build app
 curl -fsS https://pm.你的域名.com/api/health
 ```
 
-不要执行 `npm run db:seed:demo` 或 `prisma db push --force-reset`。
+不要执行 `npm run db:seed:demo` 或 `prisma db push --force-reset`。如果迁移命令显示已完成、但应用报 Prisma 字段缺失错误，先检查是否遗漏了 `build migrator`；不要直接在生产库执行重置或回滚。

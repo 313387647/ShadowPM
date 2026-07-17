@@ -82,10 +82,12 @@ npm run team:create-member
 
 1. 在本机先通过 `npm test`、`npm run lint`、`npm run build`。
 2. 数据库变化必须新增 migration；不要在正式库使用 `db push`。
-3. 先确认自动备份成功，再运行 `npm run db:migrate:deploy`。
+3. 先确认自动备份成功，显式构建最新 `migrator` 镜像，再运行 `npm run db:migrate:deploy`。应用镜像和迁移镜像是不同 Docker target，不能只更新应用镜像。
 4. 更新镜像并重启 ShadowPM 容器。
 5. 冒烟：管理员登录、普通成员登录、工作空间、一个项目详情、资金账本、执行月历、AI 导入、退出登录、`/api/health`。
 6. 回归时仅回滚应用镜像；已执行的数据库 migration 用新的前向修复 migration 处理，不对真实数据做盲目回滚。
+
+生产环境的实际命令以 [TENCENT_CVM_DEPLOYMENT.md](./TENCENT_CVM_DEPLOYMENT.md) 的“以后更新”段落为准，其中包含 `build migrator`。
 
 ## 试运营首周
 
