@@ -212,6 +212,7 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
   const description = (formData.get("description") as string) || null;
   const notes = (formData.get("notes") as string) || null;
   const department = (formData.get("department") as string) || null;
+  const phaseId = (formData.get("phaseId") as string) || null;
   const priority = normalizePriority((formData.get("priority") as string) || null);
   const status = normalizeStatus((formData.get("status") as string) || null);
 
@@ -231,9 +232,15 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
       notes: true,
       priority: true,
       status: true,
+      phaseId: true,
     },
   });
   if (!task) return { success: false, message: "任务不存在" };
+
+  const nextPhase = phaseId
+    ? await prisma.phase.findFirst({ where: { id: phaseId, projectId: task.projectId }, select: { id: true, name: true } })
+    : null;
+  if (phaseId && !nextPhase) return { success: false, message: "模块不存在或不属于当前项目" };
 
   const nextTask = {
     name: name.trim(),
@@ -244,8 +251,15 @@ export async function updateTask(formData: FormData): Promise<ActionResult> {
     department: normalizeText(department),
     priority,
     status,
+    phaseId,
   };
   const changes = buildTaskChangeLog(task, nextTask);
+  if (task.phaseId !== phaseId) {
+    const previousPhase = task.phaseId
+      ? await prisma.phase.findUnique({ where: { id: task.phaseId }, select: { name: true } })
+      : null;
+    changes.push(`模块：${previousPhase?.name ?? "未分模块"} → ${nextPhase?.name ?? "未分模块"}`);
+  }
 
   await prisma.$transaction([
     prisma.task.update({
