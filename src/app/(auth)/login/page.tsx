@@ -43,7 +43,7 @@ export default function LoginPage({ searchParams }: { searchParams?: { error?: s
         </p>
         </div>
       </div>
-      <SiteRegistration className="pt-8" />
+      <SiteRegistration className="pt-5" />
     </div>
   );
 }
