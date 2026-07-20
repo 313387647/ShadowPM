@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { CopilotPanel } from "@/components/copilot/CopilotPanel";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
+import { SiteRegistration } from "@/components/layout/SiteRegistration";
 import { getSidebarProjects } from "@/actions/sidebar-actions";
 
 export default async function MainLayout({
@@ -21,6 +22,7 @@ export default async function MainLayout({
       <div className="flex min-w-0 flex-1 flex-col md:ml-60">
         <Header userRole={user.role} userName={user.name} projects={projects} />
         <main className="min-w-0 flex-1 pb-16 md:pb-0">{children}</main>
+        <SiteRegistration className="border-t border-border/70 pb-20 md:pb-4" />
       </div>
       <CopilotPanel />
       <MobileBottomNav userRole={user.role} />

@@ -1,9 +1,12 @@
+import { SiteRegistration } from "@/components/layout/SiteRegistration";
+
 export default function LoginPage({ searchParams }: { searchParams?: { error?: string } }) {
   const hasError = searchParams?.error === "invalid-credentials";
 
   return (
-    <div className="surface-grid flex min-h-screen items-center justify-center px-4 py-10 sm:px-6">
-      <div className="w-full max-w-lg space-y-7 rounded-lg border bg-background/95 p-5 shadow-[0_18px_60px_rgba(15,23,18,0.08)] backdrop-blur sm:p-7">
+    <div className="surface-grid flex min-h-screen flex-col px-4 py-10 sm:px-6">
+      <div className="flex flex-1 items-center justify-center">
+        <div className="w-full max-w-lg space-y-7 rounded-lg border bg-background/95 p-5 shadow-[0_18px_60px_rgba(15,23,18,0.08)] backdrop-blur sm:p-7">
         {/* 标题 */}
         <div className="text-center">
           <div className="mx-auto mb-4 flex size-11 items-center justify-center rounded-lg bg-gray-950">
@@ -38,7 +41,9 @@ export default function LoginPage({ searchParams }: { searchParams?: { error?: s
         <p className="text-center text-xs text-gray-400">
           团队内部系统 · 请使用管理员创建的账号登录
         </p>
+        </div>
       </div>
+      <SiteRegistration className="pt-8" />
     </div>
   );
 }
