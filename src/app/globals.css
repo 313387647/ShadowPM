@@ -91,6 +91,19 @@
     @apply overflow-hidden rounded-lg border border-border bg-card;
   }
 
+  /* Shared native form controls used by high-density tables and dialogs. */
+  .form-input {
+    @apply block w-full min-h-10 rounded-md border border-input bg-canvas/45 px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-primary/25 focus:border-ring focus:ring-2 focus:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  select.form-input {
+    @apply h-10;
+  }
+
+  textarea.form-input {
+    @apply min-h-20 leading-6;
+  }
+
   .data-table thead {
     @apply sticky top-0 z-10 bg-secondary/95 backdrop-blur;
   }
