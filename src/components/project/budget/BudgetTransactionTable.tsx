@@ -34,11 +34,10 @@ function FlowIcon({ action }: { action: string | null }) {
 
 export function BudgetTransactionTable({ flows, itemTitles }: { flows: BudgetFlow[]; itemTitles: Record<string, string> }) {
   if (flows.length === 0) {
-    return <div className="rounded-xl border border-dashed border-border bg-surface-1 px-5 py-12 text-center text-sm text-muted-foreground">尚无资金流水。确认预算项后，可记录报批、划拨、支出、退款和验收。</div>;
+    return <div className="border-y border-dashed border-border px-5 py-12 text-center text-sm text-muted-foreground">尚无资金流水。</div>;
   }
 
-  return <section className="overflow-hidden rounded-xl border border-border bg-surface-1">
-    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5"><div><h2 className="text-base font-semibold">资金流水</h2><p className="mt-1 text-sm text-muted-foreground">记录事实与审批动作，不改变预算规划的原始口径。</p></div><span className="font-mono text-xs tabular-nums text-muted-foreground">{flows.length} 条记录</span></div>
+  return <section className="overflow-hidden border-y border-border">
     <ol className="divide-y divide-border">{flows.map((flow) => {
       const action = flow.action ?? flow.legacyOperation;
       const isRefund = flow.action === "REFUND_RECORDED";

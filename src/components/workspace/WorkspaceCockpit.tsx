@@ -32,9 +32,9 @@ export function WorkspaceCockpit({ userName, data }: { userName: string; data: W
         <NewProjectButton />
       </header>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <section className="table-shell" id="my-tasks">
-          <PanelHeader title={taskScope === "overdue" ? "已逾期" : "需要我处理"} description={taskScope === "overdue" ? "只显示需要立即处理的逾期事项" : "按逾期、截止时间和优先级排序"} />
+      <section className="table-shell grid overflow-hidden lg:grid-cols-2" aria-label="个人工作面">
+        <div className="min-w-0 border-b border-border lg:border-b-0 lg:border-r" id="my-tasks">
+          <PanelHeader title={taskScope === "overdue" ? "已逾期" : "需要我处理"} />
           <div className="divide-y divide-border">
             {visibleTasks.length === 0 ? <Empty text={taskScope === "overdue" ? "当前没有逾期事项。" : "当前没有分配给你的待处理事项。"} /> : visibleTasks.map((task) => (
               <Link key={task.id} href={`/projects/${task.projectId}?tab=tasks&focusTask=${task.id}`} className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-primary/[0.045]">
@@ -44,23 +44,23 @@ export function WorkspaceCockpit({ userName, data }: { userName: string; data: W
               </Link>
             ))}
           </div>
-        </section>
+        </div>
 
-        <section className="table-shell" id="upcoming">
-          <PanelHeader title="未来 7 天" description="跨项目的正式执行节点" />
+        <div className="min-w-0" id="upcoming">
+          <PanelHeader title="未来 7 天" />
           <div className="divide-y divide-border">
             {data.upcomingCalendar.length === 0 ? <Empty text="未来 7 天暂无正式执行节点。" /> : data.upcomingCalendar.map((entry) => (
               <Link key={entry.id} href={`/projects/${entry.projectId}?tab=calendar`} className="flex gap-3 px-4 py-3 transition-colors hover:bg-primary/[0.045]">
                 <div className="w-12 shrink-0 text-center"><p className="text-xs font-medium">{formatDate(entry.date)}</p><p className="mt-1 text-[11px] text-muted-foreground">{entry.startTime ?? "待定"}</p></div>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{entry.content}</p><p className="mt-1 truncate text-xs text-muted-foreground">{entry.channel ?? "渠道待确认"} · {entry.projectName}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{entry.content}</p><p className="mt-1 truncate text-xs text-muted-foreground">{entry.channel ?? "未标注渠道"} · {entry.projectName}</p></div>
               </Link>
             ))}
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
 
       <section className="table-shell" id="my-projects">
-        <PanelHeader title="正在推进的项目" description="只显示我负责或参与的进行中项目" action={<Link href="/projects" className="text-xs font-medium text-primary hover:text-primary/80">查看全部</Link>} />
+        <PanelHeader title="正在推进的项目" action={<Link href="/projects" className="text-xs font-medium text-primary hover:text-primary/80">查看全部</Link>} />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[620px] text-left text-sm">
             <thead className="border-b border-border bg-muted/25 text-xs text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium">项目</th><th className="px-3 py-2.5 font-medium">下一步</th><th className="px-3 py-2.5 font-medium">异常信号</th><th className="px-3 py-2.5 font-medium">最后更新</th></tr></thead>
@@ -74,7 +74,7 @@ export function WorkspaceCockpit({ userName, data }: { userName: string; data: W
   );
 }
 
-function PanelHeader({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) { return <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3"><div><h2 className="text-sm font-semibold">{title}</h2><p className="mt-0.5 text-xs text-muted-foreground">{description}</p></div>{action}</div>; }
+function PanelHeader({ title, action }: { title: string; action?: React.ReactNode }) { return <div className="flex min-h-12 items-center justify-between gap-3 border-b border-border px-4 py-3"><h2 className="text-sm font-semibold">{title}</h2>{action}</div>; }
 function StatusMarker({ overdue, status }: { overdue: boolean; status: string }) { return <span className={overdue ? "flex size-8 shrink-0 items-center justify-center rounded-lg border border-destructive/30 bg-destructive/10 text-[10px] font-semibold text-destructive" : status === "IN_PROGRESS" ? "flex size-8 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-[10px] font-semibold text-primary" : "flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-secondary text-[10px] font-semibold text-muted-foreground"}>{overdue ? "逾期" : status === "IN_PROGRESS" ? "进行" : "待启"}</span>; }
 function ProjectSignal({ project }: { project: WorkspaceCockpitData["myProjects"][number] }) { if (project.budgetTone !== "default") return <span className={project.budgetTone === "danger" ? "text-xs font-medium text-destructive" : "text-xs font-medium text-warning"}>{project.budgetSignal}</span>; if (project.health !== "HEALTHY") return <span className={project.health === "RISK" ? "text-xs font-medium text-destructive" : "text-xs font-medium text-warning"}>{HEALTH_LABEL[project.health]}</span>; if (project.needsMyAttention > 0) return <span className="text-xs font-medium text-primary">{project.needsMyAttention} 项待处理</span>; return null; }
 function Empty({ text }: { text: string }) { return <div className="px-4 py-8 text-center text-sm text-muted-foreground">{text}</div>; }

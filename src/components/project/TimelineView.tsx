@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarCheck, CircleDollarSign, ClipboardList, Clock, Loader2, MessageSquare, Search, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { TASK_STATUS_MAP } from "@/lib/constants";
 import { adoptAIActionSuggestion, adoptAIBudgetSignal, generateProjectActivitySummary, scheduleAIActionSuggestion } from "@/actions/timeline-actions";
 import { cn } from "@/lib/utils";
@@ -72,39 +72,6 @@ const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "AI", label: "AI 导入" },
 ];
 
-const ACTIVITY_BLUEPRINTS = [
-  {
-    title: "管控变更",
-    description: "负责人、部门、截止日期与批量补齐",
-    Icon: ClipboardList,
-    className: "border-primary/30 bg-primary/[0.06] text-primary",
-  },
-  {
-    title: "人工进度",
-    description: "关键进展、阻塞、结论和下一步",
-    Icon: MessageSquare,
-    className: "border-info/30 bg-info/[0.06] text-info",
-  },
-  {
-    title: "预算流转",
-    description: "预算分配、支出、退款和余额变化",
-    Icon: CircleDollarSign,
-    className: "border-success/30 bg-success/[0.06] text-success",
-  },
-  {
-    title: "执行日历",
-    description: "传播排期、渠道动作和执行状态",
-    Icon: CalendarCheck,
-    className: "border-primary/25 bg-primary/[0.05] text-primary",
-  },
-  {
-    title: "AI 导入",
-    description: "表格识别、直接入表和可追溯修正",
-    Icon: Sparkles,
-    className: "border-border bg-secondary text-muted-foreground",
-  },
-];
-
 export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -119,20 +86,6 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
   const [filter, setFilter] = useState<ActivityFilter>("ALL");
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
-
-  const filterCounts = useMemo(() => {
-    return ACTIVITY_FILTERS.reduce<Record<ActivityFilter, number>>((counts, item) => {
-      counts[item.value] = logs.filter((log) => matchesFilter(log, item.value)).length;
-      return counts;
-    }, {
-      ALL: 0,
-      PROGRESS: 0,
-      CONTROL: 0,
-      BUDGET: 0,
-      CALENDAR: 0,
-      AI: 0,
-    });
-  }, [logs]);
 
   const insight = useMemo(() => getActivityInsight(logs), [logs]);
 
@@ -251,51 +204,21 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">共 {logs.length} 条已发生的项目变化</p>
-      </div>
-
       {insight && (
-        <div className="rounded-lg border bg-muted/20 p-3" data-activity-insight="true">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-[260px] flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="size-3.5 text-primary" />
-                  <p className="text-sm font-medium">项目状态摘要</p>
-                </div>
-                {canEdit && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleGenerateSummary}
-                    disabled={generatingSummary}
-                    className="h-7 gap-1.5 px-2 text-xs"
-                  >
-                    {generatingSummary ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
-                    AI 提炼
-                  </Button>
-                )}
-              </div>
-              {aiInsight && (
-                <AIInsightPanel insight={aiInsight} />
-              )}
-              <p className="mt-1 line-clamp-2 text-sm leading-6 text-foreground/80">
-                最近 7 天有 {insight.recentCount} 条活动，主要变化集中在「{insight.focusLabel}」。
-                {insight.budgetCount > 0 ? ` 预算流转 ${insight.budgetCount} 条，建议和预算页交叉核对。` : ""}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                最新动作：{insight.latestTitle} · {insight.latestContent}
-              </p>
+        <details className="border-y border-border py-3" data-activity-insight="true">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground marker:hidden">
+            <Sparkles className="size-3.5 text-primary" />
+            <span>AI 简报：最近 7 天有 {insight.recentCount} 次变化，{insight.focusCount} 项集中在「{insight.focusLabel}」。</span>
+            <span className="ml-auto text-xs text-primary">展开</span>
+          </summary>
+          <div className="pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm leading-6 text-foreground/80">最新动作：{insight.latestTitle} · {insight.latestContent}</p>
+              {canEdit && <Button type="button" size="sm" variant="ghost" onClick={handleGenerateSummary} disabled={generatingSummary} className="h-7 gap-1.5 px-2 text-xs">{generatingSummary ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}AI 提炼</Button>}
             </div>
-            <div className="grid grid-cols-2 gap-2 text-right sm:grid-cols-4">
-              <InsightMetric label="7 天活动" value={insight.recentCount} />
-              <InsightMetric label={insight.focusLabel} value={insight.focusCount} />
-              <InsightMetric label="预算" value={insight.budgetCount} />
-            </div>
+            {aiInsight && <AIInsightPanel insight={aiInsight} />}
           </div>
-        </div>
+        </details>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -305,16 +228,10 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
             type="button"
             size="sm"
             variant={filter === item.value ? "default" : "outline"}
-            className="h-7 gap-1.5 rounded-full px-3 text-xs"
+            className="h-7 gap-1.5 px-2.5 text-xs"
             onClick={() => setFilter(item.value)}
           >
             {item.label}
-            <span className={cn(
-              "rounded-full px-1.5 text-[10px]",
-              filter === item.value ? "bg-primary-foreground/20" : "bg-muted text-muted-foreground"
-            )}>
-              {filterCounts[item.value]}
-            </span>
           </Button>
         ))}
       </div>
@@ -328,7 +245,7 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="搜索活动、事项、人员或来源（/ 聚焦）"
-            className="h-9 rounded-full pl-8 pr-9 text-xs"
+            className="h-9 pl-8 pr-9 text-xs"
           />
           {query && (
             <button
@@ -347,36 +264,13 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
       </div>
 
       {logs.length === 0 ? (
-        <div className="rounded-lg border-2 border-dashed p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-medium">暂无项目活动</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                后续关键动作会自动沉淀为项目记忆，先从人工进度或管控表补齐开始。
-              </p>
-            </div>
-            <Clock className="size-9 text-muted-foreground/25" />
-          </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {ACTIVITY_BLUEPRINTS.map((item) => (
-              <div key={item.title} className="rounded-md border bg-background p-3">
-                <div className="flex items-start gap-2">
-                  <div className={cn("mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border", item.className)}>
-                    <item.Icon className="size-3.5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">{item.title}</p>
-                    <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                      {item.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="border-y border-border py-10 text-center">
+          <p className="text-sm font-medium">暂无项目变化。</p>
+          <p className="mt-1 text-xs text-muted-foreground">更新管控事项、预算或执行节点后，这里会自动记录。</p>
+          <Button type="button" size="sm" variant="ghost" className="mt-3 text-xs" onClick={() => router.push(`/projects/${projectId}?tab=tasks`)}>前往管控事项 <ArrowRight className="ml-1 size-3" /></Button>
         </div>
       ) : visibleLogs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed py-14 text-center">
+        <div className="flex flex-col items-center justify-center border-y border-border py-14 text-center">
           <Clock className="size-9 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground">当前条件下暂无活动</p>
           <p className="text-xs text-muted-foreground/60 mt-1">调整筛选或清空搜索查看完整项目记录</p>
@@ -404,14 +298,6 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
                       <span className="text-sm font-medium">
                         {meta.title}
                       </span>
-                      <Badge variant={log.type === "ACTIVITY" ? "secondary" : "outline"} className="text-[10px] h-4 px-1.5">
-                        {meta.badge}
-                      </Badge>
-                      {log.source && (
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-muted-foreground">
-                          {sourceLabel(log.source)}
-                        </Badge>
-                      )}
                       <span className="text-xs text-muted-foreground ml-auto">
                         {new Date(log.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -434,19 +320,19 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
                       />
                     )}
                     {affectedTasks.length > 1 && (
-                      <div className="flex flex-wrap gap-1.5 rounded-md bg-muted/30 p-2">
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
                         {affectedTasks.slice(0, 5).map((task) => (
                           <button
                             key={task.id}
                             type="button"
                             onClick={() => router.push(`/projects/${projectId}?tab=tasks&focusTask=${task.id}`)}
-                            className="rounded-full border bg-background px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                            className="text-muted-foreground underline-offset-4 hover:text-primary hover:underline"
                           >
                             {task.name}
                           </button>
                         ))}
                         {overflowCount > 0 && (
-                          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                          <span className="text-muted-foreground">
                             另 {overflowCount} 条
                           </span>
                         )}
@@ -527,12 +413,12 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium">关联管控事项</label>
-              <select name="taskId" className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none">
+              <Select name="taskId">
                 <option value="">不关联</option>
                 {tasks.map((task) => (
                   <option key={task.id} value={task.id}>{task.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
@@ -596,21 +482,21 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
           <form action={handleAdoptAIBudget} className="space-y-3">
             <div>
               <label className="mb-1.5 block text-sm font-medium">关联管控事项</label>
-              <select name="taskId" required className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none">
+              <Select name="taskId" required>
                 <option value="">请选择事项</option>
                 {tasks.map((task) => (
                   <option key={task.id} value={task.id}>{task.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">流水类型</label>
-                <select name="flowType" defaultValue="EXPENSE" className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none">
+                <Select name="flowType" defaultValue="EXPENSE">
                   <option value="ALLOCATE">分配</option>
                   <option value="EXPENSE">支出</option>
                   <option value="REFUND">退款</option>
-                </select>
+                </Select>
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium">金额</label>
@@ -636,15 +522,6 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function InsightMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="min-w-16 rounded-md border bg-background px-2.5 py-2">
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold">{value}</p>
     </div>
   );
 }
@@ -868,7 +745,7 @@ function getLogMeta(log: Log) {
       title: log.task.name,
       badge: TASK_STATUS_MAP[log.task.status as keyof typeof TASK_STATUS_MAP] ?? log.task.status,
       Icon: MessageSquare,
-      dotClass: "border-blue-300 text-blue-600",
+      dotClass: "border-primary/30 text-primary",
     };
   }
 
@@ -877,7 +754,7 @@ function getLogMeta(log: Log) {
       title: "预算流转",
       badge: changeTypeLabel(log.changeType),
       Icon: CircleDollarSign,
-      dotClass: "border-emerald-300 text-emerald-600",
+      dotClass: "border-success/30 text-success",
     };
   }
 
@@ -886,7 +763,7 @@ function getLogMeta(log: Log) {
       title: "管控表更新",
       badge: changeTypeLabel(log.changeType),
       Icon: ClipboardList,
-      dotClass: "border-sky-300 text-sky-600",
+      dotClass: "border-primary/30 text-primary",
     };
   }
 
@@ -895,7 +772,7 @@ function getLogMeta(log: Log) {
       title: "执行日历",
       badge: changeTypeLabel(log.changeType),
       Icon: CalendarCheck,
-      dotClass: "border-violet-300 text-violet-600",
+      dotClass: "border-info/30 text-info",
     };
   }
 
@@ -904,7 +781,7 @@ function getLogMeta(log: Log) {
       title: "待确认记录",
       badge: changeTypeLabel(log.changeType),
       Icon: ClipboardList,
-      dotClass: "border-sky-300 text-sky-600",
+      dotClass: "border-warning/30 text-warning",
     };
   }
 
@@ -913,7 +790,7 @@ function getLogMeta(log: Log) {
       title: "AI 项目判断",
       badge: changeTypeLabel(log.changeType),
       Icon: Sparkles,
-      dotClass: "border-gray-300 text-primary",
+      dotClass: "border-primary/30 text-primary",
     };
   }
 
@@ -921,7 +798,7 @@ function getLogMeta(log: Log) {
     title: "项目活动",
     badge: changeTypeLabel(log.changeType),
     Icon: Sparkles,
-    dotClass: "border-gray-300 text-gray-600",
+    dotClass: "border-border text-muted-foreground",
   };
 }
 

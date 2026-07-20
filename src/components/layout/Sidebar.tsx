@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { logout } from "@/actions/auth-actions";
 import { ProjectNavList } from "@/components/layout/ProjectNavList";
 import { NavigationSections } from "@/components/layout/NavigationSections";
+import { BrandMark } from "@/components/layout/BrandMark";
 import type { SidebarProject } from "@/actions/sidebar-actions";
 
 interface SidebarProps {
@@ -15,30 +16,23 @@ interface SidebarProps {
 
 export function Sidebar({ userRole, userName, projects }: SidebarProps) {
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col border-r border-border bg-sidebar text-foreground md:flex">
-      {/* Logo */}
-      <div className="flex h-16 items-center gap-2.5 border-b border-border px-5">
-        <div className="flex size-8 items-center justify-center rounded-lg border border-primary/35 bg-primary/15 text-xs font-bold text-primary">
-          S
-        </div>
-        <div>
-          <span className="block text-sm font-semibold tracking-tight">ShadowPM</span>
-          <span className="block text-[10px] text-muted-foreground">项目协作空间</span>
-        </div>
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-56 flex-col border-r border-border bg-sidebar text-foreground md:flex">
+      <div className="flex h-14 items-center gap-2.5 px-4">
+        <BrandMark />
+        <span className="text-sm font-semibold tracking-tight">ShadowPM</span>
       </div>
 
-      <nav className="shrink-0 px-3 py-4">
+      <nav className="shrink-0 px-2.5 py-3">
         <NavigationSections userRole={userRole} variant="primary" />
       </nav>
 
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-3 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-border px-2.5 py-3">
         <ProjectNavList projects={projects} />
       </div>
 
-      {/* 底部用户区 */}
-      <div className="border-t border-border p-3">
+      <div className="border-t border-border p-2.5">
         <NavigationSections userRole={userRole} variant="utility" />
-        <div className="flex items-center justify-between rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:border-border hover:bg-surface-2/70">
+        <div className="flex items-center justify-between rounded-md px-2.5 py-2 transition-colors hover:bg-surface-2/70">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{userName}</p>
             <p className="text-xs text-muted-foreground">

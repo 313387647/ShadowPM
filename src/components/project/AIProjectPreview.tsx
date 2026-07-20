@@ -1,8 +1,8 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CalendarDays, CheckCircle2, Loader2, Plus, Sparkles, Table2, Upload, WalletCards, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Plus, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { AIParsedProject, CreateProjectFromAIDTO } from "@/actions/ai-actions";
@@ -59,6 +59,12 @@ export function AIProjectCreator({ onClose }: Props) {
   const [edited, setEdited] = useState<CreateProjectFromAIDTO | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [loadingElapsedSeconds, setLoadingElapsedSeconds] = useState(0);
+  const [taskDetailsOpen, setTaskDetailsOpen] = useState(false);
+  const [budgetDetailsOpen, setBudgetDetailsOpen] = useState(false);
+  const [calendarDetailsOpen, setCalendarDetailsOpen] = useState(false);
+  const editedRef = useRef<CreateProjectFromAIDTO | null>(null);
+
+  useEffect(() => { editedRef.current = edited; }, [edited]);
 
   useEffect(() => {
     if (step !== "loading") {
@@ -71,6 +77,14 @@ export function AIProjectCreator({ onClose }: Props) {
     updateElapsed();
     const timer = window.setInterval(updateElapsed, 500);
     return () => window.clearInterval(timer);
+  }, [step]);
+
+  useEffect(() => {
+    const draft = editedRef.current;
+    if (step !== "preview" || !draft) return;
+    setTaskDetailsOpen(diagnosticCount(draft) > 0);
+    setBudgetDetailsOpen((draft.budgetItems ?? []).some((item) => !shouldDefaultSelectAIBudgetItem(item) || (item.conflicts?.length ?? 0) > 0));
+    setCalendarDetailsOpen((draft.calendarEntries ?? []).some((entry) => (entry.missingFields?.length ?? 0) > 0 || (entry.conflicts?.length ?? 0) > 0));
   }, [step]);
 
   function createDraft(project: AIParsedProject): CreateProjectFromAIDTO {
@@ -105,14 +119,6 @@ export function AIProjectCreator({ onClose }: Props) {
       unsafe: "需人工确认",
     };
     return labels[quality ?? "messy"];
-  }
-
-  function candidateCount(project: {
-    budgetItems?: AIParsedProject["budgetItems"];
-    calendarEntries?: AIParsedProject["calendarEntries"];
-  } | null) {
-    if (!project) return 0;
-    return (project.budgetItems?.length ?? 0) + (project.calendarEntries?.length ?? 0);
   }
 
   function confidenceLabel(confidence?: string | null) {
@@ -155,10 +161,6 @@ export function AIProjectCreator({ onClose }: Props) {
 
   function getRequiredGaps(draft: CreateProjectFromAIDTO | null) {
     return draft ? buildAIImportPlan(draft).requiredGaps : [];
-  }
-
-  function getOptionalGapSummary(draft: CreateProjectFromAIDTO | null) {
-    return draft ? buildAIImportPlan(draft).optionalGaps : [];
   }
 
   function getSelectedBudgetTotal(draft: CreateProjectFromAIDTO | null) {
@@ -478,19 +480,6 @@ export function AIProjectCreator({ onClose }: Props) {
             </div>
           )}
 
-          {getOptionalGapSummary(edited).length > 0 && (
-            <div className="rounded-lg border p-3">
-              <p className="text-sm font-medium">可稍后在管控表中补充</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {getOptionalGapSummary(edited).map((gap) => (
-                  <span key={gap} className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-                    {gap}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="flex justify-end gap-2 border-t pt-3">
             <Button variant="ghost" onClick={() => setStep("upload")}>
               重新上传
@@ -504,51 +493,11 @@ export function AIProjectCreator({ onClose }: Props) {
 
       {/* ── Step: Preview ── */}
       {step === "preview" && edited && (
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto -mx-2 px-2">
-          {(() => {
-            const importPlan = buildAIImportPlan(edited);
-            return (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-                <div className="flex items-start gap-2">
-                  <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold">AI 写入计划</p>
-                      <span className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
-                        {importPlan.canCreateNow ? "可以创建，缺口进表补" : "仍缺必填项"}
-                      </span>
-                    </div>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-4">
-                      <div className="rounded-md bg-background px-2 py-1.5">
-                        <p className="text-[11px] text-muted-foreground">管控事项</p>
-                        <p className="text-sm font-semibold">{importPlan.controlItemCount} 条</p>
-                      </div>
-                      <div className="rounded-md bg-background px-2 py-1.5">
-                        <p className="text-[11px] text-muted-foreground">预算草稿</p>
-                        <p className="text-sm font-semibold">{importPlan.selectedBudgetItemCount} 条</p>
-                      </div>
-                      <div className="rounded-md bg-background px-2 py-1.5">
-                        <p className="text-[11px] text-muted-foreground">执行日历</p>
-                        <p className="text-sm font-semibold">{importPlan.calendarEntryCount} 条</p>
-                      </div>
-                      <div className="rounded-md bg-background px-2 py-1.5">
-                        <p className="text-[11px] text-muted-foreground">需补齐</p>
-                        <p className="text-sm font-semibold">{importPlan.rowsWithDiagnostics} 行</p>
-                      </div>
-                    </div>
-                    {(importPlan.deferredBudgetCandidateCount > 0 || importPlan.calendarNeedsConfirmationCount > 0 || importPlan.lowConfidenceTasks > 0) && (
-                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        {importPlan.deferredBudgetCandidateCount > 0 ? `${importPlan.deferredBudgetCandidateCount} 条预算候选不会写入项目，` : ""}
-                        {importPlan.calendarNeedsConfirmationCount > 0 ? `${importPlan.calendarNeedsConfirmationCount} 条日历需要补日期/负责人，` : ""}
-                        {importPlan.lowConfidenceTasks > 0 ? `${importPlan.lowConfidenceTasks} 条低置信事项会标记待确认，` : ""}
-                        创建后可直接在对应表格内修改。
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
+        <div className="space-y-5">
+          <section className="grid gap-4 border-y border-border py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+            <div><p className="text-sm font-medium">来源资料</p><p className="mt-1 text-xs leading-5 text-muted-foreground">结构：{sourceQualityLabel(parsed?.sourceQuality)} · 置信度：{confidenceLabel(parsed?.confidence)} · {diagnosticCount(edited)} 处需要关注</p></div>
+            <div><p className="text-sm font-medium">本次创建</p><p className="mt-1 text-sm text-muted-foreground">{buildAIImportPlan(edited).controlItemCount} 项事项 · {buildAIImportPlan(edited).selectedBudgetItemCount} 条预算草稿 · {buildAIImportPlan(edited).calendarEntryCount} 个执行节点</p><p className="mt-1 text-xs text-muted-foreground">AI 识别结果不会直接成为正式预算；未匹配事项的预算项会保持未关联。</p></div>
+          </section>
 
           {/* Confidence warning */}
           {parsed?.confidence === "low" && (
@@ -558,81 +507,6 @@ export function AIProjectCreator({ onClose }: Props) {
             </div>
           )}
 
-          {parsed && (
-            <div className="surface-panel rounded-xl p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">AI 分诊结果</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    源结构：{sourceQualityLabel(parsed.sourceQuality)} · 置信度：{parsed.confidence}
-                  </p>
-                </div>
-                <span className="rounded-md border border-border bg-canvas/30 px-2 py-1 text-xs text-muted-foreground">
-                  同步生成 {candidateCount(edited)} · 诊断 {diagnosticCount(edited)}
-                </span>
-              </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <div className="rounded-lg border border-border bg-canvas/30 p-2">
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <Table2 className="size-3" /> 管控总表
-                  </div>
-                  <p className="mt-1 text-base font-semibold">{edited.tasks.length}</p>
-                </div>
-                <div className="rounded-lg border border-border bg-canvas/30 p-2">
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <WalletCards className="size-3" /> 预算
-                  </div>
-                  <p className="mt-1 text-base font-semibold">{edited.budgetItems?.length ?? 0}</p>
-                </div>
-                <div className="rounded-lg border border-border bg-canvas/30 p-2">
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <CalendarDays className="size-3" /> 日历
-                  </div>
-                  <p className="mt-1 text-base font-semibold">{edited.calendarEntries?.length ?? 0}</p>
-                </div>
-              </div>
-
-              {((edited.missingFields?.length ?? 0) > 0 || (edited.conflicts?.length ?? 0) > 0) && (
-                <div className="mt-3 space-y-2 rounded-md bg-background p-2 text-xs">
-                  {(edited.missingFields?.length ?? 0) > 0 && (
-                    <div>
-                      <span className="font-medium text-muted-foreground">项目级缺失：</span>
-                      <span>{edited.missingFields?.join("、")}</span>
-                    </div>
-                  )}
-                  {(edited.conflicts?.length ?? 0) > 0 && (
-                    <div>
-                      <span className="font-medium text-red-700">冲突：</span>
-                      <span>{edited.conflicts?.join("；")}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {parsed && (
-            <div className="rounded-lg border border-primary/25 bg-primary/[0.07] p-3 text-sm text-secondary-foreground">
-              <div className="flex items-start gap-2">
-                <Sparkles className="mt-0.5 size-4 shrink-0" />
-                <div className="space-y-1">
-                  <p className="font-medium">本次创建范围</p>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    将创建项目资料和项目管控总表。
-                    {edited.budgetMode === "CONFIRMED"
-                      ? " 已确认的总预算会作为项目级预算池创建。"
-                      : edited.budgetMode === "PENDING"
-                        ? " 预算保持待确认，项目不会显示虚假的 0 元预算。"
-                        : " 本项目不会启用预算管理。"}
-                    {candidateCount(edited) > 0
-                      ? ` 选中的 AI 预算只会保存为独立预算草稿；可匹配时才关联事项，无法匹配时保持未关联。`
-                      : " 未识别到可同步生成的预算或日历。"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Project fields */}
           <div className="space-y-3">
@@ -700,25 +574,9 @@ export function AIProjectCreator({ onClose }: Props) {
           </div>
 
           {/* Control item list */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                项目管控总表 ({edited.tasks.length})
-              </h4>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 gap-1 text-xs"
-                onClick={() =>
-                  setEdited({
-                    ...edited,
-                    tasks: [...edited.tasks, { name: "", assignee: null, deadline: null }],
-                  })
-                }
-              >
-                <Plus className="size-3" /> 添加
-              </Button>
-            </div>
+          <details className="border-y border-border py-3" open={taskDetailsOpen} onToggle={(event) => setTaskDetailsOpen(event.currentTarget.open)}>
+            <summary className="cursor-pointer list-none text-sm font-medium marker:hidden">管控事项 <span className="font-normal text-muted-foreground">{edited.tasks.length} 项</span></summary>
+            <div className="mt-3 flex justify-end"><Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => setEdited({ ...edited, tasks: [...edited.tasks, { name: "", assignee: null, deadline: null }] })}><Plus className="size-3" />添加事项</Button></div>
 
             {edited.tasks.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-4">
@@ -806,10 +664,12 @@ export function AIProjectCreator({ onClose }: Props) {
                 ))}
               </div>
             )}
-          </div>
+          </details>
 
           {parsed && (
-            <div className="space-y-3 rounded-lg border border-dashed bg-muted/10 p-3">
+            <details className="border-y border-border py-3" open={budgetDetailsOpen} onToggle={(event) => setBudgetDetailsOpen(event.currentTarget.open)}>
+              <summary className="cursor-pointer list-none text-sm font-medium marker:hidden">预算项草稿 <span className="font-normal text-muted-foreground">{edited.budgetItems?.length ?? 0} 条</span></summary>
+            <div className="mt-3 space-y-3">
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -872,10 +732,13 @@ export function AIProjectCreator({ onClose }: Props) {
                 return <div className={`mt-2 grid grid-cols-3 gap-2 rounded-md border px-2 py-2 text-[11px] ${remaining < 0 ? "border-destructive/40 bg-destructive/5" : "border-border bg-canvas/30"}`}><div><p className="text-muted-foreground">项目总预算</p><p className="mt-0.5 font-mono font-medium">¥{(edited.totalBudget ?? 0).toLocaleString("zh-CN")}</p></div><div><p className="text-muted-foreground">已选预算草稿</p><p className="mt-0.5 font-mono font-medium">¥{selectedTotal.toLocaleString("zh-CN")}</p></div><div><p className="text-muted-foreground">剩余可编排</p><p className={`mt-0.5 font-mono font-medium ${remaining < 0 ? "text-destructive" : ""}`}>¥{remaining.toLocaleString("zh-CN")}</p></div>{remaining < 0 && <p className="col-span-3 text-destructive">预算项合计超过总预算，不能创建项目。</p>}</div>;
               })()}
             </div>
+            </details>
           )}
 
           {parsed && (edited.calendarEntries?.length ?? 0) > 0 && (
-            <div className="space-y-2 rounded-lg border border-dashed bg-muted/10 p-3">
+            <details className="border-y border-border py-3" open={calendarDetailsOpen} onToggle={(event) => setCalendarDetailsOpen(event.currentTarget.open)}>
+              <summary className="cursor-pointer list-none text-sm font-medium marker:hidden">执行日历 <span className="font-normal text-muted-foreground">{edited.calendarEntries?.length ?? 0} 个节点</span></summary>
+            <div className="mt-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   将生成执行日历 ({edited.calendarEntries?.length ?? 0})
@@ -911,23 +774,15 @@ export function AIProjectCreator({ onClose }: Props) {
                 </div>
               ))}
             </div>
-          )}
-
-          {edited.budgetMode !== "CONFIRMED" && (
-            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-              当前不会建立项目预算池。项目仍可正常创建、维护管控总表和执行日历。
-            </div>
+            </details>
           )}
 
           {/* Action buttons */}
-          <div className="sticky bottom-0 flex items-center justify-between border-t border-border bg-popover/95 pt-3 backdrop-blur">
-            <Button variant="ghost" size="sm" onClick={handleReparse} className="gap-1.5 text-xs">
-              <Sparkles className="size-3" /> 重新解析
-            </Button>
+          <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-popover/95 py-3 backdrop-blur">
+            <div className="text-xs text-muted-foreground">{buildAIImportPlan(edited).controlItemCount} 项事项 · {buildAIImportPlan(edited).selectedBudgetItemCount} 条预算 · {buildAIImportPlan(edited).calendarEntryCount} 个节点 · {diagnosticCount(edited)} 处待确认</div>
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={onClose}>
-                取消
-              </Button>
+              <Button variant="ghost" size="sm" onClick={handleReparse}>重新解析</Button>
+              <Button variant="ghost" onClick={onClose}>取消</Button>
               <Button
                 onClick={handleConfirm}
                 disabled={!edited.projectName.trim() || (edited.budgetMode === "CONFIRMED" && ((edited.totalBudget ?? 0) <= 0 || getSelectedBudgetTotal(edited) > (edited.totalBudget ?? 0)))}

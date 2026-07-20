@@ -56,7 +56,7 @@ function TabsList({ className, children }: { className?: string; children: React
     <div
       role="tablist"
       className={cn(
-        "inline-flex h-10 w-full items-center justify-start gap-1 rounded-lg border bg-secondary/70 p-1 text-muted-foreground",
+        "flex h-10 w-full items-center justify-start gap-5 border-b border-border text-muted-foreground",
         className
       )}
     >
@@ -87,11 +87,11 @@ function TabsTrigger({
       disabled={disabled}
       onClick={() => onChange(value)}
       className={cn(
-        "relative inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-150",
+        "relative inline-flex h-10 items-center justify-center gap-1.5 border-b-2 border-transparent px-0 text-sm font-medium whitespace-nowrap transition-colors",
         "hover:text-foreground",
         "disabled:pointer-events-none disabled:opacity-50",
         isActive
-          ? "border border-primary/20 bg-card text-foreground"
+          ? "border-primary text-foreground"
           : "text-muted-foreground",
         className
       )}

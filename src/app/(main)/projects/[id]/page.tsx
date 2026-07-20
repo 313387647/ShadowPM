@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Eye } from "lucide-react";
+import { ChevronLeft, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { getProjectDetail } from "@/actions/project-actions";
 import { getProjectTasks } from "@/actions/task-actions";
@@ -38,11 +38,12 @@ export default async function ProjectDetailPage({ params, searchParams }: { para
   const outputs = await getProjectOutputs(params.id);
 
   return <div className="mx-auto max-w-[1600px] space-y-4 p-4 sm:p-6 lg:p-7">
+    <div className="flex h-10 items-center gap-2 border-b border-border md:hidden"><Link href="/projects" className="inline-flex items-center gap-0.5 text-xs text-muted-foreground"><ChevronLeft className="size-4" />项目列表</Link><span className="min-w-0 flex-1 truncate text-sm font-medium">{project.name}</span></div>
     <header className="border-b border-border pb-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Link href="/projects" className="hover:text-foreground">项目</Link><span>/</span><span className="truncate">{project.name}</span></div>
-          <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1><Badge variant="outline" className={project.archivedAt ? "border-muted-foreground/30 bg-muted text-muted-foreground" : lifecycle === "COMPLETED" ? "border-success/25 bg-success/10 text-success" : lifecycle === "UPCOMING" ? "border-warning/25 bg-warning/10 text-warning" : "border-primary/25 bg-primary/10 text-primary"}>{project.archivedAt ? "已归档" : PROJECT_LIFECYCLE_LABEL[lifecycle]}</Badge>{!project.canEdit && <Badge variant="outline" className="gap-1"><Eye className="size-3" />只读</Badge>}</div>
+          <div className="mb-2 hidden flex-wrap items-center gap-2 text-xs text-muted-foreground md:flex"><Link href="/projects" className="hover:text-foreground">项目</Link><span>/</span><span className="truncate">{project.name}</span></div>
+          <div className="flex flex-wrap items-center gap-2"><h1 className="hidden text-2xl font-semibold tracking-tight md:block">{project.name}</h1><Badge variant="outline" className={project.archivedAt ? "border-muted-foreground/30 bg-muted text-muted-foreground" : lifecycle === "COMPLETED" ? "border-success/25 bg-success/10 text-success" : lifecycle === "UPCOMING" ? "border-warning/25 bg-warning/10 text-warning" : "border-primary/25 bg-primary/10 text-primary"}>{project.archivedAt ? "已归档" : PROJECT_LIFECYCLE_LABEL[lifecycle]}</Badge>{!project.canEdit && <Badge variant="outline" className="gap-1"><Eye className="size-3" />只读</Badge>}</div>
           <p className="mt-2 text-sm text-muted-foreground">负责人 {project.owner.name} · {formatProjectPeriod(project.startDate, project.endDate)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2"><ProjectOutputsPanel projectId={params.id} canEdit={project.canEdit} data={outputs} /><ProjectManageActions project={{ id: project.id, name: project.name, startDate: project.startDate, endDate: project.endDate, archivedAt: project.archivedAt }} canEdit={project.canEdit} canManage={project.canManage} /></div>
@@ -50,7 +51,7 @@ export default async function ProjectDetailPage({ params, searchParams }: { para
       <section className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-y border-border py-3 text-sm" aria-label="项目脉搏"><PulseMetric label="待处理" value={openCount} /><PulseMetric label="已逾期" value={overdueCount} danger={overdueCount > 0} /><PulseMetric label="下一节点" value={nextNode?.date ? `${formatDate(nextNode.date)} ${nextNode.content}` : "待排期"} /><PulseMetric label={project.budgetSummary.mode === "CONFIRMED" ? "剩余预算" : "预算状态"} value={budgetLabel} /></section>
     </header>
 
-    <nav className="sticky top-16 z-20 flex overflow-x-auto border-b border-border bg-canvas/95 backdrop-blur" aria-label="项目模块">{TABS.map((tab) => <Link key={tab.value} href={tab.value === "tasks" ? `/projects/${params.id}` : `/projects/${params.id}?tab=${tab.value}`} className={activeTab === tab.value ? "shrink-0 border-b-2 border-primary px-3 py-3 text-sm font-medium text-foreground" : "shrink-0 border-b-2 border-transparent px-3 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground"}>{tab.label}</Link>)}</nav>
+    <nav className="sticky top-14 z-20 flex overflow-x-auto border-b border-border bg-canvas/95 backdrop-blur" aria-label="项目模块">{TABS.map((tab) => <Link key={tab.value} href={tab.value === "tasks" ? `/projects/${params.id}` : `/projects/${params.id}?tab=${tab.value}`} className={activeTab === tab.value ? "shrink-0 border-b-2 border-primary px-3 py-3 text-sm font-medium text-foreground" : "shrink-0 border-b-2 border-transparent px-3 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground"}>{tab.label}</Link>)}</nav>
 
     {activeTab === "tasks" && <TasksSurface projectId={params.id} canEdit={project.canEdit} viewerName={project.viewerName} />}
     {activeTab === "ledger" && <BudgetSurface projectId={params.id} canEdit={project.canEdit} canManage={project.canManage} />}

@@ -86,6 +86,12 @@ export async function getProjectsHealth() {
     include: {
       owner: { select: { name: true } },
       tasks: { select: { id: true, status: true, deadline: true, assignee: true } },
+      calendarEntries: {
+        where: { status: { notIn: ["DONE", "CANCELED"] }, date: { gte: now } },
+        orderBy: [{ date: "asc" }, { startTime: "asc" }],
+        take: 1,
+        select: { date: true, content: true },
+      },
       budgetItems: { select: { plannedAmount: true, status: true } },
       budgetFlows: { select: { amount: true, action: true, flowType: true } },
       _count: { select: { tasks: true } },
@@ -133,6 +139,8 @@ export async function getProjectsHealth() {
       inProgressCount,
       lifecycle,
       isAtRisk,
+      nextNode: p.calendarEntries[0]?.date ? { date: p.calendarEntries[0].date as Date, content: p.calendarEntries[0].content } : null,
+      updatedAt: p.updatedAt,
     };
   });
 }

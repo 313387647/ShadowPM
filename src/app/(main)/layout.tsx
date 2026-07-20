@@ -19,8 +19,8 @@ export default async function MainLayout({
   return (
     <div className="flex min-h-screen bg-canvas">
       <Sidebar userRole={user.role} userName={user.name} projects={projects} />
-      <div className="flex min-w-0 flex-1 flex-col md:ml-60">
-        <Header userRole={user.role} userName={user.name} projects={projects} />
+      <div className="flex min-w-0 flex-1 flex-col md:ml-56">
+        <Header />
         <main className="min-w-0 flex-1 pb-16 md:pb-0">{children}</main>
         <SiteRegistration className="pb-[4.5rem] md:pb-3" />
       </div>

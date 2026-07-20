@@ -5,6 +5,8 @@ import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { createBudgetItem } from "@/actions/budget-item-actions";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 
 type TaskOption = { id: string; name: string };
 
@@ -34,7 +36,7 @@ export function BudgetItemInlineForm({ projectId, tasks }: { projectId: string; 
   }
 
   return (
-    <form className="grid gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 md:grid-cols-[minmax(150px,1.25fr)_minmax(120px,.7fr)_minmax(100px,.6fr)_minmax(130px,.9fr)_auto]" onSubmit={async (event) => {
+    <form className="grid gap-2 border-y border-primary/25 bg-primary/[0.035] px-3 py-3 md:grid-cols-[minmax(150px,1.25fr)_minmax(120px,.7fr)_minmax(100px,.6fr)_minmax(130px,.9fr)_auto]" onSubmit={async (event) => {
       event.preventDefault();
       setSubmitting(true);
       try {
@@ -48,12 +50,12 @@ export function BudgetItemInlineForm({ projectId, tasks }: { projectId: string; 
         setSubmitting(false);
       }
     }}>
-      <input name="title" autoFocus required placeholder="预算项名称" className="form-input h-9" />
-      <input name="plannedAmount" required inputMode="decimal" type="number" min="0.01" step="0.01" placeholder="计划金额" className="form-input h-9" />
-      <input name="category" placeholder="分类" className="form-input h-9" />
-      <select name="taskId" defaultValue="" className="form-input h-9"><option value="">暂不关联事项</option>{tasks.map((task) => <option key={task.id} value={task.id}>{task.name}</option>)}</select>
+      <Input name="title" autoFocus required placeholder="预算项名称" className="h-9" />
+      <Input name="plannedAmount" required inputMode="decimal" type="number" min="0.01" step="0.01" placeholder="计划金额" className="h-9" />
+      <Input name="category" placeholder="分类" className="h-9" />
+      <Select name="taskId" defaultValue="" className="h-9"><option value="">暂不关联事项</option>{tasks.map((task) => <option key={task.id} value={task.id}>{task.name}</option>)}</Select>
       <div className="flex gap-1"><Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>取消</Button><Button type="submit" size="sm" disabled={submitting} className="gap-1.5">{submitting && <Loader2 className="size-3.5 animate-spin" />}保存</Button></div>
-      <input name="description" placeholder="说明（可选）" className="form-input h-9 md:col-span-4" />
+      <Input name="description" placeholder="说明（可选）" className="h-9 md:col-span-4" />
     </form>
   );
 }

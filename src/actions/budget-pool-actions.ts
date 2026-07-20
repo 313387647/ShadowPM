@@ -29,15 +29,14 @@ function formatMoney(amount: { toNumber: () => number }) {
 export async function setProjectBudgetPool(formData: FormData): Promise<ActionResult> {
   const projectId = String(formData.get("projectId") ?? "");
   const requestedMode = String(formData.get("budgetMode") ?? "");
-  const amount = normalizeMoneyInput(formData.get("totalBudget"));
+  const requestedAmount = normalizeMoneyInput(formData.get("totalBudget"));
   const reason = String(formData.get("reason") ?? "").trim();
   const user = await assertCanManageProject(projectId);
 
   if (!isProjectBudgetMode(requestedMode)) {
     return { success: false, message: "请选择明确预算、预算待确认或不管理预算。" };
   }
-  if (!amount) return { success: false, message: "总预算必须是非负金额。" };
-  if (requestedMode === "CONFIRMED" && amount.lte(0)) {
+  if (requestedMode === "CONFIRMED" && (!requestedAmount || requestedAmount.lte(0))) {
     return { success: false, message: "确认项目总预算时，金额必须大于 0。" };
   }
 
@@ -53,6 +52,8 @@ export async function setProjectBudgetPool(formData: FormData): Promise<ActionRe
   if (!project) return { success: false, message: "项目不存在。" };
 
   const nextMode = requestedMode as ProjectBudgetModeValue;
+  // Pending and unmanaged projects intentionally carry no synthetic 0-yuan budget.
+  const amount = nextMode === "CONFIRMED" ? requestedAmount! : normalizeMoneyInput("0")!;
   const poolWasConfirmed = project.budgetMode === "CONFIRMED";
   const amountChanged = !project.totalBudget.eq(amount);
   if (requiresBudgetChangeReason({

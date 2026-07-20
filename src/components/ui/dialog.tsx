@@ -1,161 +1,61 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { XIcon } from "lucide-react"
+import * as React from "react";
+import { XIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useOverlayA11y } from "@/components/ui/use-overlay-a11y";
 
 interface DialogContextValue {
-  open: boolean
-  setOpen: (v: boolean) => void
+  setOpen: (value: boolean) => void;
+  titleId: string;
 }
 
-const DialogContext = React.createContext<DialogContextValue | null>(null)
+const DialogContext = React.createContext<DialogContextValue | null>(null);
 
 function useDialog() {
-  const ctx = React.useContext(DialogContext)
-  if (!ctx) throw new Error("Dialog compound components must be used within <Dialog>")
-  return ctx
+  const context = React.useContext(DialogContext);
+  if (!context) throw new Error("Dialog compound components must be used within <Dialog>");
+  return context;
 }
 
-// ── Root ──
-function Dialog({
-  open: controlledOpen,
-  onOpenChange,
-  defaultOpen = false,
-  children,
-}: {
-  open?: boolean
-  onOpenChange?: (v: boolean) => void
-  defaultOpen?: boolean
-  children: React.ReactNode
-}) {
-  const [internalOpen, setInternalOpen] = React.useState(defaultOpen)
-  const open = controlledOpen ?? internalOpen
+function Dialog({ open: controlledOpen, onOpenChange, defaultOpen = false, children }: { open?: boolean; onOpenChange?: (value: boolean) => void; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
+  const open = controlledOpen ?? internalOpen;
+  const titleId = React.useId();
+  const setOpen = React.useCallback((value: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(value);
+    onOpenChange?.(value);
+  }, [controlledOpen, onOpenChange]);
 
-  const setOpen = React.useCallback(
-    (v: boolean) => {
-      if (controlledOpen === undefined) setInternalOpen(v)
-      onOpenChange?.(v)
-    },
-    [controlledOpen, onOpenChange]
-  )
-
-  React.useEffect(() => {
-    if (!open) return
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false)
-    }
-
-    window.addEventListener("keydown", closeOnEscape)
-    return () => window.removeEventListener("keydown", closeOnEscape)
-  }, [open, setOpen])
-
-  if (!open) return null
-
-  return (
-    <DialogContext.Provider value={{ open, setOpen }}>
-      {children}
-    </DialogContext.Provider>
-  )
+  if (!open) return null;
+  return <DialogContext.Provider value={{ setOpen, titleId }}>{children}</DialogContext.Provider>;
 }
 
-// ── Trigger ──
-function DialogTrigger({
-  children,
-  asChild,
-}: {
-  children: React.ReactNode
-  asChild?: boolean
-}) {
-  const { setOpen } = useDialog()
+function DialogTrigger({ children, asChild }: { children: React.ReactNode; asChild?: boolean }) {
+  const { setOpen } = useDialog();
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children as React.ReactElement<{ onClick?: () => void }>, {
-      onClick: () => setOpen(true),
-    })
+    return React.cloneElement(children as React.ReactElement<{ onClick?: () => void }>, { onClick: () => setOpen(true) });
   }
-  return (
-    <Button variant="outline" onClick={() => setOpen(true)}>
-      {children}
-    </Button>
-  )
+  return <Button variant="outline" onClick={() => setOpen(true)}>{children}</Button>;
 }
 
-// ── Portal / Overlay ──
 function DialogOverlay({ className }: { className?: string }) {
-  const { setOpen } = useDialog()
-  return (
-    <div
-      className={cn("fixed inset-0 z-50 bg-canvas/80 backdrop-blur-[2px] motion-safe:animate-in motion-safe:fade-in-0", className)}
-      onClick={() => setOpen(false)}
-    />
-  )
+  const { setOpen } = useDialog();
+  return <button type="button" aria-label="点击遮罩关闭对话框" className={cn("fixed inset-0 z-50 cursor-default bg-canvas/78 backdrop-blur-[2px] motion-safe:animate-in motion-safe:fade-in-0", className)} onClick={() => setOpen(false)} />;
 }
 
-// ── Content ──
-function DialogContent({
-  className,
-  children,
-}: {
-  className?: string
-  children: React.ReactNode
-}) {
-  const { setOpen } = useDialog()
-  return (
-    <>
-      <DialogOverlay />
-      <div className="fixed inset-0 z-50 flex items-end justify-center p-0 pointer-events-none sm:items-center sm:p-4">
-        <div
-          className={cn(
-            "pointer-events-auto relative z-50 w-full max-w-lg rounded-t-xl border border-primary/15 bg-popover p-6 shadow-[0_28px_80px_rgba(0,5,18,0.55)] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 sm:rounded-xl",
-            className
-          )}
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-2 top-2"
-            onClick={() => setOpen(false)}
-          >
-            <XIcon className="size-4" />
-          </Button>
-          {children}
-        </div>
-      </div>
-    </>
-  )
+function DialogContent({ className, children }: { className?: string; children: React.ReactNode }) {
+  const { setOpen, titleId } = useDialog();
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  useOverlayA11y({ open: true, containerRef: contentRef, onClose: () => setOpen(false) });
+
+  return <><DialogOverlay /><div className="pointer-events-none fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"><div ref={contentRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={cn("pointer-events-auto relative z-50 w-full max-w-lg rounded-t-[12px] border border-border bg-popover p-5 shadow-[0_28px_80px_rgba(0,0,0,0.42)] outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 sm:rounded-[12px] sm:p-6", className)}><Button variant="ghost" size="icon" className="absolute right-2 top-2 size-8 text-muted-foreground" onClick={() => setOpen(false)} aria-label="关闭对话框"><XIcon className="size-4" /></Button>{children}</div></div></>;
 }
 
-// ── Header / Footer / Title / Description ──
-function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex flex-col gap-1.5", className)} {...props} />
-}
+function DialogHeader({ className, ...props }: React.ComponentProps<"div">) { return <div className={cn("flex flex-col gap-1.5", className)} {...props} />; }
+function DialogFooter({ className, ...props }: React.ComponentProps<"div">) { return <div className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)} {...props} />; }
+function DialogTitle({ className, ...props }: React.ComponentProps<"h2">) { const { titleId } = useDialog(); return <h2 id={titleId} className={cn("text-lg font-semibold", className)} {...props} />; }
+function DialogDescription({ className, ...props }: React.ComponentProps<"p">) { return <p className={cn("text-sm text-muted-foreground", className)} {...props} />; }
 
-function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
-      {...props}
-    />
-  )
-}
-
-function DialogTitle({ className, ...props }: React.ComponentProps<"h2">) {
-  return <h2 className={cn("text-lg font-semibold", className)} {...props} />
-}
-
-function DialogDescription({ className, ...props }: React.ComponentProps<"p">) {
-  return <p className={cn("text-sm text-muted-foreground", className)} {...props} />
-}
-
-export {
-  Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogOverlay,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
-}
+export { Dialog, DialogTrigger, DialogContent, DialogOverlay, DialogHeader, DialogFooter, DialogTitle, DialogDescription };

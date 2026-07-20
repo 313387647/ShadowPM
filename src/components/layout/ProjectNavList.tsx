@@ -71,7 +71,7 @@ export function ProjectNavList({ projects, onNavigate }: { projects: SidebarProj
     <div className="space-y-5">
       <ProjectSection label="重点项目" projects={focusedProjects} pathname={pathname} onNavigate={onNavigate} onToggleFocus={toggleFocus} onVisit={(id) => rememberProject(id, setRecentProjectIds)} emptyText="点击星标，将项目固定在这里。" />
       <ProjectSection label="最近访问" projects={recentProjects} pathname={pathname} onNavigate={onNavigate} onToggleFocus={toggleFocus} onVisit={(id) => rememberProject(id, setRecentProjectIds)} emptyText="打开过的项目会显示在这里。" />
-      <Link href="/projects" onClick={onNavigate} className="flex items-center justify-center rounded-lg border border-dashed border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground">查看全部项目</Link>
+      <Link href="/projects" onClick={onNavigate} className="flex items-center justify-center rounded-md px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground">查看全部项目</Link>
     </div>
   );
 }
@@ -80,8 +80,8 @@ function ProjectSection({ label, projects, pathname, onNavigate, onToggleFocus, 
   return (
     <section>
       <div className="mb-2 flex items-center justify-between px-3">
-        <p className="text-[10px] font-medium tracking-[0.12em] text-muted-foreground/80">{label}</p>
-        <span className="text-[10px] tabular-nums text-muted-foreground">{projects.length}</span>
+        <p className="text-[11px] font-medium text-muted-foreground/80">{label}</p>
+        <span className="text-[11px] tabular-nums text-muted-foreground">{projects.length}</span>
       </div>
       {projects.length > 0 ? <ProjectGroup projects={projects} pathname={pathname} onNavigate={onNavigate} onToggleFocus={onToggleFocus} onVisit={onVisit} /> : <p className="px-3 py-1 text-xs leading-5 text-muted-foreground">{emptyText}</p>}
     </section>
@@ -95,7 +95,7 @@ function ProjectGroup({ projects, pathname, onNavigate, onToggleFocus, onVisit }
         const isActive = pathname.startsWith(`/projects/${project.id}`);
         const lifecycle = LIFECYCLE_STYLE[project.lifecycle];
         return (
-          <div key={project.id} className={cn("group flex items-center gap-1 rounded-lg border px-1 py-0.5 transition-colors", isActive ? "border-primary/30 bg-primary/10" : "border-transparent hover:border-border hover:bg-surface-2/75")}>
+          <div key={project.id} className={cn("group flex items-center gap-1 rounded-md px-1 py-0.5 transition-colors", isActive ? "bg-surface-2" : "hover:bg-surface-2/75")}>
             <Link href={`/projects/${project.id}`} onClick={() => { onVisit(project.id); onNavigate?.(); }} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-sm">
               <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold leading-none", lifecycle.iconClass)} title={lifecycle.label} aria-label={lifecycle.label}>{lifecycle.marker}</span>
               <span className="min-w-0 flex-1 truncate">{project.name}</span>
