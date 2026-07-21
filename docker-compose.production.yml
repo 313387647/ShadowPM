@@ -69,5 +69,33 @@ services:
         condition: service_healthy
     profiles: ["tools"]
 
+  create-external-tester:
+    build:
+      context: .
+      target: create-external-tester
+    env_file:
+      - .env.production
+    environment:
+      EXTERNAL_TESTER_NAME: ${EXTERNAL_TESTER_NAME:-}
+      EXTERNAL_TESTER_EMAIL: ${EXTERNAL_TESTER_EMAIL:-}
+      EXTERNAL_TESTER_PASSWORD: ${EXTERNAL_TESTER_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["tools"]
+
+  cleanup-external-tester:
+    build:
+      context: .
+      target: cleanup-external-tester
+    env_file:
+      - .env.production
+    environment:
+      EXTERNAL_TESTER_EMAIL: ${EXTERNAL_TESTER_EMAIL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["tools"]
+
 volumes:
   shadowpm_postgres_data:

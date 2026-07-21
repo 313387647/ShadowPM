@@ -99,6 +99,7 @@ export async function createProject(formData: FormData): Promise<ActionResult<{ 
         // Compatibility only. New budget paths use budgetMode.
         budgetStatus: budgetMode === "CONFIRMED" ? "CONFIRMED" : "UNCONFIRMED",
         ownerId: user.id,
+        isExternalProject: user.isExternalTester,
         startDate,
         endDate,
       },

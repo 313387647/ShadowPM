@@ -20,18 +20,19 @@ export async function getGlobalDashboardStats() {
     overdueCount,
     projectCount,
   ] = await Promise.all([
-    prisma.project.findMany({ select: { budgetMode: true, totalBudget: true, budgetItems: { select: { plannedAmount: true, status: true } }, budgetFlows: { select: { amount: true, action: true, flowType: true } } } }),
+    prisma.project.findMany({ where: { isExternalProject: false }, select: { budgetMode: true, totalBudget: true, budgetItems: { select: { plannedAmount: true, status: true } }, budgetFlows: { select: { amount: true, action: true, flowType: true } } } }),
 
     // 任务按状态 groupBy —— PostgreSQL 层面完成聚合
     prisma.task.groupBy({
       by: ["status"],
+      where: { project: { isExternalProject: false } },
       _count: { id: true },
     }),
 
     // 活跃项目：有未完成任务的项目去重计数
     prisma.task.groupBy({
       by: ["projectId"],
-      where: { status: { not: "COMPLETED" } },
+      where: { status: { not: "COMPLETED" }, project: { isExternalProject: false } },
       _count: { id: true },
     }),
 
@@ -40,11 +41,12 @@ export async function getGlobalDashboardStats() {
       where: {
         deadline: { lt: now },
         status: { not: "COMPLETED" },
+        project: { isExternalProject: false },
       },
     }),
 
     // 项目总数
-    prisma.project.count(),
+    prisma.project.count({ where: { isExternalProject: false } }),
   ]);
 
   const summaries = budgetProjects.map(getProjectBudgetSummary);
@@ -83,6 +85,7 @@ export async function getProjectsHealth() {
 
   // 1. 项目列表（含 owner + 任务基础信息）
   const projects = await prisma.project.findMany({
+    where: { isExternalProject: false },
     include: {
       owner: { select: { name: true } },
       tasks: { select: { id: true, status: true, deadline: true, assignee: true } },
@@ -156,6 +159,7 @@ export async function getLeaderDashboardAttention() {
     prisma.task.findMany({
       where: {
         status: { not: "COMPLETED" },
+        project: { isExternalProject: false },
         OR: [
           { deadline: { lt: now } },
           { deadline: { lte: nextSevenDays }, status: "PENDING" },
@@ -177,6 +181,7 @@ export async function getLeaderDashboardAttention() {
     prisma.executionCalendarEntry.findMany({
       where: {
         status: { notIn: ["DONE", "CANCELED"] },
+        project: { isExternalProject: false },
         OR: [
           { date: { gte: now, lte: nextSevenDays } },
         ],
@@ -197,8 +202,9 @@ export async function getLeaderDashboardAttention() {
       orderBy: [{ date: "asc" }, { createdAt: "desc" }],
       take: 10,
     }),
-    prisma.project.count(),
+    prisma.project.count({ where: { isExternalProject: false } }),
     prisma.project.findMany({
+      where: { isExternalProject: false },
       select: {
         id: true,
         name: true,
@@ -230,7 +236,7 @@ export async function getLeaderDashboardAttention() {
   const attentionProjectIds = Array.from(new Set(attentionTasks.map((task) => task.projectId)));
   const attentionProjects = attentionProjectIds.length > 0
     ? await prisma.project.findMany({
-        where: { id: { in: attentionProjectIds } },
+        where: { id: { in: attentionProjectIds }, isExternalProject: false },
         select: { id: true, name: true, owner: { select: { name: true } } },
       })
     : [];
@@ -288,6 +294,7 @@ export async function getLeaderDashboardCalendar(monthKey?: string) {
     where: {
       date: { gte: monthStart, lt: nextMonthStart },
       status: { not: "CANCELED" },
+      project: { isExternalProject: false },
     },
     select: {
       id: true,

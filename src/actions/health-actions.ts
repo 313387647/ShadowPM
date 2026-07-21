@@ -11,6 +11,7 @@ export async function getTeamWorkload() {
 
   const [members, assignedTasks] = await Promise.all([
     prisma.user.findMany({
+      where: { isExternalTester: false },
       include: {
         projects: {
           include: {
@@ -35,7 +36,7 @@ export async function getTeamWorkload() {
       orderBy: [{ role: "asc" }, { name: "asc" }],
     }),
     prisma.task.findMany({
-      where: { assignee: { not: null } },
+      where: { assignee: { not: null }, project: { isExternalProject: false } },
       select: {
         id: true,
         name: true,

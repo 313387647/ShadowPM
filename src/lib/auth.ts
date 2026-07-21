@@ -6,6 +6,7 @@ export interface SessionUser {
   id: string;
   name: string;
   role: "LEADER" | "MEMBER";
+  isExternalTester: boolean;
 }
 
 export const SESSION_COOKIE = "shadowpm-session";
@@ -64,7 +65,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
       expiresAt: { gt: new Date() },
       user: { isActive: true },
     },
-    select: { user: { select: { id: true, name: true, role: true } } },
+    select: { user: { select: { id: true, name: true, role: true, isExternalTester: true } } },
   });
 
   return record?.user ?? null;

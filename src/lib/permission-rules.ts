@@ -5,7 +5,11 @@ export function canReadProject(params: {
   role: ProjectAccessRole;
   ownerId: string | null | undefined;
   memberRole?: "EDITOR" | "VIEWER" | string | null;
+  isExternalProject?: boolean;
 }) {
+  if (params.isExternalProject) {
+    return params.userId === params.ownerId || Boolean(params.memberRole);
+  }
   return params.role === "LEADER" || params.userId === params.ownerId || Boolean(params.memberRole);
 }
 

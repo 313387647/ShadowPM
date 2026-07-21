@@ -32,7 +32,7 @@ function sidebarProjectWhere(userId: string): Prisma.ProjectWhereInput {
 }
 
 function readableProjectWhere(user: Awaited<ReturnType<typeof requireCurrentUser>>): Prisma.ProjectWhereInput {
-  if (user.role === "LEADER") return {};
+  if (user.role === "LEADER") return { isExternalProject: false };
   return {
     OR: [
       { ownerId: user.id },

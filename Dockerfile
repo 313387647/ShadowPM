@@ -22,6 +22,12 @@ CMD ["npm", "run", "team:bootstrap-admin"]
 FROM builder AS create-member
 CMD ["npm", "run", "team:create-member"]
 
+FROM builder AS create-external-tester
+CMD ["npx", "tsx", "scripts/create-external-tester.ts"]
+
+FROM builder AS cleanup-external-tester
+CMD ["npx", "tsx", "scripts/cleanup-external-tester.ts"]
+
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production

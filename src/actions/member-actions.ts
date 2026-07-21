@@ -21,10 +21,13 @@ export async function getProjectMembers(projectId: string) {
         },
       },
     }),
-    prisma.user.findMany({
-      orderBy: [{ role: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, role: true },
-    }),
+    user.isExternalTester
+      ? Promise.resolve([])
+      : prisma.user.findMany({
+          where: { isExternalTester: false },
+          orderBy: [{ role: "asc" }, { name: "asc" }],
+          select: { id: true, name: true, role: true },
+        }),
   ]);
 
   if (!project) return null;

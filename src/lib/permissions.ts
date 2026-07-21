@@ -8,7 +8,7 @@ export async function getPersistedCurrentUser(): Promise<SessionUser | null> {
 
   const persisted = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { id: true, name: true, role: true },
+    select: { id: true, name: true, role: true, isExternalTester: true },
   });
   if (!persisted) return null;
 
@@ -16,6 +16,7 @@ export async function getPersistedCurrentUser(): Promise<SessionUser | null> {
     id: persisted.id,
     name: persisted.name,
     role: persisted.role,
+    isExternalTester: persisted.isExternalTester,
   };
 }
 
@@ -33,11 +34,12 @@ export async function assertCanReadProject(projectId: string): Promise<SessionUs
     select: {
       id: true,
       ownerId: true,
+      isExternalProject: true,
       members: { where: { userId: user.id }, select: { role: true }, take: 1 },
     },
   });
   const memberRole = project?.members[0]?.role ?? null;
-  if (!project || !canReadProject({ userId: user.id, role: user.role, ownerId: project.ownerId, memberRole })) {
+  if (!project || !canReadProject({ userId: user.id, role: user.role, ownerId: project.ownerId, memberRole, isExternalProject: project.isExternalProject })) {
     throw new Error("无权访问此项目");
   }
 
@@ -68,9 +70,9 @@ export async function assertCanManageProjectMembers(projectId: string): Promise<
 
   const project = await prisma.project.findFirst({
     where: { id: projectId },
-    select: { id: true, ownerId: true },
+    select: { id: true, ownerId: true, isExternalProject: true },
   });
-  if (!project || !canManageProjectMembers({ userId: user.id, ownerId: project.ownerId })) {
+  if (!project || project.isExternalProject || !canManageProjectMembers({ userId: user.id, ownerId: project.ownerId })) {
     throw new Error("只有项目主负责人可以管理协作者");
   }
 

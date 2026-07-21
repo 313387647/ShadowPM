@@ -390,6 +390,21 @@ describe("project permission rules", () => {
     }), false);
   });
 
+  it("keeps external tester projects outside the leader's default read scope", () => {
+    assert.equal(canReadProject({
+      userId: "leader-1",
+      role: "LEADER",
+      ownerId: "external-1",
+      isExternalProject: true,
+    }), false);
+    assert.equal(canReadProject({
+      userId: "external-1",
+      role: "MEMBER",
+      ownerId: "external-1",
+      isExternalProject: true,
+    }), true);
+  });
+
   it("allows project owners to read and edit their own projects", () => {
     const params = {
       userId: "member-1",

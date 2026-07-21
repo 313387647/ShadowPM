@@ -413,6 +413,7 @@ export async function createProjectFromAI(
         // Compatibility only. New budget code reads Project.budgetMode.
         budgetStatus: budgetMode === "CONFIRMED" ? "CONFIRMED" : "UNCONFIRMED",
         ownerId: user.id,
+        isExternalProject: user.isExternalTester,
         startDate: dto.startDate ? new Date(dto.startDate + "T00:00:00.000Z") : null,
         endDate: dto.endDate ? new Date(dto.endDate + "T00:00:00.000Z") : null,
       },

@@ -79,7 +79,7 @@ function textMatchesInput(input: string, value: string) {
 
 function readableProjectWhere(user: Awaited<ReturnType<typeof requireCurrentUser>>) {
   return user.role === "LEADER"
-    ? {}
+    ? { isExternalProject: false }
     : {
         OR: [
           { ownerId: user.id },
@@ -119,7 +119,7 @@ export async function processCopilotMessage(input: string): Promise<CopilotRespo
       }),
       prisma.task.findMany({
         where: {
-          ...(user.role === "LEADER" ? {} : { project: readableProjectWhere(user) }),
+          project: readableProjectWhere(user),
           status: { not: "COMPLETED" },
         },
         select: {

@@ -108,6 +108,7 @@ model User {
   email              String            @unique
   passwordHash       String
   isActive           Boolean           @default(true)
+  isExternalTester   Boolean           @default(false) // 外部体验账号：不进入团队管理与全局大盘
   role               Role              @default(MEMBER)
   createdAt          DateTime          @default(now())
   projects           Project[]
@@ -143,6 +144,7 @@ model Project {
   startDate   DateTime?
   endDate     DateTime?
   archivedAt  DateTime?
+  isExternalProject Boolean @default(false) // 体验账号创建的隔离项目
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -165,6 +167,7 @@ model Project {
   @@index([archivedAt])
   @@index([createdAt])
   @@index([budgetMode])
+  @@index([isExternalProject])
 }
 
 /// A user-specific shortcut for projects that need sustained attention.
