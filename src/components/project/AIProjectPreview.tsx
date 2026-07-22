@@ -259,14 +259,14 @@ export function AIProjectCreator({ onClose }: Props) {
 
   return (
     <div className="space-y-5">
-      <ol className="grid grid-cols-3 gap-1 rounded-xl border border-border bg-secondary/55 p-2">
+      <ol className="grid grid-cols-3 border-b border-border">
         {IMPORT_STEPS.map((label, index) => {
           const current = getStepIndex(step);
           const complete = index < current;
           const active = index === current;
           return (
             <li key={label} className="min-w-0">
-              <div className={complete || active ? "flex min-w-0 items-center gap-1.5 rounded-lg bg-primary/10 px-2 py-1.5 text-primary" : "flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-muted-foreground"}>
+              <div className={complete || active ? "flex min-w-0 items-center gap-1.5 border-b-2 border-primary px-2 py-2 text-primary" : "flex min-w-0 items-center gap-1.5 border-b-2 border-transparent px-2 py-2 text-muted-foreground"}>
                 <span className={complete ? "flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground" : active ? "flex size-5 shrink-0 items-center justify-center rounded-full border border-primary bg-primary/10 text-[10px] font-semibold" : "flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-[10px]"}>{complete ? "✓" : index + 1}</span>
                 <span className="hidden truncate text-[11px] font-medium sm:block">{label}</span>
               </div>
@@ -544,7 +544,7 @@ export function AIProjectCreator({ onClose }: Props) {
               </div>
             </div>
 
-            <div className="space-y-2 rounded-lg border border-primary/25 bg-primary/5 p-3">
+            <div className="space-y-3 border-y border-border py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium">确认项目总预算</p>
@@ -559,7 +559,7 @@ export function AIProjectCreator({ onClose }: Props) {
               {(edited.totalBudgetCandidates?.length ?? 0) > 0 && (
                 <div className="space-y-1.5">
                   {edited.totalBudgetCandidates?.map((candidate, index) => (
-                    <label key={`${candidate.amount}-${index}`} className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${edited.totalBudget === candidate.amount ? "border-primary bg-background" : "border-border bg-background/60"}`}>
+                    <label key={`${candidate.amount}-${index}`} className={`flex cursor-pointer items-center gap-2 border-b px-1 py-2 text-xs last:border-b-0 ${edited.totalBudget === candidate.amount ? "border-primary/45 text-foreground" : "border-border text-muted-foreground"}`}>
                       <input type="radio" checked={edited.totalBudget === candidate.amount} onChange={() => setEdited({ ...edited, totalBudget: candidate.amount })} />
                       <span className="font-mono font-medium">¥{candidate.amount.toLocaleString("zh-CN")}</span>
                       <span className="min-w-0 flex-1 truncate text-muted-foreground">{candidate.sourceRef ?? "来源位置未定位"}</span>
@@ -583,11 +583,11 @@ export function AIProjectCreator({ onClose }: Props) {
                 未识别到管控事项，请手动添加
               </p>
             ) : (
-              <div className="space-y-2">
+              <div>
                 {edited.tasks.map((task, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-2 rounded-lg border px-3 py-2"
+                    className="flex items-center gap-2 border-b border-border px-1 py-2.5 last:border-b-0"
                   >
                     <input
                       value={task.name}
@@ -686,9 +686,9 @@ export function AIProjectCreator({ onClose }: Props) {
               {(edited.budgetItems?.length ?? 0) === 0 ? (
                 <p className="text-xs text-muted-foreground">未识别到独立预算项</p>
               ) : (
-                <div className="space-y-1.5">
+                <div>
                   {(edited.budgetItems ?? []).slice(0, 8).map((item, i) => (
-                    <div key={`${item.title}-${i}`} className="rounded-md bg-background px-2 py-1.5 text-xs">
+                    <div key={`${item.title}-${i}`} className="border-b border-border px-1 py-2 text-xs last:border-b-0">
                       <div className="flex items-center gap-2">
                         <input type="checkbox" checked={Boolean(item.selected)} onChange={(event) => {
                           const copy = [...(edited.budgetItems ?? [])];
@@ -729,7 +729,7 @@ export function AIProjectCreator({ onClose }: Props) {
               {edited.budgetMode === "CONFIRMED" && (() => {
                 const selectedTotal = getSelectedBudgetTotal(edited);
                 const remaining = (edited.totalBudget ?? 0) - selectedTotal;
-                return <div className={`mt-2 grid grid-cols-3 gap-2 rounded-md border px-2 py-2 text-[11px] ${remaining < 0 ? "border-destructive/40 bg-destructive/5" : "border-border bg-canvas/30"}`}><div><p className="text-muted-foreground">项目总预算</p><p className="mt-0.5 font-mono font-medium">¥{(edited.totalBudget ?? 0).toLocaleString("zh-CN")}</p></div><div><p className="text-muted-foreground">已选预算草稿</p><p className="mt-0.5 font-mono font-medium">¥{selectedTotal.toLocaleString("zh-CN")}</p></div><div><p className="text-muted-foreground">剩余可编排</p><p className={`mt-0.5 font-mono font-medium ${remaining < 0 ? "text-destructive" : ""}`}>¥{remaining.toLocaleString("zh-CN")}</p></div>{remaining < 0 && <p className="col-span-3 text-destructive">预算项合计超过总预算，不能创建项目。</p>}</div>;
+                return <div className={`mt-3 grid grid-cols-3 gap-2 border-y px-1 py-3 text-[11px] ${remaining < 0 ? "border-destructive/40 bg-destructive/[0.035]" : "border-border"}`}><div><p className="text-muted-foreground">项目总预算</p><p className="mt-0.5 font-mono font-medium">¥{(edited.totalBudget ?? 0).toLocaleString("zh-CN")}</p></div><div><p className="text-muted-foreground">已选预算草稿</p><p className="mt-0.5 font-mono font-medium">¥{selectedTotal.toLocaleString("zh-CN")}</p></div><div><p className="text-muted-foreground">剩余可编排</p><p className={`mt-0.5 font-mono font-medium ${remaining < 0 ? "text-destructive" : ""}`}>¥{remaining.toLocaleString("zh-CN")}</p></div>{remaining < 0 && <p className="col-span-3 text-destructive">预算项合计超过总预算，不能创建项目。</p>}</div>;
               })()}
             </div>
             </details>
@@ -748,7 +748,7 @@ export function AIProjectCreator({ onClose }: Props) {
                 </span>
               </div>
               {(edited.calendarEntries ?? []).slice(0, 5).map((entry, i) => (
-                <div key={`${entry.content}-${i}`} className="rounded-md bg-background px-2 py-1.5 text-xs">
+                <div key={`${entry.content}-${i}`} className="border-b border-border px-1 py-2 text-xs last:border-b-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-muted-foreground">{entry.date ?? "日期待确认"}</span>
                     {entry.channel && <span className="min-w-0 flex-1 truncate text-muted-foreground">{entry.channel}</span>}

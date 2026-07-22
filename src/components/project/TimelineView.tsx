@@ -221,23 +221,22 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
         </details>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {ACTIVITY_FILTERS.map((item) => (
-          <Button
-            key={item.value}
-            type="button"
-            size="sm"
-            variant={filter === item.value ? "default" : "outline"}
-            className="h-7 gap-1.5 px-2.5 text-xs"
-            onClick={() => setFilter(item.value)}
-          >
-            {item.label}
-          </Button>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[260px] flex-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+        <div className="flex flex-wrap items-center gap-1">
+          {ACTIVITY_FILTERS.map((item) => (
+            <Button
+              key={item.value}
+              type="button"
+              size="sm"
+              variant={filter === item.value ? "default" : "ghost"}
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setFilter(item.value)}
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+        <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             ref={searchRef}
@@ -258,9 +257,7 @@ export function TimelineView({ projectId, logs, tasks, canEdit }: Props) {
             </button>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          显示 {visibleLogs.length} / {logs.length} 条
-        </p>
+        <p className="shrink-0 text-xs text-muted-foreground">显示 {visibleLogs.length} / {logs.length} 条</p>
       </div>
 
       {logs.length === 0 ? (

@@ -6,6 +6,7 @@ import { BarChart3, FolderKanban, LayoutGrid, LifeBuoy, LogOut, MoreHorizontal, 
 import { useState } from "react";
 import { logout } from "@/actions/auth-actions";
 import { Sheet, SheetContent, SheetHeader } from "@/components/ui/sheet";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 export function MobileBottomNav({ userRole }: { userRole: string }) {
@@ -36,7 +37,7 @@ export function MobileBottomNav({ userRole }: { userRole: string }) {
       </nav>
 
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-        <SheetContent className="md:hidden">
+        <SheetContent size="auto" className="md:hidden">
           <SheetHeader title="更多" />
           <div className="mt-4 space-y-1">
             {userRole === "LEADER" && (
@@ -46,6 +47,7 @@ export function MobileBottomNav({ userRole }: { userRole: string }) {
               <MobileLink href="/team" icon={ShieldCheck} onNavigate={() => setMoreOpen(false)}>团队与权限</MobileLink>
             )}
             <MobileLink href="/guide" icon={LifeBuoy} onNavigate={() => setMoreOpen(false)}>帮助与反馈</MobileLink>
+            <ThemeToggle variant="row" />
           </div>
           <div className="mt-4 border-t border-border pt-3">
             <button type="button" onClick={() => logout()} className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground">

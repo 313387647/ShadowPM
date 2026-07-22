@@ -155,16 +155,23 @@ export async function getLeaderDashboardAttention() {
   const now = new Date();
   const nextSevenDays = new Date(now.getTime() + 7 * 86400000);
 
-  const [attentionTasks, upcomingCalendarEntries, projectCount, projectsWithTasks] = await Promise.all([
+  const attentionWhere = {
+    status: { not: "COMPLETED" as const },
+    project: { isExternalProject: false },
+    OR: [
+      { deadline: { lt: now } },
+      { deadline: { lte: nextSevenDays }, status: "PENDING" as const },
+    ],
+  };
+  const upcomingCalendarWhere = {
+    status: { notIn: ["DONE", "CANCELED"] },
+    project: { isExternalProject: false },
+    date: { gte: now, lte: nextSevenDays },
+  };
+
+  const [attentionTasks, upcomingCalendarEntries, attentionTaskCount, upcomingCalendarCount, projectCount, projectsWithTasks] = await Promise.all([
     prisma.task.findMany({
-      where: {
-        status: { not: "COMPLETED" },
-        project: { isExternalProject: false },
-        OR: [
-          { deadline: { lt: now } },
-          { deadline: { lte: nextSevenDays }, status: "PENDING" },
-        ],
-      },
+      where: attentionWhere,
       select: {
         id: true,
         projectId: true,
@@ -176,16 +183,10 @@ export async function getLeaderDashboardAttention() {
         deadline: true,
       },
       orderBy: [{ deadline: "asc" }, { priority: "asc" }],
-      take: 12,
+      take: 50,
     }),
     prisma.executionCalendarEntry.findMany({
-      where: {
-        status: { notIn: ["DONE", "CANCELED"] },
-        project: { isExternalProject: false },
-        OR: [
-          { date: { gte: now, lte: nextSevenDays } },
-        ],
-      },
+      where: upcomingCalendarWhere,
       select: {
         id: true,
         projectId: true,
@@ -200,8 +201,10 @@ export async function getLeaderDashboardAttention() {
         project: { select: { id: true, name: true } },
       },
       orderBy: [{ date: "asc" }, { createdAt: "desc" }],
-      take: 10,
+      take: 50,
     }),
+    prisma.task.count({ where: attentionWhere }),
+    prisma.executionCalendarEntry.count({ where: upcomingCalendarWhere }),
     prisma.project.count({ where: { isExternalProject: false } }),
     prisma.project.findMany({
       where: { isExternalProject: false },
@@ -244,6 +247,8 @@ export async function getLeaderDashboardAttention() {
 
   return {
     projectCount,
+    attentionTaskCount,
+    upcomingCalendarCount,
     attentionTasks: attentionTasks.map((task) => ({
       id: task.id,
       name: task.name,

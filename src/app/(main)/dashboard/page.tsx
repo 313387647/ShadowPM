@@ -8,7 +8,7 @@ import { GlobalExecutionCalendar } from "@/components/dashboard/GlobalExecutionC
 
 type DashboardView = "overview" | "projects" | "budget" | "calendar";
 
-export default async function DashboardPage({ searchParams }: { searchParams?: { view?: string; month?: string; budgetFilter?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams?: { view?: string; month?: string; budgetFilter?: string; attention?: string } }) {
   const user = await getCurrentUser();
   if (!user || user.role !== "LEADER") redirect("/workspace");
   const view = isDashboardView(searchParams?.view) ? searchParams!.view : "overview";
@@ -21,7 +21,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
 
       <DashboardViewNav activeView={view} />
 
-      {view === "overview" && <OverviewDashboard />}
+      {view === "overview" && <OverviewDashboard showAllAttention={searchParams?.attention === "all"} />}
       {view === "projects" && <ProjectsDashboard />}
       {view === "budget" && <BudgetDashboard filter={searchParams?.budgetFilter} />}
       {view === "calendar" && <CalendarDashboard month={searchParams?.month} />}
@@ -29,19 +29,19 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   );
 }
 
-async function OverviewDashboard() {
+async function OverviewDashboard({ showAllAttention }: { showAllAttention: boolean }) {
   const [stats, health, attention] = await Promise.all([getGlobalDashboardStats(), getProjectsHealth(), getLeaderDashboardAttention()]);
-  const urgentTasks = attention.attentionTasks.slice(0, 6);
+  const urgentTasks = showAllAttention ? attention.attentionTasks : attention.attentionTasks.slice(0, 6);
   const upcomingCalendar = attention.upcomingCalendarEntries.slice(0, 6);
   const activeProjects = health.filter((project) => project.lifecycle === "ACTIVE").length;
 
   return <div className="space-y-6">
     <section className="flex flex-wrap divide-x divide-border border-y border-border text-sm" aria-label="全局核心状态">
       <SummaryMetric label="进行中项目" value={String(activeProjects)} />
-      <SummaryMetric label="未来 7 天节点" value={String(upcomingCalendar.length)} />
+      <SummaryMetric label="未来 7 天节点" value={String(attention.upcomingCalendarCount)} />
       <SummaryMetric label="可用预算" value={formatWan(stats.totalPool - stats.totalExpense)} warning={stats.totalExpense > stats.totalPool} />
     </section>
-    <AttentionList tasks={urgentTasks} />
+    <AttentionList tasks={urgentTasks} total={attention.attentionTaskCount} expanded={showAllAttention} />
     <OverviewCharts projects={health} stats={stats} />
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
       <PortfolioSnapshot projects={health.slice(0, 6)} />
@@ -87,12 +87,13 @@ function BudgetManagement({ projects, stats, filter }: { projects: Awaited<Retur
       <SummaryMetric label="实际支出" value={formatWan(stats.totalExpense)} />
       <SummaryMetric label="可用结余" value={formatWan(balance)} warning={balance < 0} />
     </section>
-    <section className="table-shell overflow-hidden"><div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"><h2 className="text-sm font-semibold">项目预算</h2><nav className="flex flex-wrap gap-1" aria-label="项目预算筛选">{([['all', '全部'], ['anomaly', '只看异常'], ['high', '高消耗'], ['over', '已超支']] as const).map(([value, label]) => <Link key={value} href={value === 'all' ? '/dashboard?view=budget' : `/dashboard?view=budget&budgetFilter=${value}`} className={activeFilter === value ? 'rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground' : 'rounded-md px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground'}>{label}</Link>)}</nav></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b bg-muted/30 text-xs text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium">项目 / 负责人</th><th className="px-3 py-2.5 font-medium">确认预算</th><th className="px-3 py-2.5 font-medium">实际支出</th><th className="px-3 py-2.5 font-medium">结余</th><th className="px-3 py-2.5 font-medium">使用率</th></tr></thead><tbody className="divide-y">{orderedProjects.map((project) => <tr key={project.id} className="transition-colors hover:bg-muted/35"><td className="px-4 py-3"><Link href={`/projects/${project.id}?tab=ledger`} className="font-medium hover:text-primary">{project.name}</Link><p className="mt-0.5 text-xs text-muted-foreground">{project.ownerName}</p></td><td className="px-3 py-3 font-mono text-xs">{formatWan(project.dynamicTotal)}</td><td className="px-3 py-3 font-mono text-xs">{formatWan(project.consumed)}</td><td className={project.balance < 0 ? "px-3 py-3 font-mono text-xs text-destructive" : "px-3 py-3 font-mono text-xs"}>{formatWan(project.balance)}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted"><div className={project.budgetUsage >= 90 ? "h-full rounded-full bg-destructive" : "h-full rounded-full bg-primary"} style={{ width: `${Math.min(project.budgetUsage, 100)}%` }} /></div><span className="text-xs tabular-nums">{project.budgetUsage}%</span></div></td></tr>)}</tbody></table></div></section>
+    <section className="table-shell overflow-hidden"><div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"><h2 className="text-sm font-semibold">项目预算</h2><nav className="flex flex-wrap gap-1" aria-label="项目预算筛选">{([['all', '全部'], ['anomaly', '只看异常'], ['high', '高消耗'], ['over', '已超支']] as const).map(([value, label]) => <Link key={value} href={value === 'all' ? '/dashboard?view=budget' : `/dashboard?view=budget&budgetFilter=${value}`} className={activeFilter === value ? 'rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground' : 'rounded-md px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground'}>{label}</Link>)}</nav></div><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b bg-muted/30 text-xs text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium">项目 / 负责人</th><th className="px-3 py-2.5 font-medium">确认预算</th><th className="px-3 py-2.5 font-medium">实际支出</th><th className="px-3 py-2.5 font-medium">结余</th><th className="px-3 py-2.5 font-medium">使用率</th></tr></thead><tbody className="divide-y">{orderedProjects.map((project) => <tr key={project.id} className="transition-colors hover:bg-muted/35"><td className="px-4 py-3"><Link href={`/projects/${project.id}?tab=ledger`} className="font-medium hover:text-primary">{project.name}</Link><p className="mt-0.5 text-xs text-muted-foreground">{project.ownerName}</p></td><td className="px-3 py-3 font-mono text-xs">{formatWan(project.dynamicTotal)}</td><td className="px-3 py-3 font-mono text-xs">{formatWan(project.consumed)}</td><td className={project.balance < 0 ? "px-3 py-3 font-mono text-xs text-destructive" : "px-3 py-3 font-mono text-xs"}>{formatWan(project.balance)}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted"><div className={project.budgetUsage >= 90 ? "h-full rounded-full bg-destructive" : "h-full rounded-full bg-primary"} style={{ width: `${Math.min(project.budgetUsage, 100)}%` }} /></div><span className="text-xs tabular-nums">{project.budgetUsage}%</span></div></td></tr>)}</tbody></table></div><div className="divide-y divide-border md:hidden">{orderedProjects.map((project) => <Link key={project.id} href={`/projects/${project.id}?tab=ledger`} className="block px-4 py-4 transition-colors hover:bg-muted/35"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{project.name}</p><p className="mt-1 text-xs text-muted-foreground">{project.ownerName} · 已用 {project.budgetUsage}%</p></div><p className={project.balance < 0 ? "shrink-0 font-mono text-xs font-medium text-destructive" : "shrink-0 font-mono text-xs"}>{formatWan(project.balance)}</p></div><p className="mt-2 text-xs text-muted-foreground">确认 {formatWan(project.dynamicTotal)} · 支出 {formatWan(project.consumed)}</p></Link>)}</div></section>
   </div>;
 }
 
-function AttentionList({ tasks }: { tasks: Awaited<ReturnType<typeof getLeaderDashboardAttention>>["attentionTasks"] }) {
-  return <section className="border-y border-border"><div className="flex items-center justify-between px-0 py-3"><h2 className="text-sm font-semibold">需要介入</h2></div><div className="divide-y divide-border">{tasks.length === 0 ? <Empty text="当前没有需要管理者介入的事项。" /> : tasks.map((task) => <Link key={task.id} href={`/projects/${task.projectId}?tab=tasks&focusTask=${task.id}`} className="flex items-start justify-between gap-3 py-3 transition-colors hover:text-primary"><div className="min-w-0"><p className="truncate text-sm font-medium">{task.name}</p><p className="mt-1 truncate text-xs text-muted-foreground">{task.projectName} · {task.assignee}</p></div><p className={task.signals.includes("已逾期") ? "shrink-0 text-xs font-medium text-destructive" : "shrink-0 text-xs text-warning"}>{task.signals[0]}</p></Link>)}</div></section>;
+function AttentionList({ tasks, total, expanded }: { tasks: Awaited<ReturnType<typeof getLeaderDashboardAttention>>["attentionTasks"]; total: number; expanded: boolean }) {
+  const showToggle = total > 6;
+  return <section className="border-y border-border"><div className="flex items-center justify-between px-0 py-3"><h2 className="text-sm font-semibold">需要介入 <span className="font-normal text-muted-foreground">{total}</span></h2>{showToggle && <Link href={expanded ? "/dashboard" : "/dashboard?attention=all"} className="text-xs font-medium text-primary hover:text-primary/80">{expanded ? "收起" : "查看全部"}</Link>}</div><div className="divide-y divide-border">{tasks.length === 0 ? <Empty text="当前没有需要管理者介入的事项。" /> : tasks.map((task) => <Link key={task.id} href={`/projects/${task.projectId}?tab=tasks&focusTask=${task.id}`} className="flex items-start justify-between gap-3 py-3 transition-colors hover:text-primary"><div className="min-w-0"><p className="truncate text-sm font-medium">{task.name}</p><p className="mt-1 truncate text-xs text-muted-foreground">{task.projectName} · {task.assignee}</p></div><p className={task.signals.includes("已逾期") ? "shrink-0 text-xs font-medium text-destructive" : "shrink-0 text-xs text-warning"}>{task.signals[0]}</p></Link>)}</div></section>;
 }
 
 function PortfolioSnapshot({ projects }: { projects: Awaited<ReturnType<typeof getProjectsHealth>> }) {

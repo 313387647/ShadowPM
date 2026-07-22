@@ -62,7 +62,7 @@ export function PortfolioTable({ projects }: { projects: PortfolioProject[] }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[820px] text-left text-sm">
           <thead className="border-b bg-muted/30 text-xs text-muted-foreground">
             <tr>
@@ -85,6 +85,9 @@ export function PortfolioTable({ projects }: { projects: PortfolioProject[] }) {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="divide-y divide-border md:hidden">
+        {visible.map((project) => <Link key={project.id} href={`/projects/${project.id}`} className="block px-4 py-4 transition-colors hover:bg-muted/35"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{project.name}</p><p className="mt-1 text-xs text-muted-foreground">{project.ownerName} · {project.nextNode ? `${formatDate(project.nextNode.date)} ${project.nextNode.content}` : "未安排下一节点"}</p></div><p className={project.overdueCount > 0 || project.balance < 0 ? "shrink-0 text-xs font-medium text-destructive" : "shrink-0 text-xs text-muted-foreground"}>{project.overdueCount > 0 ? `逾期 ${project.overdueCount}` : `已用 ${project.budgetUsage}%`}</p></div></Link>)}
       </div>
       {visible.length === 0 && <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground"><AlertTriangle className="size-4" />没有符合条件的项目</div>}
     </section>

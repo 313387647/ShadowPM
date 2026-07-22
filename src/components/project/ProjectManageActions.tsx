@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { deleteProject, setProjectArchived, updateProjectInfo } from "@/actions/project-actions";
@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader } from "@/components/ui/sheet";
+import { useDismissablePopover } from "@/components/ui/use-dismissable-popover";
 
 type ProjectSummary = { id: string; name: string; startDate: Date | string | null; endDate: Date | string | null; archivedAt: Date | string | null };
-type SettingsSection = "project" | "members";
 
 function dateValue(value: Date | string | null) { return value ? new Date(value).toISOString().slice(0, 10) : ""; }
 
@@ -19,16 +19,17 @@ export function ProjectManageActions({ project, canEdit, canManage }: { project:
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("project");
   const [editing, setEditing] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saved">("idle");
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const menuRef = useDismissablePopover(menuOpen, closeMenu);
 
   if (!canEdit) return null;
 
-  function openSettings(section: SettingsSection) { setSettingsSection(section); setEditing(false); setSaveState("idle"); setSettingsOpen(true); setMenuOpen(false); }
+  function openSettings() { setEditing(false); setSaveState("idle"); setSettingsOpen(true); setMenuOpen(false); }
   async function saveInfo(formData: FormData) {
     if (submitting) return;
     setSubmitting(true); setSaveState("idle"); formData.set("projectId", project.id);
@@ -57,16 +58,24 @@ export function ProjectManageActions({ project, canEdit, canManage }: { project:
     } catch { toast.error("删除失败，请重试"); } finally { setSubmitting(false); }
   }
 
-  return <div className="relative">
+  function handleMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>("[role='menuitem']") ?? []);
+    if (!items.length || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = Math.max(0, items.indexOf(document.activeElement as HTMLElement));
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? (currentIndex + 1) % items.length : (currentIndex - 1 + items.length) % items.length;
+    items[nextIndex]?.focus();
+  }
+
+  return <div ref={menuRef} className="relative">
     <Button type="button" size="sm" variant="ghost" className="h-8 gap-1.5" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal className="size-4" />更多</Button>
-    {menuOpen && <div role="menu" className="absolute right-0 top-10 z-30 min-w-40 rounded-[10px] border border-border bg-popover p-1 shadow-[0_16px_40px_rgba(0,0,0,0.3)]">
-      <MenuItem onClick={() => openSettings("project")}>项目设置</MenuItem>
-      <MenuItem onClick={() => openSettings("members")}>成员与权限</MenuItem>
+    {menuOpen && <div role="menu" onKeyDown={handleMenuKeyDown} className="absolute right-0 top-10 z-30 min-w-40 rounded-[10px] border border-border bg-popover p-1 shadow-[0_16px_40px_rgba(0,0,0,0.3)]">
+      <MenuItem onClick={openSettings}>项目设置</MenuItem>
       {canManage && <><div className="my-1 border-t border-border" /><MenuItem onClick={() => { setArchiveOpen(true); setMenuOpen(false); }}>{project.archivedAt ? "恢复项目" : "归档项目"}</MenuItem><MenuItem danger onClick={() => { setDeleteOpen(true); setMenuOpen(false); }}>删除项目</MenuItem></>}
     </div>}
 
-    <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}><SheetContent className="max-w-lg"><SheetHeader title={settingsSection === "project" ? "项目设置" : "成员与权限"} />
-      {settingsSection === "project" ? <ProjectSettings project={project} editing={editing} submitting={submitting} saveState={saveState} onEdit={() => { setEditing(true); setSaveState("idle"); }} onCancel={() => setEditing(false)} onSave={saveInfo} /> : <ProjectMembersInfo />}
+    <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}><SheetContent className="max-w-lg"><SheetHeader title="项目设置" />
+      <ProjectSettings project={project} editing={editing} submitting={submitting} saveState={saveState} onEdit={() => { setEditing(true); setSaveState("idle"); }} onCancel={() => setEditing(false)} onSave={saveInfo} />
     </SheetContent></Sheet>
 
     <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}><DialogContent><DialogHeader><DialogTitle>{project.archivedAt ? "恢复项目" : "归档项目"}</DialogTitle></DialogHeader><p className="text-sm leading-6 text-muted-foreground">{project.archivedAt ? `「${project.name}」会恢复到工作区和侧边栏项目列表。` : `归档后，「${project.name}」会移出日常项目列表，历史数据和活动记录保持可追溯。`}</p><DialogFooter><Button type="button" variant="ghost" onClick={() => setArchiveOpen(false)}>取消</Button><Button type="button" disabled={submitting} onClick={changeArchive}>{submitting ? <Loader2 className="size-3.5 animate-spin" /> : project.archivedAt ? "恢复项目" : "确认归档"}</Button></DialogFooter></DialogContent></Dialog>
@@ -79,6 +88,5 @@ function ProjectSettings({ project, editing, submitting, saveState, onEdit, onCa
   return <div className="flex-1 overflow-y-auto px-5 py-5"><div className="absolute right-12 top-3"><Button type="button" size="sm" variant="ghost" className="h-8 gap-1.5" onClick={onEdit}><Pencil className="size-3.5" />编辑</Button></div><div className="space-y-5"><ReadField label="项目名称" value={project.name} /><ReadField label="项目周期" value={`${dateValue(project.startDate) || "未定"} 至 ${dateValue(project.endDate) || "未定"}`} /></div>{saveState === "saved" && <p className="mt-6 text-xs text-success">已保存</p>}</div>;
 }
 
-function ProjectMembersInfo() { return <div className="flex-1 overflow-y-auto px-5 py-5"><div className="flex items-center gap-2 text-sm font-medium"><Users className="size-4 text-muted-foreground" />成员与权限</div><p className="mt-3 text-sm leading-6 text-muted-foreground">项目成员与项目级权限保持独立于事项负责人。团队管理页面负责维护成员账号；项目内协作成员会在下一轮项目权限面板中集中呈现。</p></div>; }
 function ReadField({ label, value }: { label: string; value: string }) { return <div><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-sm leading-6 text-secondary-foreground">{value}</p></div>; }
 function MenuItem({ children, onClick, danger = false }: { children: React.ReactNode; onClick: () => void; danger?: boolean }) { return <button type="button" role="menuitem" onClick={onClick} className={danger ? "flex min-h-9 w-full items-center rounded-md px-2.5 text-left text-sm text-destructive hover:bg-destructive/10" : "flex min-h-9 w-full items-center rounded-md px-2.5 text-left text-sm text-foreground hover:bg-surface-2"}>{children}</button>; }

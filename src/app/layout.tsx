@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ThemeBootScript } from "@/components/layout/ThemeBootScript";
 
 export const metadata: Metadata = {
   title: "ShadowPM - AI Native Project Management Platform",
@@ -13,8 +14,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className="font-sans">
+    <html lang="zh-CN" className="font-sans" suppressHydrationWarning>
       <body className="antialiased min-h-screen bg-background text-foreground">
+        <ThemeBootScript />
         {children}
       </body>
     </html>
