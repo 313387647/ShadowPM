@@ -97,7 +97,7 @@ export async function getProjectCalendarEntries(projectId: string) {
   return prisma.executionCalendarEntry.findMany({
     where: { projectId },
     include: {
-      task: { select: { id: true, name: true, status: true } },
+      task: { select: { id: true, name: true, status: true, phase: { select: { id: true, name: true } } } },
     },
     orderBy: [
       { date: "asc" },

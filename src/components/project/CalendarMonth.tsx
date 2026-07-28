@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { dateKey, monthKey, type CalendarEntry } from "@/components/project/calendar-types";
+import { calendarWorkstream, calendarWorkstreamColor, dateKey, monthKey, type CalendarEntry } from "@/components/project/calendar-types";
 
 export function CalendarMonth({ entries, month, onOpen, onMonthChange, onDayOpen }: { entries: CalendarEntry[]; month: Date; onOpen: (entry: CalendarEntry) => void; onMonthChange: (month: Date) => void; onDayOpen: (date: string) => void }) {
   const today = new Date();
@@ -19,6 +19,7 @@ export function CalendarMonth({ entries, month, onOpen, onMonthChange, onDayOpen
     byDay.set(key, [...(byDay.get(key) ?? []), entry]);
   });
   const todayKey = dateKey(today);
+  const workstreams = Array.from(new Set(entries.map(calendarWorkstream))).sort((left, right) => left.localeCompare(right, "zh-CN"));
 
   return (
     <div className="space-y-3">
@@ -30,6 +31,7 @@ export function CalendarMonth({ entries, month, onOpen, onMonthChange, onDayOpen
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={() => onMonthChange(new Date(today.getFullYear(), today.getMonth(), 1))}>今天</Button>
       </div>
+      {workstreams.length > 0 && <div className="flex flex-wrap gap-1.5 px-1" aria-label="执行模块颜色图例">{workstreams.map((workstream) => <span key={workstream} className={`inline-flex items-center rounded-md border px-2 py-1 text-[11px] ${calendarWorkstreamColor(workstream)}`}><span className="mr-1.5 size-1.5 rounded-full bg-current" />{workstream}</span>)}</div>}
       <div className="overflow-x-auto">
         <div className="min-w-[620px]">
           <div className="grid grid-cols-7 border-b border-border text-center text-xs text-muted-foreground">{["日", "一", "二", "三", "四", "五", "六"].map((day) => <span key={day} className="py-2">{day}</span>)}</div>
@@ -39,7 +41,7 @@ export function CalendarMonth({ entries, month, onOpen, onMonthChange, onDayOpen
               const items = byDay.get(key) ?? [];
               return <div key={key} className={cn("min-h-24 border-b border-r border-border p-2", day.getMonth() !== month.getMonth() && "bg-surface-1/40 text-muted-foreground", key === todayKey && "bg-primary/[0.035]")}>
                 <button type="button" onClick={() => onDayOpen(key)} className={cn("grid size-6 place-items-center rounded text-xs font-medium hover:bg-surface-3", key === todayKey && "bg-primary text-primary-foreground")}>{day.getDate()}</button>
-                <div className="mt-1 space-y-1">{items.slice(0, 2).map((entry) => <button key={entry.id} type="button" onClick={() => onOpen(entry)} className="block w-full truncate text-left text-[11px] hover:text-primary">{entry.startTime ? `${entry.startTime} ` : ""}{entry.content}</button>)}{items.length > 2 && <button type="button" onClick={() => onDayOpen(key)} className="text-[11px] text-muted-foreground hover:text-foreground">另 {items.length - 2} 项</button>}</div>
+                <div className="mt-1 space-y-1">{items.slice(0, 2).map((entry) => { const workstream = calendarWorkstream(entry); return <button key={entry.id} type="button" title={`${workstream} · ${entry.content}`} onClick={() => onOpen(entry)} className={cn("block w-full truncate rounded-md border px-1.5 py-1 text-left text-[11px] leading-4", calendarWorkstreamColor(workstream))}><span className="mr-1 font-medium opacity-75">{entry.startTime || "全天"}</span>{entry.content}</button>; })}{items.length > 2 && <button type="button" onClick={() => onDayOpen(key)} className="text-[11px] text-muted-foreground hover:text-foreground">另 {items.length - 2} 项</button>}</div>
               </div>;
             })}
           </div>

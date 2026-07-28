@@ -13,13 +13,25 @@ export type CalendarEntry = {
   source: string;
   createdAt: Date | string;
   taskId: string | null;
-  task: { id: string; name: string; status: string } | null;
+  task: { id: string; name: string; status: string; phase: { id: string; name: string } | null } | null;
 };
 
 export type TaskOption = { id: string; name: string; status: string };
 export type CalendarFilter = "ALL" | "UNSCHEDULED" | "OVERDUE";
 
 export const STATUS_LABEL: Record<string, string> = { PLANNED: "计划中", CONFIRMED: "已确认", DONE: "已完成", CANCELED: "已取消" };
+
+const WORKSTREAM_COLORS = [
+  "border-sky-400/35 bg-sky-400/10 text-sky-100 hover:bg-sky-400/15",
+  "border-cyan-400/35 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/15",
+  "border-emerald-400/35 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/15",
+  "border-amber-400/35 bg-amber-400/10 text-amber-100 hover:bg-amber-400/15",
+  "border-rose-400/35 bg-rose-400/10 text-rose-100 hover:bg-rose-400/15",
+  "border-lime-400/35 bg-lime-400/10 text-lime-100 hover:bg-lime-400/15",
+];
+
+export function calendarWorkstream(entry: CalendarEntry) { return entry.workstream || entry.task?.phase?.name || "未分模块"; }
+export function calendarWorkstreamColor(workstream: string) { let hash = 0; for (const character of workstream) hash = (hash * 31 + character.charCodeAt(0)) >>> 0; return WORKSTREAM_COLORS[hash % WORKSTREAM_COLORS.length]; }
 
 export function toDateInput(value: CalendarEntry["date"]) { return value ? new Date(value).toISOString().slice(0, 10) : ""; }
 export function dateKey(value: CalendarEntry["date"]) {
