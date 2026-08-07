@@ -3,7 +3,11 @@
 import * as React from "react";
 
 /** Keeps lightweight menus and filter popovers consistent without turning them into dialogs. */
-export function useDismissablePopover(open: boolean, onClose: () => void) {
+export function useDismissablePopover(
+  open: boolean,
+  onClose: () => void,
+  portaledContentRef?: React.RefObject<HTMLElement | null>,
+) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const onCloseRef = React.useRef(onClose);
 
@@ -16,7 +20,11 @@ export function useDismissablePopover(open: boolean, onClose: () => void) {
 
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     function dismissFromOutside(event: PointerEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) onCloseRef.current();
+      const target = event.target as Node;
+      const isInsideTrigger = containerRef.current?.contains(target);
+      const isInsidePortaledContent = portaledContentRef?.current?.contains(target);
+
+      if (!isInsideTrigger && !isInsidePortaledContent) onCloseRef.current();
     }
     function dismissFromKeyboard(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
@@ -31,7 +39,7 @@ export function useDismissablePopover(open: boolean, onClose: () => void) {
       document.removeEventListener("keydown", dismissFromKeyboard);
       previouslyFocused?.focus();
     };
-  }, [open]);
+  }, [open, portaledContentRef]);
 
   return containerRef;
 }

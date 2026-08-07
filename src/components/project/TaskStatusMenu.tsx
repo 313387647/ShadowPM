@@ -1,7 +1,8 @@
 "use client";
 
 import { Check, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { createPortal } from "react-dom";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useDismissablePopover } from "@/components/ui/use-dismissable-popover";
 import { cn } from "@/lib/utils";
 
@@ -15,19 +16,67 @@ const STATUS_OPTIONS: Array<{ value: TaskStatus; label: string; className: strin
 
 export function TaskStatusMenu({ status, disabled = false, onChange }: { status: TaskStatus; disabled?: boolean; onChange: (status: TaskStatus) => void }) {
   const [open, setOpen] = useState(false);
-  const popoverRef = useDismissablePopover(open, () => setOpen(false));
+  const [position, setPosition] = useState({ left: 8, top: 8, opensUpward: false });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useDismissablePopover(open, () => setOpen(false), menuRef);
   const current = STATUS_OPTIONS.find((option) => option.value === status) ?? STATUS_OPTIONS[0];
 
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+
+      const rect = trigger.getBoundingClientRect();
+      const menuHeight = 124;
+      const gap = 4;
+      const opensUpward = window.innerHeight - rect.bottom < menuHeight + gap && rect.top > menuHeight + gap;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - 144));
+
+      setPosition({
+        left,
+        top: opensUpward ? rect.top - gap : rect.bottom + gap,
+        opensUpward,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  const menu = open && typeof document !== "undefined"
+    ? createPortal(
+      <div
+        ref={menuRef}
+        role="menu"
+        aria-label="选择事项状态"
+        className={cn(
+          "fixed z-50 w-32 overflow-hidden rounded-[10px] border border-border bg-popover p-1 shadow-[0_16px_40px_rgba(0,0,0,0.3)]",
+          position.opensUpward && "-translate-y-full",
+        )}
+        style={{ left: position.left, top: position.top }}
+      >
+        {STATUS_OPTIONS.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={option.value === status} onClick={() => { setOpen(false); if (option.value !== status) onChange(option.value); }} className={cn("flex min-h-9 w-full items-center justify-between rounded-md px-2 text-left text-sm text-foreground hover:bg-surface-2", option.value === status && "bg-surface-2")}>
+          {option.label}
+          {option.value === status && <Check className="size-3.5 text-primary" aria-hidden="true" />}
+        </button>)}
+      </div>,
+      document.body,
+    )
+    : null;
+
   return <div ref={popoverRef} className="relative inline-flex" onClick={(event) => event.stopPropagation()}>
-    <button type="button" disabled={disabled} onClick={() => setOpen((value) => !value)} className={cn("flex h-7 w-28 items-center justify-between rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50", current.className)} aria-label={`更新事项状态：${current.label}`} aria-haspopup="menu" aria-expanded={open}>
+    <button ref={triggerRef} type="button" disabled={disabled} onClick={() => setOpen((value) => !value)} className={cn("flex h-7 w-28 items-center justify-between rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50", current.className)} aria-label={`更新事项状态：${current.label}`} aria-haspopup="menu" aria-expanded={open}>
       <span>{current.label}</span>
       <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
     </button>
-    {open && <div role="menu" aria-label="选择事项状态" className="absolute left-0 top-8 z-30 w-32 overflow-hidden rounded-[10px] border border-border bg-popover p-1 shadow-[0_16px_40px_rgba(0,0,0,0.3)]">
-      {STATUS_OPTIONS.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={option.value === status} onClick={() => { setOpen(false); if (option.value !== status) onChange(option.value); }} className={cn("flex min-h-9 w-full items-center justify-between rounded-md px-2 text-left text-sm text-foreground hover:bg-surface-2", option.value === status && "bg-surface-2")}>
-        {option.label}
-        {option.value === status && <Check className="size-3.5 text-primary" aria-hidden="true" />}
-      </button>)}
-    </div>}
+    {menu}
   </div>;
 }
