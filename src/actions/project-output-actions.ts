@@ -250,7 +250,7 @@ async function generateGroundedReport(facts: unknown, periodType: ProjectReportP
       messages: [
         {
           role: "system",
-          content: "你是 ShadowPM 项目报告引擎。仅使用提供的结构化事实和来源摘录，不编造。输出简洁中文 Markdown，固定包含：本期结论、关键进展、预算状态、近期执行、待确认。明确区分已发生、计划中、缺失信息。",
+          content: "你是 ShadowPM 项目报告引擎。仅使用提供的结构化事实和来源摘录，不编造。输出简洁中文 Markdown，固定包含：本期结论、关键进展、预算状态、近期执行、待确认。明确区分已发生、计划中、缺失信息。只使用二级标题和无序列表，不要使用 Markdown 表格、HTML、表情符号或装饰性符号。",
         },
         {
           role: "user",

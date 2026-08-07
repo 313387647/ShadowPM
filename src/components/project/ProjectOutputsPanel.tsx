@@ -170,7 +170,7 @@ export function ProjectOutputsPanel({
                     <h3 className="text-sm font-semibold">最新项目报告</h3>
                     <p className="mt-0.5 text-xs text-muted-foreground">依据正式数据和已留存来源生成</p>
                   </div>
-                  {reportContent && <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => copy(reportContent, "报告")}><Copy className="size-3.5" />复制</Button>}
+                  {reportContent && <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => copy(reportToPlainText(reportContent), "报告")}><Copy className="size-3.5" />复制</Button>}
                 </div>
                 {reportContent ? (
                   <ReportContent content={reportContent} />
@@ -219,14 +219,103 @@ function LinkRow({ icon, label, value, onCopy }: { icon: React.ReactNode; label:
 }
 
 function ReportContent({ content }: { content: string }) {
+  const blocks = parseReportMarkdown(content);
+
   return (
-    <div className="max-h-[360px] space-y-1.5 overflow-y-auto rounded-lg border bg-muted/15 p-4 text-sm leading-6">
-      {content.split("\n").map((line, index) => {
-        if (line.startsWith("# ")) return <h3 key={index} className="text-base font-semibold">{line.slice(2)}</h3>;
-        if (line.startsWith("## ")) return <h4 key={index} className="pt-2 text-sm font-semibold">{line.slice(3)}</h4>;
-        if (line.startsWith("- ")) return <p key={index} className="pl-3 text-muted-foreground before:-ml-3 before:mr-2 before:content-['•']">{line.slice(2)}</p>;
-        return line ? <p key={index}>{line}</p> : <div key={index} className="h-1" />;
-      })}
+    <div className="max-h-[420px] overflow-y-auto rounded-lg border bg-muted/15 p-4 text-sm leading-6">
+      <div className="space-y-4">
+        {blocks.map((block, index) => {
+          if (block.type === "title") return <h3 key={index} className="text-base font-semibold tracking-tight text-foreground">{block.content}</h3>;
+          if (block.type === "heading") return <h4 key={index} className="border-t border-border pt-3 text-sm font-semibold text-foreground first:border-t-0 first:pt-0">{block.content}</h4>;
+          if (block.type === "list") return <ul key={index} className="space-y-1.5 text-secondary-foreground">{block.items.map((item, itemIndex) => <li key={itemIndex} className="grid grid-cols-[6px_minmax(0,1fr)] gap-2"><span className="mt-2 size-1.5 rounded-full bg-primary/70" aria-hidden="true" />{item}</li>)}</ul>;
+          if (block.type === "table") return <div key={index} className="overflow-x-auto rounded-md border border-border bg-background"><table className="min-w-full text-left text-xs leading-5"><thead className="bg-muted/45 text-muted-foreground"><tr>{block.headers.map((header, headerIndex) => <th key={headerIndex} className="whitespace-nowrap px-3 py-2 font-medium">{header}</th>)}</tr></thead><tbody className="divide-y divide-border">{block.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className="align-top px-3 py-2 text-secondary-foreground">{cell}</td>)}</tr>)}</tbody></table></div>;
+          return <p key={index} className="text-secondary-foreground">{block.content}</p>;
+        })}
+      </div>
     </div>
   );
+}
+
+type ReportBlock =
+  | { type: "title" | "heading" | "paragraph"; content: string }
+  | { type: "list"; items: string[] }
+  | { type: "table"; headers: string[]; rows: string[][] };
+
+function parseReportMarkdown(content: string): ReportBlock[] {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  const blocks: ReportBlock[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index].trim();
+    if (!line) {
+      index += 1;
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      blocks.push({ type: heading[1].length === 1 ? "title" : "heading", content: stripMarkdown(heading[2]) });
+      index += 1;
+      continue;
+    }
+
+    if (isTableLine(line) && index + 1 < lines.length && isTableDivider(lines[index + 1].trim())) {
+      const headers = parseTableLine(line);
+      index += 2;
+      const rows: string[][] = [];
+      while (index < lines.length && isTableLine(lines[index].trim())) {
+        rows.push(parseTableLine(lines[index].trim()));
+        index += 1;
+      }
+      blocks.push({ type: "table", headers, rows });
+      continue;
+    }
+
+    const listMatch = line.match(/^(?:[-*+]\s+|\d+[.)]\s+)(.+)$/);
+    if (listMatch) {
+      const items: string[] = [];
+      while (index < lines.length) {
+        const item = lines[index].trim().match(/^(?:[-*+]\s+|\d+[.)]\s+)(.+)$/);
+        if (!item) break;
+        items.push(stripMarkdown(item[1]));
+        index += 1;
+      }
+      blocks.push({ type: "list", items });
+      continue;
+    }
+
+    blocks.push({ type: "paragraph", content: stripMarkdown(line) });
+    index += 1;
+  }
+
+  return blocks;
+}
+
+function isTableLine(line: string) {
+  return line.startsWith("|") && line.endsWith("|");
+}
+
+function isTableDivider(line: string) {
+  return isTableLine(line) && /^\|[\s:|-]+\|$/.test(line);
+}
+
+function parseTableLine(line: string) {
+  return line.slice(1, -1).split("|").map((cell) => stripMarkdown(cell.trim()));
+}
+
+function stripMarkdown(value: string) {
+  return value
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/(`{1,3}|\*{1,3}|_{1,3}|~{2})/g, "")
+    .trim();
+}
+
+function reportToPlainText(content: string) {
+  return parseReportMarkdown(content).map((block) => {
+    if (block.type === "list") return block.items.map((item) => `• ${item}`).join("\n");
+    if (block.type === "table") return [block.headers.join("｜"), ...block.rows.map((row) => row.join("｜"))].join("\n");
+    return block.content;
+  }).join("\n\n");
 }
